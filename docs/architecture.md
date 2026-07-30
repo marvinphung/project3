@@ -8,7 +8,7 @@ hoạch tổng và thứ tự triển khai nằm tại
 
 | Quyết định | Lựa chọn | Lý do và đánh đổi |
 | --- | --- | --- |
-| Backend runtime | Python 3.12 | Được Airflow hiện tại hỗ trợ, hệ sinh thái NLP/AI tốt, ít rủi ro tương thích hơn việc dùng phiên bản Python mới nhất ngay trong dự án ba tuần. Cần xác nhận bằng lockfile khi khởi tạo. |
+| Backend runtime | Python 3.12 | Đã được chấp thuận cho Phase 0; hệ sinh thái NLP/AI tốt và ít rủi ro tương thích hơn phiên bản mới nhất. Phiên bản package chính xác sẽ được khóa bằng `uv.lock`. |
 | Quản lý Python | `uv` workspace, một `uv.lock` | Các service vẫn có `pyproject.toml` và dependency riêng, nhưng cùng một lockfile để tái lập môi trường. `uv` hỗ trợ workspace nhiều package và chạy theo package. |
 | HTTP framework | FastAPI + Pydantic | Async phù hợp I/O, OpenAPI tự động, validation tại boundary, dễ test bằng ASGI client. Không đặt business logic trong route. |
 | Kafka client | `confluent-kafka` | Client được duy trì bởi Confluent/librdkafka, có delivery callback, idempotent producer và manual commit. Poll loop là synchronous nên mỗi consumer chạy trong worker process/thread riêng, không chia sẻ consumer giữa thread. |
@@ -23,6 +23,9 @@ hoạch tổng và thứ tự triển khai nằm tại
 | Airflow | Airflow 3, scheduler + API server, executor nhẹ cho local | DAG chỉ gọi API/command cấp batch. Không tạo task theo article. Airflow có metadata DB riêng. Cấu hình executor cụ thể phải được xác nhận khi Compose được triển khai. |
 | Publication schedule | Loại khỏi MVP | State chính là `DRAFT → NEEDS_REVIEW → APPROVED/REJECTED → PUBLISHED`. `SCHEDULED` là P1. |
 | Observability local | JSON logs + health/readiness + operational read models | Không dùng Prometheus hoặc Grafana. Admin dashboard đọc counters/failures từ PostgreSQL; Kafka UI chỉ là công cụ local tùy chọn. |
+| Python quality | Ruff + mypy + pytest/pytest-asyncio | Một formatter/linter nhanh, type checking tĩnh và test sync/async. Exact commands chỉ được công bố sau khi cấu hình được tạo và chạy thành công. |
+| Local Kafka | Apache Kafka KRaft single-node | Thể hiện đúng Kafka, bỏ ZooKeeper và tiết kiệm tài nguyên. Replication factor 1 chỉ phù hợp localhost, không chịu được broker loss. |
+| Auth/RBAC | JWT access token + Argon2; `EDITOR`, `ADMIN` | Giữ MVP nhỏ: Editor review/edit/approve/reject; chỉ Admin publish và quản trị vận hành. Không refresh token/OAuth/public registration. |
 
 Nguồn chính thức đã đối chiếu:
 
@@ -334,14 +337,14 @@ Roles MVP:
 
 - `PUBLIC`: read-only public endpoints, không cần token.
 - `EDITOR`: review/edit/approve/reject, entity/story corrections.
-- `ADMIN`: source config, manual crawl/reprocess/retry, user management.
-- `PUBLISHER`: publish; trong demo có thể cùng account admin nhưng permission
-  vẫn tách.
+- `ADMIN`: toàn bộ quyền Editor, publish, source config, manual
+  crawl/reprocess/retry, merge và user management.
 
-Auth MVP: email/password hash mạnh, short-lived access token và refresh session
-server-side. Internal endpoints chỉ expose trong Compose network và yêu cầu
-`X-Internal-Token`; đây là giải pháp local, không phải production-grade service
-identity. Không hard-code token, không log Authorization/API keys.
+Auth MVP: email/password hash Argon2 và short-lived JWT access token. Không có
+refresh token, OAuth hoặc public registration. Internal endpoints chỉ expose
+trong Compose network và yêu cầu configured `X-Internal-Token`; đây là giải
+pháp local, không phải production-grade service identity. Không hard-code
+token, không log Authorization/API keys.
 
 ### Crawler safety
 

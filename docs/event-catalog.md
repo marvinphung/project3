@@ -32,8 +32,8 @@ Quy tắc version:
 
 | Topic / event | Producer → consumer group | Key / ordering | Trigger và payload tối thiểu | Retry / DLQ / idempotency |
 | --- | --- | --- | --- | --- |
-| `crawl.batch.requested.v1` | Gateway/Crawler → `crawler-service-v1` nếu command chuyển sang async | `batch_id` | batch ID, source IDs, interval, trigger, idempotency key | MVP ưu tiên HTTP command nên topic này P1. Nếu dùng: 3 retry topics, DLQ; unique batch idempotency key. |
-| `article.discovered.v1` | Crawler → `article-service-v1` | `source_id` để giữ thứ tự source; aggregate là discovery/article ID | source/crawl IDs, original URL/title, publication time, fetched payload/parsed candidate, headers allowlist | Retry transient DB/Kafka; `article.discovered.retry.{1m,5m,30m}.v1`; DLQ `article.discovered.dlq.v1`; `processed_events.event_id` + article identity. |
+| `crawl.batch.requested.v1` | Gateway/Crawler → `crawler-service-v1` nếu command chuyển sang async | `batch_id` | batch ID, source IDs, interval, trigger, idempotency key | MVP ưu tiên HTTP command nên topic này P1. Nếu dùng: một retry topic, một DLQ; unique batch idempotency key. |
+| `article.discovered.v1` | Crawler → `article-service-v1` | `source_id` để giữ thứ tự source; aggregate là discovery/article ID | source/crawl IDs, original URL/title, publication time, bounded parsed source snapshot, headers allowlist | Retry transient DB/Kafka qua `article.discovered.retry.v1`; DLQ `article.discovered.dlq.v1`; `processed_events.event_id` + article identity. |
 | `article.unique.v1` | Article → `intelligence-service-v1` | `article_id` | article ID, source snapshot, normalized title/content/hash, near-duplicate info, publication time | Retry PG/provider-independent failures; DLQ; event ID + unique source article link. |
 | `article.duplicate.v1` | Article → `content-readmodel-v1`/ops optional | `primary_article_id` | duplicate ID, primary ID, kind, score/reasons, source info | Không đi intelligence mặc định cho URL/exact; ops consumer idempotent. Near duplicate vẫn đi `article.unique`. |
 | `article.processing.failed.v1` | Article → `failure-readmodel-v1` | `article_id` | original event reference, stage, error class/code, attempts | Không retry event thông báo; failure read model upsert theo failure ID. |
@@ -49,17 +49,15 @@ Quy tắc version:
 Retry topic convention được tạo chỉ cho input topic có transient failure:
 
 ```text
-<base>.retry.1m.v1
-<base>.retry.5m.v1
-<base>.retry.30m.v1
+<base>.retry.v1
 <base>.dlq.v1
 ```
 
-MVP có tối đa ba delayed attempts ngoài quick in-process retry (ví dụ 3 lần
-trong vài giây). Kafka không tự delay message; retry dispatcher chỉ publish khi
-`retry_at` đến. Nếu delayed scheduler làm vượt scope, dùng một retry topic với
-`retry_at` + bounded dispatcher, vẫn giữ cùng event ID và increment
-`delivery_attempt`.
+MVP có tối đa ba delayed attempts ngoài quick in-process retry. Kafka không tự
+delay message; bounded retry dispatcher chỉ publish lại khi `next_attempt_at`
+đến. Retry giữ cùng `event_id`, tăng `delivery_attempt`, ghi `last_error_code`
+đã redaction và dùng exponential backoff có jitter. Hết attempt thì chuyển
+sang DLQ; không tạo nhiều delay tier.
 
 ## 3. Payload boundaries
 

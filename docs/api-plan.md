@@ -24,7 +24,8 @@
 - Error envelope thống nhất được định nghĩa trong `architecture.md`.
 - Mutation nhận `Idempotency-Key` khi có side effect retryable; optimistic
   mutation nhận `expectedVersion`.
-- Auth roles: `PUBLIC`, `EDITOR`, `PUBLISHER`, `ADMIN`.
+- Auth roles: `PUBLIC`, `EDITOR`, `ADMIN`. `ADMIN` bao gồm toàn bộ quyền
+  `EDITOR`; chỉ `ADMIN` được publish và chạy command vận hành nhạy cảm.
 - Rate limit là planned default, phải config được và xác nhận qua test:
   public GET 120/min/IP; search 60/min/IP; login 10/15min/IP; admin GET
   120/min/user; command 10/min/user; generate/crawl/publish 5/min/user.
@@ -90,9 +91,12 @@ technical log.
 
 | Endpoint | Body → response | Role/rate | Errors | Owner/idempotency |
 | --- | --- | --- | --- | --- |
-| `POST /auth/login` | `{email,password}` → access token + refresh session | anonymous, 10/15min | `INVALID_CREDENTIALS`, `ACCOUNT_DISABLED`, `RATE_LIMITED` | Gateway; không idempotency |
-| `POST /auth/refresh` | refresh cookie/token → new access | authenticated session | invalid/revoked/expired | Gateway; rotate token |
-| `POST /auth/logout` | session ID → 204 | any auth | 401 | Gateway; idempotent |
+| `POST /auth/login` | `{email,password}` → short-lived JWT access token + user/roles | anonymous, 10/15min | `INVALID_CREDENTIALS`, `ACCOUNT_DISABLED`, `RATE_LIMITED` | Gateway; không idempotency |
+| `GET /auth/me` | — → current user/roles | EDITOR/ADMIN | invalid/expired token | Gateway |
+
+Refresh token, server-side session, OAuth, public registration và logout
+revocation không thuộc MVP. Frontend logout xóa access token local; token có
+thời hạn ngắn để giới hạn cửa sổ rủi ro.
 
 ### Sources và crawl
 
@@ -138,7 +142,7 @@ Gateway không query Mongo trực tiếp; nó proxy một hop tới Article inte
 | `POST /admin/drafts/{id}/regenerate` | `{expectedVersion,instructions?}` | EDITOR 5/min | key; in progress/stale story | Content command → Kafka |
 | `POST /admin/drafts/{id}/approve` | `{revisionId,expectedVersion,note?}` | EDITOR 10/min | key; validation warning/conflict | Content |
 | `POST /admin/drafts/{id}/reject` | `{revisionId,expectedVersion,reason}` | EDITOR 10/min | key; invalid transition | Content |
-| `POST /admin/drafts/{id}/publish` | `{revisionId,expectedVersion}` | PUBLISHER 5/min | key required; not approved/stale/already published | Content |
+| `POST /admin/drafts/{id}/publish` | `{revisionId,expectedVersion}` | ADMIN 5/min | key required; not approved/stale/already published | Content |
 | `GET /admin/publications` | date/status pagination | EDITOR | — | Content |
 
 `SCHEDULED`/schedule endpoints không thuộc MVP.

@@ -14,7 +14,7 @@ lưu source evidence, PostgreSQL lưu normalized product/editorial data, Redis
 chỉ rate limit/cache/coordination. Frontend React/Vite hiện hữu được nối dần vào
 Gateway/read models.
 
-**Technology direction:** Python 3.12 (đề xuất), `uv`, FastAPI, Pydantic,
+**Technology direction:** Python 3.12 (đã chốt), `uv`, FastAPI, Pydantic,
 HTTPX, `confluent-kafka`, PyMongo Async, SQLAlchemy 2, `psycopg`, Alembic,
 `redis-py`, Apache Kafka, Airflow, MongoDB, PostgreSQL, Redis, React/Vite.
 
@@ -555,33 +555,36 @@ Project hoàn thành khi có evidence kiểm thử/documentation cho tất cả:
 | Local machine RAM | Medium | High | Compose profiles/resource caps | Airflow/tools profile on demand; small fixture datasets |
 | Python package conflicts | Medium | Medium | uv lock; Airflow image/environment isolation | Airflow không là workspace member nếu conflict |
 
-## 10. Assumptions và decisions cần user xác nhận
+## 10. Baseline Phase 0 đã được chấp thuận
 
-Kế hoạch đang dùng các assumptions sau:
+Các quyết định sau được user chấp thuận ngày 2026-07-31 và được ghi tại
+[`ADR-0001`](./decisions/0001-phase-0-foundation.md):
 
-1. Python 3.12 được chấp nhận cho backend dù máy local hiện có thể có Python
-   khác.
+1. Python 3.12 cho backend; một root `uv` workspace/lockfile, service manifest
+   riêng; Ruff, mypy, pytest và pytest-asyncio.
 2. Giữ `frontend/` React/Vite/pnpm; không chuyển Next.js.
 3. MongoDB là source-of-truth cho Source Article; PostgreSQL cho Story/Content.
 4. Sáu backend services, không có Source Service riêng.
-5. Airflow local profile dùng topology nhẹ, không CeleryExecutor.
-6. AI worker consume Kafka trực tiếp; không ARQ.
-7. Không có publication scheduling trong MVP.
-8. Một demo admin account có thể mang cả EDITOR/PUBLISHER/ADMIN permissions.
-9. Localhost-only; internal token trong private Compose network là đủ cho MVP.
-10. Không Prometheus/Grafana; JSON logs, health, Kafka inspection và admin
-    failure/counter read models.
+5. Apache Kafka KRaft single-node local; JSON Schema/Pydantic; versioned topic;
+   một retry topic và một DLQ cho mỗi input topic cần retry.
+6. `article.discovered.v1` mang bounded parsed source snapshot.
+7. MongoDB chạy single-node replica set để hỗ trợ Article transaction/outbox.
+8. Airflow local profile dùng topology nhẹ, không CeleryExecutor; AI worker
+   consume Kafka trực tiếp, không ARQ.
+9. JWT/Argon2 với hai role: `EDITOR` review/edit/approve/reject; `ADMIN` có thêm
+   publish và quyền vận hành. Local internal token bảo vệ internal APIs.
+10. Không publication scheduling, Prometheus hoặc Grafana trong MVP.
 
-Nếu không phản đối trước Phase 0, các assumption này được coi là approved
-implementation decisions và ghi ADR.
+Các điểm vẫn phải xác minh bằng implementation: dependency versions, exact
+Airflow executor, Kafka partition/retention tuning và mọi command.
 
 ## 11. First 10 implementation tasks
 
 Mỗi task nhỏ, độc lập, theo TDD; command là planned đến khi được chạy.
 
-1. **Record foundation ADRs.** Tạo ADR cho Python 3.12/uv, React-Vite giữ
-   nguyên, service boundaries, databases, Kafka JSON Schema, no ARQ/no
-   Prometheus/Grafana. Verify links và doc lint.
+1. **Verify accepted foundation ADR.** Đối chiếu `ADR-0001` với root
+   instructions và plan; mọi thay đổi quyết định sau này phải supersede ADR,
+   không sửa lịch sử âm thầm.
 2. **Initialize root uv workspace.** Chỉ root config + quality/test tools;
    generate/commit lock. Verify `uv sync --locked` và a smoke test.
 3. **Define event envelope + `article.discovered.v1`.** Write invalid tests

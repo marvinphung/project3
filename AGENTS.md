@@ -19,7 +19,7 @@ event-driven asynchronous pipelines, correctness under at-least-once delivery,
 and grounded AI/NLP integration. The finished MVP must be fully reproducible on
 localhost and demonstrable offline.
 
-## Repository state at initialization
+## Repository state
 
 Verified on 2026-07-26:
 
@@ -39,6 +39,12 @@ Verified on 2026-07-26:
 - On 2026-07-30, the planned backend implementation language was changed from
   a Go/Python split to Python for all backend microservices and workers.
 - Python dependencies and environments will be managed with `uv`.
+- On 2026-07-30, an existing React 19/Vite 8/TypeScript frontend with public
+  and admin mock screens was added under `frontend/`; it uses `pnpm` and is not
+  yet connected to backend APIs.
+- On 2026-07-31, the Phase 0 foundation decisions below were approved. They
+  replace conflicting earlier planning assumptions, but remain unimplemented
+  until corresponding files and verified commands exist.
 
 Do not describe any planned component below as implemented unless the
 repository has subsequently gained and verified it. Update this section when
@@ -141,26 +147,31 @@ Do not create network services for trivial helpers.
 | Component | Planned technology | Responsibility and owned data |
 | --- | --- | --- |
 | API Gateway | Python | Single public/admin HTTP entry point, auth/RBAC, validation, middleware, routing; owns no article/story/publication logic |
-| Source Service | Python | Source definitions, crawl policies, histories, and crawl-batch requests |
-| Collector Service | Python | Safe bounded concurrent RSS/HTML fetching, retries/rate limits, and raw article events |
+| Crawler Service | Python | Source definitions, crawl policies and histories, crawl batches, safe bounded concurrent RSS/HTML fetching, retries/rate limits, and `article.discovered` events |
 | Article Service | Python | Parsing, normalization, metadata, hashes, duplicate detection, and source articles |
 | Intelligence Service | Python | Entities, aliases, classification, claims, story matching, timelines, and correction workflows |
 | AI Content Service | Python | Deterministic mock and optional external generation from grounded claims, with structured validation |
 | Content Service | Python | Drafts, revisions, editorial state, audit history, idempotent publication, and public article data |
-| Web application | Next.js/TypeScript | One application containing public news pages and admin/editorial tools |
+| Web application | Existing React 19/Vite 8/TypeScript | One application containing public news pages and admin/editorial tools; keep it for the MVP |
 | Mock News Source | TBD implementation | Deterministic RSS/HTML fixtures and controllable failure/progression scenarios |
 | Airflow | Python DAGs | Workflow scheduling, batches, backfills, reprocessing, checks, and demos—not per-article business logic |
 
 Planned infrastructure:
 
 - Kafka: asynchronous cross-service event backbone.
-- PostgreSQL: durable source of truth, with one schema or database per service.
+- MongoDB: authoritative evidence store for Source Articles and their duplicate
+  relationships, processing records, and Article Service outbox.
+- PostgreSQL: durable source of truth for source/crawl configuration, identity,
+  stories, claims, generation jobs, drafts, revisions, and publications, with
+  one schema per owning service.
 - Redis: rate limits, cache, and temporary coordination only.
 - Docker Compose: reproducible localhost deployment.
 - OpenAPI: synchronous API contracts.
-- Versioned JSON Schema, Protobuf, or another explicitly selected format:
-  Kafka event contracts. The format is **TBD**.
-- Prometheus, Grafana, and Kafka UI: optional after the core slice works.
+- JSON Schema Draft 2020-12 in Git plus Pydantic runtime models: Kafka event
+  contracts. A Schema Registry is not required for the MVP.
+- Structured JSON logs, health/readiness endpoints, operational read models,
+  and an optional Kafka UI provide localhost observability. Do not add
+  Prometheus or Grafana.
 
 The preferred initial AI worker design is direct Kafka consumption. ARQ may be
 introduced only for a documented, bounded internal Python job need. Never send
@@ -174,17 +185,17 @@ parts required by the active vertical slice:
 ```text
 services/
   api-gateway/
-  source-service/
-  collector-service/
+  crawler-service/
   article-service/
   intelligence-service/
   ai-content-service/
   content-service/
-web/
+frontend/                 # already exists
 airflow/dags/
 contracts/openapi/
 contracts/events/
-infrastructure/{docker,kafka,postgres,redis,monitoring}/
+packages/event-contracts/
+infrastructure/{docker,kafka,mongodb,postgres,redis}/
 mock-news-source/
 test/{fixtures,integration,end-to-end,load}/
 docs/
@@ -198,14 +209,17 @@ AGENTS.md
 
 ## Boundaries and data ownership
 
-- Each service owns a separate PostgreSQL database or schema and its own
-  migrations. Suggested schema names are `source_schema`, `article_schema`,
+- PostgreSQL schemas are `source_schema` (Crawler Service),
   `intelligence_schema`, `ai_content_schema`, `content_schema`, and
-  `identity_schema`; final names are TBD.
+  `identity_schema`. Each owner controls its migrations. There is no
+  PostgreSQL `article_schema` in the MVP.
 - Never query another service's tables. Exchange data through documented APIs
   or Kafka events. Local read models derived from events are allowed.
-- PostgreSQL is authoritative for articles, stories, claims, revisions, and
-  publications. Redis is never authoritative for these entities.
+- MongoDB is authoritative for Source Articles. PostgreSQL is authoritative
+  for stories, claims, generation jobs, revisions, and publications. Story
+  records keep immutable source references or bounded snapshots and do not
+  query MongoDB directly during normal event processing. Redis is never
+  authoritative for these entities.
 - Keep business logic out of HTTP handlers, middleware, Airflow DAGs, and
   infrastructure adapters.
 - Do not replace an asynchronous boundary with direct synchronous coupling
@@ -226,10 +240,10 @@ Every important event should include:
 - aggregate ID and typed payload;
 - trace metadata where available.
 
-Topic names are **TBD**. Candidate groups are `crawl.*`, `article.*`,
-`intelligence.*`, `story.*`, `content.*`, and `publication.*`. Select and
-document one consistent naming convention before producers and consumers
-depend on it.
+Physical topic names follow `<domain>.<event>.v1`, while `event_type` omits the
+version suffix. Initial topics are documented in `docs/event-catalog.md`.
+Retryable input topics use at most one `<base>.retry.v1` topic with
+`next_attempt_at` and one `<base>.dlq.v1` topic for the MVP.
 
 Assume Kafka delivers at least once:
 
@@ -303,14 +317,15 @@ Assume Kafka delivers at least once:
 
 ### Editorial and publication
 
-Use explicit state transitions, initially:
+Use these explicit MVP state transitions:
 
 ```text
-DRAFT → NEEDS_REVIEW → APPROVED → SCHEDULED? → PUBLISHED
+DRAFT → NEEDS_REVIEW → APPROVED → PUBLISHED
                     ↘ REJECTED
 ```
 
-Exact permitted transitions are **TBD** and must be documented and tested.
+Publication scheduling is outside the MVP. Exact correction/re-review
+transitions must be documented and tested before implementation.
 Use conditional updates and audit history. Publishing must require an approved,
 current revision and be idempotent under retries and simultaneous workers.
 Protect it with revision identity, a stable idempotency key, transactions, and
@@ -329,11 +344,12 @@ and crawl-policy configuration. Redis-backed limits must remain correct across
 multiple workers when enabled.
 
 Every long-running service should eventually provide liveness and readiness
-endpoints, structured logs with service and correlation identity, basic
-metrics, and graceful shutdown of HTTP, database, Redis, and Kafka resources.
+endpoints, structured logs with service and correlation identity, operational
+counters/read models, and graceful shutdown of HTTP, database, Redis, and Kafka
+resources.
 Never log secrets or full scraped article bodies by default.
 
-Prioritize metrics for crawl outcomes/latency/rate limits/retries, consumer lag,
+Prioritize locally inspectable counters for crawl outcomes/latency/rate limits/retries, consumer lag,
 article throughput and duplicate rate, story create/update outcomes, AI queue
 and validation behavior, draft/publication outcomes, and DLQ size.
 
@@ -380,10 +396,11 @@ and validation behavior, draft/publication outcomes, and DLQ size.
 - Add focused tests for alias resolution, classification, clustering, and
   generation validation, plus concurrency-sensitive tests for collection,
   story updates, event handling, and publication.
-- Formatter, linter, type-checker, and exact commands are **TBD** until
-  repository configuration selects them.
+- The approved Python quality stack is Ruff for formatting/linting, mypy for
+  static typing, and pytest/pytest-asyncio for tests. Exact commands remain
+  **TBD** until their configuration exists and has been executed.
 
-### TypeScript and Next.js
+### TypeScript and React/Vite
 
 - Enable strict TypeScript.
 - Keep server/client responsibilities explicit and share or generate API types
@@ -393,7 +410,8 @@ and validation behavior, draft/publication outcomes, and DLQ size.
 - Do not duplicate backend business rules in the frontend.
 - Add suitable news-page SEO metadata without prioritizing visual polish over
   pipeline correctness.
-- Package manager, lint/test tools, and exact commands are **TBD**.
+- Keep the existing `pnpm` package manager. Exact lint/test commands remain
+  **TBD** until they have been executed successfully.
 
 ## Testing and validation
 
@@ -491,21 +509,50 @@ Do not claim the planned architecture or MVP is complete until the full
 localhost workflow, recovery behavior, tests, and documentation demonstrate
 the project completion criteria.
 
+## Accepted Phase 0 foundation decisions
+
+Approved on 2026-07-31:
+
+- Python 3.12 for backend services and workers.
+- One root `uv` workspace and committed `uv.lock`; each service has its own
+  package manifest. A small `event-contracts` package may be shared, but
+  service business logic must remain private.
+- FastAPI and Pydantic for HTTP boundaries; Ruff, mypy, pytest, and
+  pytest-asyncio for Python quality and tests.
+- Six backend services: API Gateway, Crawler, Article, Intelligence, AI
+  Content, and Content. Do not add a separate Source Service in the MVP.
+- Keep the existing React/Vite frontend and `pnpm`; do not migrate to Next.js
+  in the MVP.
+- Apache Kafka in single-node KRaft mode for localhost. Use
+  `replication.factor=1` only locally, while producers still use `acks=all`
+  and idempotence where supported.
+- JSON Schema Draft 2020-12 plus Pydantic event validation, versioned topic
+  names, one retry topic per retryable base topic, and one DLQ.
+- `article.discovered.v1` carries a bounded parsed source snapshot sufficient
+  for Article Service processing, not full raw HTML and not only a retrieval
+  ID.
+- MongoDB runs as a single-node replica set locally so Article Service can
+  transactionally write evidence, processed-event state, and its outbox.
+- Airflow 3 runs in a separate lightweight Compose profile without
+  CeleryExecutor. The exact supported local executor must be confirmed by a
+  smoke test when Compose is implemented.
+- JWT access tokens, Argon2 password hashes, and roles `ADMIN` and `EDITOR`.
+  Public reads require no token. `EDITOR` may review/edit/approve/reject;
+  only `ADMIN` may publish and perform source/crawl/retry/merge administration.
+  Internal APIs use a configured `X-Internal-Token` inside the local Compose
+  network. Refresh tokens, OAuth, and public registration are not MVP work.
+- MongoDB owns Source Articles; PostgreSQL owns the other normalized product
+  data in the schemas listed above.
+- No ARQ, scheduled publication, Prometheus, or Grafana in the MVP.
+
 ## Decisions still TBD
 
 Confirm through an architecture decision or implementation slice before
 depending on:
 
-- supported Python version, framework, repository/package naming, and quality
-  tools;
-- exact service directory and schema/database names;
-- Kafka event schema format, topic names, partition keys, retry topics, and DLQ
-  convention;
-- API authentication and role model;
-- Next.js package manager and test stack;
-- migration tools for Python services;
-- Kafka distribution and local Airflow executor;
-- whether scheduling publication is included in the MVP;
-- observability components included in the default local stack;
+- exact dependency versions once `uv.lock` is generated;
+- exact Kafka partition counts and retention after local load measurements;
+- exact Airflow 3 local executor after Compose smoke testing;
+- frontend lint/test stack beyond the existing `pnpm` setup;
 - exact similarity thresholds and confirmation transition rules;
 - verified build, lint, test, migration, startup, and demo commands.
