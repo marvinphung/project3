@@ -25,8 +25,9 @@ Verified on 2026-07-26:
 
 - The repository root contains only `README.md`, `.gitignore`, and this file.
 - `README.md` contains only the heading `# project3`.
-- `.gitignore` contains Go binary/test-output patterns, ignores `go.work`,
-  `go.work.sum`, and `.env`, and has no broader multi-language rules yet.
+- `.gitignore` contains Python/`uv`, test, coverage, build, Next.js, environment,
+  editor, and operating-system artifact rules. `uv.lock` is intentionally not
+  ignored and must be committed once generated.
 - The Git branch is `main`; the initial commit is the only commit.
 - No application source, service directories, module/package manifests,
   dependency locks, Docker/Compose files, migrations, schemas, tests,
@@ -35,6 +36,9 @@ Verified on 2026-07-26:
   verified. All commands in those categories are **TBD** until their owning
   files are added and the commands are executed successfully.
 - No service-specific instructions currently exist.
+- On 2026-07-30, the planned backend implementation language was changed from
+  a Go/Python split to Python for all backend microservices and workers.
+- Python dependencies and environments will be managed with `uv`.
 
 Do not describe any planned component below as implemented unless the
 repository has subsequently gained and verified it. Update this section when
@@ -136,13 +140,13 @@ Do not create network services for trivial helpers.
 
 | Component | Planned technology | Responsibility and owned data |
 | --- | --- | --- |
-| API Gateway | Go | Single public/admin HTTP entry point, auth/RBAC, validation, middleware, routing; owns no article/story/publication logic |
-| Source Service | Go | Source definitions, crawl policies, histories, and crawl-batch requests |
-| Collector Service | Go | Safe bounded concurrent RSS/HTML fetching, retries/rate limits, and raw article events |
-| Article Service | Go | Parsing, normalization, metadata, hashes, duplicate detection, and source articles |
+| API Gateway | Python | Single public/admin HTTP entry point, auth/RBAC, validation, middleware, routing; owns no article/story/publication logic |
+| Source Service | Python | Source definitions, crawl policies, histories, and crawl-batch requests |
+| Collector Service | Python | Safe bounded concurrent RSS/HTML fetching, retries/rate limits, and raw article events |
+| Article Service | Python | Parsing, normalization, metadata, hashes, duplicate detection, and source articles |
 | Intelligence Service | Python | Entities, aliases, classification, claims, story matching, timelines, and correction workflows |
 | AI Content Service | Python | Deterministic mock and optional external generation from grounded claims, with structured validation |
-| Content Service | Go | Drafts, revisions, editorial state, audit history, idempotent publication, and public article data |
+| Content Service | Python | Drafts, revisions, editorial state, audit history, idempotent publication, and public article data |
 | Web application | Next.js/TypeScript | One application containing public news pages and admin/editorial tools |
 | Mock News Source | TBD implementation | Deterministic RSS/HTML fixtures and controllable failure/progression scenarios |
 | Airflow | Python DAGs | Workflow scheduling, batches, backfills, reprocessing, checks, and demos—not per-article business logic |
@@ -249,10 +253,11 @@ Assume Kafka delivers at least once:
 
 ### Collection
 
-- Use bounded worker pools and channels; never create unbounded goroutines.
-- Propagate contexts and cancellation, reuse configured HTTP clients, enforce
-  global and per-domain concurrency, support backpressure, and shut down
-  gracefully without acknowledging incomplete work.
+- Use bounded worker pools, queues, semaphores, or structured task groups; never
+  create unbounded threads, processes, or asyncio tasks.
+- Propagate cancellation and deadlines, reuse configured asynchronous HTTP
+  clients, enforce global and per-domain concurrency, support backpressure, and
+  shut down gracefully without acknowledging incomplete work.
 - Bound attempts, redirects, response sizes, and timeouts; respect
   `Retry-After` where applicable.
 - SSRF protection is mandatory: allow only HTTP/HTTPS, use configured domains,
@@ -352,29 +357,31 @@ and validation behavior, draft/publication outcomes, and DLQ size.
 - Keep the three-week scope and complete vertical slice ahead of optional
   polish.
 
-### Go
-
-- Run `gofmt` on changed Go files.
-- Use contexts for I/O and graceful cancellation.
-- Prefer explicit constructors and small consumer-owned interfaces; do not
-  create an interface for every struct.
-- Avoid mutable globals. Reuse HTTP clients and configure DB pools.
-- Bound goroutines and channels and avoid leaks.
-- Prefer table-driven tests where appropriate.
-- Once Go modules and commands exist, verify `go vet` and use the race detector
-  for concurrency-sensitive packages. Exact repository commands are **TBD**.
-
 ### Python
 
+- Use `uv` as the sole Python dependency and environment manager. Declare
+  dependencies in `pyproject.toml`, commit `uv.lock`, and use `uv run` for
+  repository Python commands. Do not introduce a second package manager or
+  maintain hand-written requirements files unless a documented integration
+  requires an exported compatibility file.
 - Use type hints and separate domain logic from framework/worker adapters.
-- Keep worker operations idempotent and concurrency explicit.
+- Use async I/O for network-bound service and collector work where it improves
+  throughput, while keeping blocking and CPU-bound work off the event loop.
+- Bound asyncio tasks, thread/process pools, queues, database pools, HTTP
+  connections, and Kafka consumer concurrency. Propagate cancellation and
+  deadlines and close resources gracefully.
+- Keep worker operations idempotent and concurrency, transaction boundaries,
+  retries, and acknowledgement timing explicit.
+- Prefer explicit dependency injection and small protocol-based boundaries over
+  framework globals or speculative abstractions.
 - Avoid hidden global model state.
 - Validate all structured AI output.
 - Retain deterministic mock implementations.
 - Add focused tests for alias resolution, classification, clustering, and
-  generation validation.
-- Formatter, linter, type-checker, package manager, and exact commands are
-  **TBD** until repository configuration selects them.
+  generation validation, plus concurrency-sensitive tests for collection,
+  story updates, event handling, and publication.
+- Formatter, linter, type-checker, and exact commands are **TBD** until
+  repository configuration selects them.
 
 ### TypeScript and Next.js
 
@@ -425,7 +432,6 @@ There are currently no verified project commands.
 | Unit tests | TBD |
 | Integration tests | TBD |
 | End-to-end tests | TBD |
-| Go format/vet/race | TBD until Go modules exist |
 | Python format/lint/type-check | TBD |
 | TypeScript lint/type-check/test | TBD |
 | Database migration | TBD |
@@ -490,14 +496,14 @@ the project completion criteria.
 Confirm through an architecture decision or implementation slice before
 depending on:
 
-- Go module path and repository/package naming;
+- supported Python version, framework, repository/package naming, and quality
+  tools;
 - exact service directory and schema/database names;
 - Kafka event schema format, topic names, partition keys, retry topics, and DLQ
   convention;
 - API authentication and role model;
-- Python package manager/framework and quality tools;
 - Next.js package manager and test stack;
-- migration tools for Go and Python services;
+- migration tools for Python services;
 - Kafka distribution and local Airflow executor;
 - whether scheduling publication is included in the MVP;
 - observability components included in the default local stack;
