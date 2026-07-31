@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://footballpulse.local/contracts/events/article.discovered/v1.schema.json",
+  "title": "article.discovered v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "occurred_at",
+    "producer",
+    "correlation_id",
+    "causation_id",
+    "aggregate_id",
+    "payload"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "const": "article.discovered"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "producer": {
+      "const": "crawler-service"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "causation_id": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "aggregate_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    },
+    "payload": {
+      "$ref": "#/$defs/articleDiscoveredPayload"
+    }
+  },
+  "$defs": {
+    "articleDiscoveredPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "discovery_id",
+        "source_id",
+        "crawl_batch_id",
+        "source_name",
+        "source_domain",
+        "original_url",
+        "canonical_url_hint",
+        "original_title",
+        "parsed_content",
+        "author",
+        "published_at",
+        "collected_at",
+        "language",
+        "http_status",
+        "content_type",
+        "response_headers"
+      ],
+      "properties": {
+        "discovery_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "crawl_batch_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "source_domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
+        "original_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://"
+        },
+        "canonical_url_hint": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "original_title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "parsed_content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        },
+        "author": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "published_at": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "collected_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "language": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+        },
+        "http_status": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 299
+        },
+        "content_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "response_headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "etag": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last-modified": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "content-language": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

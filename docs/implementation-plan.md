@@ -1,7 +1,8 @@
 # FootballPulse — Kế hoạch triển khai
 
-> Tài liệu này chỉ là kế hoạch. Không có application feature, dependency hoặc
-> service scaffold nào được tạo trong task lập kế hoạch.
+> Tài liệu này mô tả thứ tự triển khai từ trạng thái repository ngày
+> 2026-07-31. Trong lần cập nhật này không triển khai application feature,
+> không cài dependency và không chạy Docker.
 
 **Mục tiêu:** Trong 3 tuần, khoảng 4–8 giờ/ngày, xây dựng một vertical slice
 localhost/offline từ thu thập nguồn đến story, draft, review, publication và
@@ -27,7 +28,8 @@ HTTPX, `confluent-kafka`, PyMongo Async, SQLAlchemy 2, `psycopg`, Alembic,
   hợp và xuất bản tin tức bóng đá theo kiến trúc microservices**.
 - English: **FootballPulse — Automated Football News Intelligence Platform**.
 - Thời gian: 21 ngày, 4–8 giờ/ngày.
-- Chạy localhost, ưu tiên Docker Compose; offline demo là P0.
+- Chạy localhost bằng Docker Compose và offline demo vẫn là P0 của toàn dự án,
+  nhưng theo ADR-0002 mọi task Docker được gom vào phase cuối.
 - Không dùng Go, Prometheus hoặc Grafana.
 - Không dùng MongoDB polling để kích hoạt Intelligence.
 - Không dùng ARQ trong MVP.
@@ -40,12 +42,23 @@ Source Article != Story != Published News Article
 
 ## 2. Repository assessment
 
-Kiểm tra ngày 2026-07-30 cho thấy:
+Kiểm tra lại ngày 2026-07-31 cho thấy:
 
 ### Đã tồn tại
 
-- Root: `AGENTS.md`, `.gitignore`, `README.md`.
-- `README.md` chỉ có `# project3`; không có quick start/architecture/commands.
+- Root đã có `AGENTS.md`, `.gitignore`, `README.md`, `.python-version`,
+  `pyproject.toml`, `uv.lock`, `.env.example`, `Makefile` và
+  `docker-compose.yml`.
+- Python 3.12 và root `uv` workspace đã được thiết lập; Ruff, mypy, pytest và
+  pytest-asyncio đã có cấu hình.
+- `packages/event-contracts/` đã có Pydantic model cho
+  `article.discovered.v1`; JSON Schema và valid fixture tương ứng nằm dưới
+  `contracts/events/` và `tests/contract/`.
+- `mock-news-source/static/` đã có deterministic RSS/HTML tối thiểu.
+- `infrastructure/` đã có Kafka topic init, Mongo replica-set init và
+  PostgreSQL schema init scripts.
+- `docker-compose.yml` và infrastructure smoke script đã được tạo nhưng lần
+  start/smoke hoàn chỉnh chưa được xác nhận; không được coi stack là hoạt động.
 - `.gitignore` đã có Python/uv, test/build, frontend và env rules.
 - `.venv/` local tồn tại nhưng ignored; chưa có root `pyproject.toml` hay
   `uv.lock`.
@@ -63,13 +76,15 @@ Kiểm tra ngày 2026-07-30 cho thấy:
 
 ### Chưa tồn tại
 
-- Không có Python application/package/service.
+- Không có Python application service hoặc business logic service.
 - Không có backend/API/Kafka producer/consumer.
 - Không có MongoDB/PostgreSQL/Redis schemas, migrations hay repositories.
-- Không có event/OpenAPI contracts.
-- Không có Dockerfile/Compose, Airflow DAG, mock news service.
+- Chưa có OpenAPI contracts; mới chỉ có event contract đầu tiên.
+- Không có service Dockerfile hoặc Airflow DAG/profile.
 - Không có backend/frontend tests hoặc CI.
-- Không có verified build/test/start/migration/demo command ở root.
+- Chưa có verified Docker startup, migration, integration, E2E hoặc demo
+  command. Quality/contract commands phải được chạy lại ở checkpoint Phase 0
+  trước khi ghi là verified hiện tại.
 - Frontend `package.json` có `dev`, `build`, `preview`, `format`, nhưng trong
   task này không chạy/install nên vẫn chưa xác nhận.
 
@@ -141,53 +156,63 @@ fan-out. Chi tiết đầy đủ ở `architecture.md`.
 
 ## 5. Phased delivery strategy
 
-### Phase 0 — Decision lock và foundation (Days 1–2)
+### Phase 0 — Foundation không Docker (Days 1–2)
 
-Chốt contract conventions, uv workspace, quality tools, Docker baseline và
-first event. Chỉ tạo những phần Milestone 1 cần.
+Chốt conventions, uv workspace, quality tools, configuration, first event
+contract và deterministic fixtures. Không tạo/chạy container và không scaffold
+toàn bộ services.
 
-**Gate:** root environment có verified commands; Kafka/Mongo/Postgres/Redis và
-mock source health; một contract fixture validate.
+**Gate:** root quality/contract commands chạy được; schema valid/invalid được
+test; mock fixtures deterministic; mọi Docker command vẫn được ghi rõ là
+deferred/unverified.
 
-### Phase 1 — Ingestion vertical slice (Days 3–6)
+**Status 2026-07-31:** hoàn thành. Workspace/lockfile, event contract, runtime
+configuration, fixture catalog, port conventions và non-Docker quality gates
+đã có. Docker/integration gate vẫn chưa bắt đầu.
+
+### Phase 1 — Ingestion domain slice (Days 3–6)
 
 ```text
-Manual trigger → Mock source → Crawler → Kafka
-→ Article Service → MongoDB → article.unique
+Mocked HTTP → Crawler use case → validated event port
+→ Article use case → repository/outbox ports
 ```
 
-**Gate:** exact duplicate được giữ evidence nhưng chỉ một unique downstream;
-429/500/timeout có test; worker restart/redelivery không duplicate.
+**Gate:** crawler safety/retry/concurrency và article normalization/dedup/
+idempotency/outbox được chứng minh bằng unit/contract tests với deterministic
+fakes. Chưa tuyên bố Kafka/MongoDB integration hoạt động.
 
-### Phase 2 — Intelligence/story vertical slice (Days 7–11)
+### Phase 2 — Intelligence/story domain slice (Days 7–11)
 
 ```text
-article.unique → Intelligence → entity/alias/keyword
-→ claim/story/timeline → PostgreSQL → generation request
+article.unique fixture → Intelligence use case → entity/alias/keyword
+→ claim/story/timeline → repository/outbox ports → generation request
 ```
 
 **Gate:** multi-source transfer vào một story; injury/match tách; concurrent
-workers không tạo duplicate story.
+use cases dùng optimistic-version/unique-conflict semantics không tạo duplicate
+story trong fake concurrency tests. PostgreSQL behavior chờ phase cuối xác minh.
 
-### Phase 3 — Editorial/public vertical slice (Days 12–16)
-
-```text
-story version → Mock AI → validated draft
-→ review/approve/publish → read model/API → existing frontend
-```
-
-**Gate:** editor publish đúng current approved revision; public/search/entity
-screens đọc API thật; offline.
-
-### Phase 4 — Orchestration, recovery và final demo (Days 17–21)
+### Phase 3 — AI, editorial và API contracts (Days 12–16)
 
 ```text
-Airflow schedule/manual/demo → retry/DLQ/outbox/reconcile
-→ failure/load/E2E → documentation
+story fixture → Mock AI → validated draft
+→ review/approve/publish use cases → API contracts → frontend client boundary
 ```
 
-**Gate:** full Compose/demo documented; restart and failure scenarios pass;
-scope/limitations/measurements trung thực.
+**Gate:** mock AI grounding, editorial invariants, auth/RBAC/middleware và
+frontend contract mapping có focused tests. Chưa gọi đây là full-stack.
+
+### Phase 4 — Docker integration, orchestration và final demo (Days 17–21)
+
+```text
+Docker dependencies → real adapters/migrations/topics
+→ services → Airflow schedule/manual/demo
+→ retry/DLQ/outbox/reconcile → offline E2E/load → documentation
+```
+
+**Gate:** Compose sạch start/stop được; Kafka/Mongo/Postgres/Redis/Airflow thật
+được smoke/integration test; full offline demo, restart và failure scenarios
+pass; scope/limitations/measurements được ghi trung thực.
 
 ## 6. Roadmap 21 ngày
 
@@ -210,83 +235,94 @@ ngay trong ngày thay vì chuyển sang breadth mới.
 - **Fallback:** Airflow giữ environment/image riêng, app services vẫn một uv
   workspace.
 
-### Day 2 — Local infrastructure tối thiểu
+### Day 2 — Contract/config và deterministic fixtures
 
-- **Objective:** Dependency services và Mock Source chạy ổn định.
-- **Tasks:** Compose Kafka KRaft, Mongo single-node replica set, PostgreSQL,
-  Redis, mock news source; health/init scripts; `.env.example`.
-- **Expected:** `docker-compose.yml`, infrastructure init/health files,
-  `mock-news-source/` chỉ với fixture endpoints cần cho first slice.
-- **Tests:** Compose config; health; replica transaction smoke; Kafka produce/
-  consume smoke; fixture snapshot.
+- **Objective:** Hoàn thành foundation có thể kiểm tra mà không cần container.
+- **Tasks:** chuẩn hóa event envelope; invalid fixtures; config model đọc env;
+  mock RSS/HTML datasets cho transfer/duplicate/injury/match và failure scripts;
+  repository/producer protocols tối thiểu cho Milestone 1.
+- **Expected:** `contracts/events/`, `packages/event-contracts/`,
+  `tests/fixtures/`, config tests và mock-source fixture manifest.
+- **Tests:** JSON Schema/Pydantic compatibility; unknown field/timezone/size
+  rejection; fixture snapshot; config secret không xuất hiện trong repr/log.
 - **Dependencies:** Day 1.
-- **DoD:** clean startup/shutdown; no Internet needed.
-- **Risk:** Mongo replica/Kafka init race.
-- **Fallback:** explicit idempotent init container/script và readiness retry;
-  chưa thêm Airflow.
+- **DoD:** fixtures ổn định, tests offline pass, không có container được chạy.
+- **Risk:** contract quá rộng trước use case.
+- **Fallback:** chỉ giữ envelope và `article.discovered.v1`; bổ sung event khác
+  đúng lúc vertical slice cần.
 
 ### Day 3 — Crawler fetch một source
 
 - **Objective:** Manual command fetch RSS/HTML mock an toàn.
-- **Tasks:** Crawler package; source config/crawl batch minimal migration;
-  HTTPX client; URL allowlist/SSRF guard; one-source command.
-- **Expected:** `services/crawler-service`, source migration, focused tests.
+- **Tasks:** Crawler package; source/crawl policy domain model; HTTP client
+  protocol; URL allowlist/SSRF guard; one-source use case.
+- **Expected:** `services/crawler-service` chỉ gồm package cần cho slice và
+  focused tests; migration để sau adapter phase.
 - **Tests:** RSS parse, allowed mock host, private target reject, timeout/size.
-- **Dependencies:** mock source, Postgres.
+- **Dependencies:** Day 2 fixtures/contracts.
 - **DoD:** một source tạo bounded article candidates, chưa cần broad parsers.
 - **Risk:** over-generalized crawler.
 - **Fallback:** chỉ support explicit fixture RSS + simple HTML selectors.
 
-### Day 4 — Bounded concurrency, rate/retry và Kafka produce
+### Day 4 — Bounded concurrency, rate/retry và event producer port
 
-- **Objective:** Crawler phát durable `article.discovered`.
+- **Objective:** Crawler tạo đúng `article.discovered` và chỉ acknowledge sau
+  khi producer port xác nhận delivery.
 - **Tasks:** global/per-domain semaphore/rate policy; 429/5xx/timeout retry;
-  Kafka producer delivery callback; batch counters.
+  producer protocol/delivery result; fake producer; batch counters.
 - **Expected:** crawler adapters/domain policies, event fixtures.
 - **Tests:** concurrency bound, Retry-After, delivery failure, only confirmed
   event increments queued.
-- **Dependencies:** Day 3, Kafka.
+- **Dependencies:** Day 3; không cần broker thật.
 - **DoD:** multi-source crawl không vượt limit; deterministic failures pass.
-- **Risk:** async client + sync Kafka loop complexity.
-- **Fallback:** dedicated producer thread/queue bounded, không dùng experimental
-  async Kafka API.
+- **Risk:** fake producer không phản ánh callback semantics của client Kafka.
+- **Fallback:** định nghĩa contract delivery/timeout rõ và đánh dấu integration
+  proof là bắt buộc ở Day 18.
 
-### Day 5 — Article normalization và Mongo evidence
+### Day 5 — Article normalization và evidence model
 
-- **Objective:** Consume discovered event, persist immutable Source Article.
-- **Tasks:** Article worker/repository; Mongo indexes; URL/title/content
-  normalization; hash; processed events.
-- **Expected:** `services/article-service`, Mongo init/index definitions,
-  `article.unique` contract.
-- **Tests:** normalization tables, transaction, invalid event no business write.
+- **Objective:** Xử lý discovered event thành immutable Source Article qua
+  repository port.
+- **Tasks:** Article use case/repository protocol; URL/title/content
+  normalization; hash; processed-event/idempotency model; `article.unique`
+  contract.
+- **Expected:** `services/article-service`, pure domain modules, contracts và
+  fake repository tests.
+- **Tests:** normalization tables; invalid event no repository call; duplicate
+  event no repeated state/outbox intent.
 - **Dependencies:** Day 4.
-- **DoD:** one discovered event → one evidence doc + trace metadata.
-- **Risk:** PyMongo Async behavior/transactions.
-- **Fallback:** sync PyMongo worker process if Async API blocks progress; giữ
-  repository interface và transaction semantics.
+- **DoD:** one discovered fixture → one evidence aggregate + trace metadata +
+  outbox intent trong fake atomic boundary.
+- **Risk:** fake atomic boundary che giấu Mongo transaction constraint.
+- **Fallback:** giữ transaction contract nhỏ và xác minh bắt buộc Day 18.
 
-### Day 6 — Duplicate, Article outbox và Milestone 1
+### Day 6 — Duplicate và Article outbox semantics
 
 - **Objective:** Chứng minh ingestion idempotent và recoverable.
-- **Tasks:** URL/exact/near duplicate; identities; Mongo outbox publisher;
-  retry/DLQ first path; integration scenario.
-- **Expected:** duplicate/history collections, outbox worker, Milestone 1 tests.
-- **Tests:** duplicate races, redelivery, crash after commit, outbox replay.
+- **Tasks:** URL/exact/near duplicate; identities; outbox state machine;
+  retry/DLQ classification; fake publisher scenario.
+- **Expected:** duplicate model, outbox protocol/state transitions và Milestone
+  1 domain tests.
+- **Tests:** duplicate race model, redelivery, simulated crash after commit,
+  outbox replay/idempotency.
 - **Dependencies:** Day 5.
-- **DoD:** Milestone 1 gate đạt; duplicate evidence preserved.
+- **DoD:** Milestone 1 domain gate đạt; duplicate evidence preserved trong
+  model/fake repository. Real Mongo/Kafka gate vẫn mở tới Day 18.
 - **Risk:** near-duplicate tuning.
 - **Fallback:** URL + exact P0; near duplicate simple title/SimHash flag nhưng
   không auto-suppress.
 
-### Day 7 — Intelligence schema và seed aliases
+### Day 7 — Intelligence model và seed aliases
 
-- **Objective:** Migrations cho entities/stories/claims và curated seed.
-- **Tasks:** schema/migrations; repositories; entity/alias fixtures; processed
-  event/outbox bases.
-- **Expected:** `services/intelligence-service`, Alembic migrations, seeds.
-- **Tests:** migration up/down policy, unique aliases/fingerprints/links.
+- **Objective:** Domain model cho entities/stories/claims và curated seed.
+- **Tasks:** entity/alias/story/claim models; repository protocols; fixtures;
+  processed-event/outbox contracts.
+- **Expected:** `services/intelligence-service`, domain modules và seed data.
+- **Tests:** unique alias/fingerprint/link invariants bằng fake repository;
+  model validation.
 - **Dependencies:** article.unique contract.
-- **DoD:** schema owner isolation; aliases deterministic.
+- **DoD:** ownership boundary rõ; aliases deterministic; migration chưa được
+  tuyên bố verified.
 - **Risk:** data model breadth.
 - **Fallback:** chỉ fields/indexes P0 trong `data-model.md`.
 
@@ -315,18 +351,19 @@ ngay trong ngày thay vì chuyển sang breadth mới.
 - **Risk:** claim extraction scope.
 - **Fallback:** template rules cho demo categories; optional structured LLM P1.
 
-### Day 10 — Concurrent story update/outbox
+### Day 10 — Concurrent story update/outbox use case
 
 - **Objective:** Atomic create/attach/update/version.
-- **Tasks:** transaction, lock/unique fingerprint, optimistic version retry;
-  timeline/confirmation; story outbox.
-- **Expected:** consumer, repositories, outbox publisher.
+- **Tasks:** unit-of-work protocol; unique fingerprint conflict; optimistic
+  version retry; timeline/confirmation; story outbox intent.
+- **Expected:** consumer use case, repository ports, fake concurrency harness.
 - **Tests:** same story race, no lost claim/timeline, duplicate event.
 - **Dependencies:** Day 9.
-- **DoD:** one active story; consistent version/history.
-- **Risk:** lock/deadlock.
-- **Fallback:** serialize per fingerprint partition + unique constraint; keep
-  database protection.
+- **DoD:** fake contention giữ one active story và consistent version/history;
+  database proof được deferred.
+- **Risk:** PostgreSQL isolation/locking khác fake harness.
+- **Fallback:** unique constraints + bounded retry design phải được integration
+  test Day 18 trước khi tiếp tục E2E.
 
 ### Day 11 — Editor corrections và Milestone 2
 
@@ -342,10 +379,12 @@ ngay trong ngày thay vì chuyển sang breadth mới.
 
 ### Day 12 — AI job/provider abstraction
 
-- **Objective:** Direct Kafka generation worker and deterministic mock provider.
-- **Tasks:** job/attempt schema; adapter protocol; lease/restart; MockProvider;
+- **Objective:** Generation consumer use case theo direct-Kafka design và
+  deterministic mock provider; Kafka adapter thật để Phase 4.
+- **Tasks:** job/attempt model; adapter protocol; lease/restart; MockProvider;
   provider request schema.
-- **Expected:** `services/ai-content-service`, migrations, fixtures.
+- **Expected:** `services/ai-content-service`, domain/use-case code và fixtures;
+  migrations được viết ở Day 17.
 - **Tests:** job idempotency, expired lease, deterministic result.
 - **Dependencies:** generation event.
 - **DoD:** same story/version produces one successful job.
@@ -364,12 +403,12 @@ ngay trong ngày thay vì chuyển sang breadth mới.
 - **Risk:** API/model changes/cost.
 - **Fallback:** keep adapters config-tested, final demo uses mock only.
 
-### Day 14 — Content state/revisions/publication
+### Day 14 — Content state/revisions/publication use cases
 
 - **Objective:** Durable editorial workflow.
-- **Tasks:** Content migrations; consume draft event; revisions/actions;
+- **Tasks:** consume draft event use case; revisions/actions;
   approve/reject/publish commands; publication outbox/read model.
-- **Expected:** `services/content-service`, OpenAPI slice.
+- **Expected:** `services/content-service`, OpenAPI slice và fake repositories.
 - **Tests:** state matrix, stale edit, simultaneous/idempotent publish.
 - **Dependencies:** draft event.
 - **DoD:** exactly one successful publication per approved draft.
@@ -379,9 +418,9 @@ ngay trong ngày thay vì chuyển sang breadth mới.
 ### Day 15 — Gateway public/admin API
 
 - **Objective:** Stable API façade, auth/RBAC/middleware/read endpoints.
-- **Tasks:** identity schema; login; request/correlation/error/CORS/security/
-  body/time/rate middleware; public news/detail/search/entities; admin commands
-  needed for demo.
+- **Tasks:** identity/auth domain model và repository port; login;
+  request/correlation/error/CORS/security/body/time/rate middleware; public
+  news/detail/search/entities; admin commands needed for demo.
 - **Expected:** `services/api-gateway`, OpenAPI, contract tests.
 - **Tests:** middleware order/headers/error, RBAC, rate limits, pagination.
 - **Dependencies:** Content/Intelligence APIs/read models.
@@ -389,63 +428,76 @@ ngay trong ngày thay vì chuyển sang breadth mới.
 - **Risk:** too many endpoints.
 - **Fallback:** implement exact demo/UI endpoints P0; leave full CRUD P1.
 
-### Day 16 — Frontend API integration và Milestone 3
+### Day 16 — Frontend contract integration và Milestone 3
 
-- **Objective:** Existing React screens dùng real API.
+- **Objective:** Existing React screens dùng typed API boundary; runtime
+  full-stack được xác minh ở phase Docker.
 - **Tasks:** API client/types/auth; homepage/article/search/entity; admin
   sources/story/draft/failure priority screens; route guards; states; local
-  assets.
+  assets; mock transport chỉ bật trong test/dev contract mode.
 - **Expected:** frontend data/adapters/hooks and focused page updates.
 - **Tests:** component states, frontend build, browser happy path.
 - **Dependencies:** Gateway OpenAPI.
-- **DoD:** no silent mock fallback in demo; full publish visible publicly.
+- **DoD:** frontend contract/component tests pass; không có silent mock fallback
+  trong cấu hình demo cuối.
 - **Risk:** UI contract mismatch.
 - **Fallback:** wire homepage/article/search + draft review only; remaining
   admin lists use API next.
 
-### Day 17 — Airflow collection/manual/demo DAG
+### Day 17 — Docker baseline và real persistence adapters
 
-- **Objective:** Workflow orchestration every two hours.
-- **Tasks:** Airflow local topology; collection DAG `0 */2 * * *`; manual
-  backfill/reprocess/demo DAG; stable idempotency keys.
-- **Expected:** `airflow/dags`, Compose Airflow profile.
-- **Tests:** DAG import, task retry/timeout, duplicate DAG run.
-- **Dependencies:** crawl batch API.
-- **DoD:** Airflow calls batch API; no per-article task/business logic.
-- **Risk:** Airflow RAM/startup.
-- **Fallback:** scheduler + API server/executor light; turn Airflow profile on
-  only for demo.
+- **Objective:** Bắt đầu phase Docker; đưa dependency services lên từ clean
+  state và gắn migrations/repositories thật.
+- **Tasks:** review/finalize Compose cho Kafka KRaft, Mongo replica set,
+  PostgreSQL, Redis và mock source; service Dockerfiles khi cần; health/init;
+  Alembic migrations; Mongo indexes; real repository adapters.
+- **Expected:** Compose profiles, Dockerfiles tối thiểu, migrations/index
+  definitions và integration test configuration.
+- **Tests:** `docker compose config`; clean start/stop; health; Mongo
+  transaction; PostgreSQL migration; Redis auth; mock-source snapshot.
+- **Dependencies:** Phase 0–3 contracts/use cases.
+- **DoD:** dependency stack clean-start được và real repository contract tests
+  pass.
+- **Risk:** dồn lỗi version/network/init race về cuối.
+- **Fallback:** bật từng dependency profile để debug; không bỏ real integration
+  hoặc thay bằng SQLite.
 
-### Day 18 — Retry/DLQ/failure UI/reconciliation
+### Day 18 — Kafka adapters, retry/DLQ và Milestone 1 thật
 
-- **Objective:** Complete recovery loop.
-- **Tasks:** retry topics/dispatcher; DLQ/failure read model; admin retry;
-  reconciliation commands; outbox/stuck job handling.
-- **Expected:** failure contracts/workers/runbook/UI wiring.
-- **Tests:** poison continues partition, replay causation, missing outbox recovery.
-- **Dependencies:** all workers.
-- **DoD:** exhausted failure visible and replayable.
-- **Risk:** generic retry framework overengineering.
-- **Fallback:** one shared convention + service-specific handlers, no framework.
+- **Objective:** Xác minh ingestion qua Kafka/MongoDB thật và recovery loop.
+- **Tasks:** producer/consumer adapters; topic init; manual offset commit;
+  Mongo atomic processed-event/evidence/outbox; outbox publisher; retry
+  dispatcher; DLQ/failure read model/replay.
+- **Expected:** worker entry points, topic config, integration/failure tests.
+- **Tests:** `acks=all` delivery; produce/consume; redelivery; crash before
+  commit; crash after DB commit; poison message; outbox replay.
+- **Dependencies:** Day 17.
+- **DoD:** thin Milestone 1 chạy thật; exhausted failure visible/replayable.
+- **Risk:** client callback/offset/outbox semantics.
+- **Fallback:** giảm test dataset/worker count, không giảm invariants.
 
-### Day 19 — Full E2E và restart/failure suite
+### Day 19 — Service stack, Airflow và full offline E2E
 
-- **Objective:** Automated deterministic system proof.
-- **Tasks:** happy/evolving/unrelated scenario; dependency outages; worker kill
-  checkpoints; final invariants.
-- **Expected:** `tests/end-to-end`, `tests/failure`, fixture control scripts.
-- **Tests:** full suite itself.
-- **Dependencies:** Phases 1–4.
-- **DoD:** repeatable from clean volumes; failures diagnosed.
-- **Risk:** flaky timing.
-- **Fallback:** poll durable state with deadlines, no arbitrary sleeps; split
-  slow cases into documented manual verification only if necessary.
+- **Objective:** Chạy tất cả service adapters và orchestration thật.
+- **Tasks:** service Compose; Airflow 3 lightweight profile; collection DAG
+  `0 */2 * * *`; manual/backfill/demo DAG; migrations/seeds; happy/evolving/
+  unrelated scenario; frontend/gateway wiring.
+- **Expected:** `airflow/dags`, complete local profiles,
+  `tests/end-to-end` và fixture control scripts.
+- **Tests:** DAG import/run; full mock-source→publish→public page; duplicate DAG
+  run; worker restart.
+- **Dependencies:** Day 18.
+- **DoD:** repeatable offline from clean volumes; Airflow không chứa per-article
+  business logic.
+- **Risk:** Airflow RAM/startup và flaky timing.
+- **Fallback:** Airflow profile chỉ bật cho orchestration test/demo; dùng
+  deadline polling, không arbitrary sleep.
 
-### Day 20 — Load/concurrency và resource tuning
+### Day 20 — Failure, load/concurrency và resource tuning
 
 - **Objective:** Đo baseline localhost, không invent.
-- **Tasks:** crawler/Kafka/Intelligence/API experiments; Docker resource tuning;
-  record environment/percentiles/lag/invariants.
+- **Tasks:** dependency outage/worker kill tests; crawler/Kafka/Intelligence/API
+  experiments; Docker resource tuning; record percentiles/lag/invariants.
 - **Expected:** load scripts + dated results.
 - **Tests:** final invariant validation after each run.
 - **Dependencies:** stable E2E.
@@ -453,7 +505,7 @@ ngay trong ngày thay vì chuyển sang breadth mới.
 - **Risk:** laptop resource limit.
 - **Fallback:** smaller datasets/duration, vẫn ghi rõ machine/config.
 
-### Day 21 — Final reproducibility, docs và demo
+### Day 21 — Docker reproducibility, docs và demo
 
 - **Objective:** Một người mới chạy/hiểu/demo được project.
 - **Tasks:** clean Compose rebuild; migrations/seeds; README/architecture/API/
@@ -578,46 +630,53 @@ Các quyết định sau được user chấp thuận ngày 2026-07-31 và đư�
 Các điểm vẫn phải xác minh bằng implementation: dependency versions, exact
 Airflow executor, Kafka partition/retention tuning và mọi command.
 
+Thứ tự thực hiện đã được cập nhật bởi
+[`ADR-0002`](./decisions/0002-defer-docker-work.md): kiến trúc và Definition of
+Done không đổi, nhưng toàn bộ tạo/chỉnh/chạy/xác minh Docker được chuyển sang
+Phase 4 (Days 17–21). Các phase trước không được dùng fake adapter làm bằng
+chứng thay cho Kafka/MongoDB/PostgreSQL/Redis thật.
+
 ## 11. First 10 implementation tasks
 
 Mỗi task nhỏ, độc lập, theo TDD; command là planned đến khi được chạy.
 
-1. **Verify accepted foundation ADR.** Đối chiếu `ADR-0001` với root
-   instructions và plan; mọi thay đổi quyết định sau này phải supersede ADR,
-   không sửa lịch sử âm thầm.
-2. **Initialize root uv workspace.** Chỉ root config + quality/test tools;
-   generate/commit lock. Verify `uv sync --locked` và a smoke test.
-3. **Define event envelope + `article.discovered.v1`.** Write invalid tests
-   first, then JSON Schema/Pydantic package. Verify contract tests.
-4. **Bring up Kafka only with health/topic init.** Compose smallest infra slice;
-   verify produce/consume smoke and clean restart.
-5. **Add Mock Source first RSS scenario.** One feed + one HTML article + reset;
-   snapshot test; no failure breadth yet.
-6. **Add Crawler URL safety/policy domain module.** Tests for allowlist/private
-   IP/redirect/size/timeout before HTTP integration.
-7. **Add one-source Crawler command.** Fetch fixture and produce one validated
-   event; delivery callback test; no batch breadth yet.
-8. **Bring up Mongo single-node replica set and indexes.** Transaction/index
-   integration test from clean volume.
-9. **Add Article normalization/hash repository path.** One event → one evidence
-   + processed event + outbox, test before worker loop.
-10. **Complete Milestone 1 thin path.** Article consumer/outbox publisher emits
-    `article.unique`; redelivery and crash-window integration test; checkpoint
-    review trước khi thêm duplicate breadth/Intelligence.
+1. **Re-verify Phase 0 workspace and first contract.** Chạy quality/contract
+   tests hiện có; sửa documentation drift; tuyệt đối không chạy Docker.
+2. **Complete deterministic fixture catalog.** Thêm transfer progression,
+   alias, exact/near duplicate, injury, match và failure scenario manifests;
+   verify bằng snapshot tests.
+3. **Implement Crawler URL safety policy.** Test allowlist, scheme, DNS/IP,
+   redirect, response size và timeout bằng fake resolver/transport.
+4. **Implement one-source Crawler use case.** Parse fixture RSS/HTML, enforce
+   bounded fetch policy và gửi `article.discovered` qua producer port.
+5. **Implement crawler concurrency/retry policy.** Test global/per-domain
+   bounds, `Retry-After`, 429/5xx/timeout, cancellation và delivery failure.
+6. **Implement Article normalization/hash domain.** Table-driven tests cho URL,
+   title, content và deterministic hash.
+7. **Implement Source Article idempotent use case.** Fake unit-of-work ghi
+   evidence + processed event + outbox intent atomically; test redelivery.
+8. **Implement duplicate semantics.** URL/exact/near duplicate relationships,
+   evidence preservation và rule không emit repeated unique work.
+9. **Define and validate `article.unique.v1`.** JSON Schema/Pydantic/fixtures,
+   producer-consumer compatibility và versioning tests.
+10. **Checkpoint ingestion domain slice.** Chạy broad quality/contract/unit
+    suite, review ports và invariants; chỉ sau checkpoint này chuyển sang
+    Intelligence. Kafka/Mongo Docker integration được giữ ở Day 18.
 
 ## 12. First recommended milestone
 
-Bắt đầu bằng Milestone 1, nhưng theo đường mỏng nhất:
+Bắt đầu bằng Milestone 1 ở mức domain/contracts, theo đường mỏng nhất:
 
 ```text
-one manual trigger
-→ one deterministic RSS source
-→ one bounded crawler fetch
+one deterministic RSS fixture
+→ one bounded crawler use case
 → one validated article.discovered event
-→ one Mongo Source Article
-→ one outbox-backed article.unique event
+→ one Article use case
+→ one evidence/outbox intent through fake ports
 ```
 
-Chỉ sau khi path này có contract, test và restart behavior mới mở rộng nhiều
-source, duplicate/failure scenarios, rồi đi vào Intelligence. Đây là checkpoint
-đề nghị user duyệt trước khi implementation.
+Sau khi path này có contract và focused tests mới mở rộng duplicate/failure rồi
+đi vào Intelligence. Milestone 1 chỉ được coi là hoàn tất thật ở Day 18, khi
+cùng path đó chạy qua Kafka và MongoDB trong Docker, có redelivery/crash-window
+integration tests. Đây là checkpoint đề nghị user duyệt trước khi
+implementation.

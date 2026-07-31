@@ -21,30 +21,44 @@ localhost and demonstrable offline.
 
 ## Repository state
 
-Verified on 2026-07-26:
+Initial state was verified on 2026-07-26. Current state was last verified on
+2026-07-31:
 
-- The repository root contains only `README.md`, `.gitignore`, and this file.
-- `README.md` contains only the heading `# project3`.
+- The repository now contains planning documents, the existing `frontend/`,
+  and the completed non-Docker Phase 0 Python foundation.
 - `.gitignore` contains Python/`uv`, test, coverage, build, Next.js, environment,
-  editor, and operating-system artifact rules. `uv.lock` is intentionally not
-  ignored and must be committed once generated.
+  editor, and operating-system artifact rules. `.python-version` and `uv.lock`
+  are intentionally committed.
 - The Git branch is `main`; the initial commit is the only commit.
-- No application source, service directories, module/package manifests,
-  dependency locks, Docker/Compose files, migrations, schemas, tests,
-  generated code, CI configuration, or development scripts exist yet.
-- No build, test, lint, migration, Docker, or development command has been
-  verified. All commands in those categories are **TBD** until their owning
-  files are added and the commands are executed successfully.
-- No service-specific instructions currently exist.
+- Root `pyproject.toml` defines a Python `>=3.12,<3.13` non-package project,
+  a `uv` workspace, and Ruff/mypy/pytest configuration.
+- `packages/event-contracts` owns the Pydantic
+  `article.discovered.v1` model; its JSON Schema Draft 2020-12 and fixtures
+  exist under `contracts/events/` and `tests/contract/`.
+- `packages/runtime-config` owns only typed runtime environment parsing and
+  secret-safe diagnostic output. Service business ports remain private.
+- `uv.lock` resolves the workspace with CPython 3.12.13 and the approved
+  Python quality/configuration dependencies.
+- Deterministic fixtures cover a developing transfer, aliases, exact URL and
+  content duplicates, a near duplicate, an official update, injury, match,
+  429, 500, slow response, and timeout.
+- `docker-compose.yml`, dependency init scripts, a minimal static mock source,
+  and infrastructure helper targets exist but have not completed Docker smoke
+  verification. ADR-0002 defers every Docker task to Phase 4.
+- No backend application services, business logic, database migrations,
+  OpenAPI contracts, Airflow DAGs, CI configuration, or verified integration/
+  end-to-end commands exist yet.
+- No service-specific instructions currently exist beyond
+  `frontend/AGENTS.md`.
 - On 2026-07-30, the planned backend implementation language was changed from
   a Go/Python split to Python for all backend microservices and workers.
 - Python dependencies and environments will be managed with `uv`.
 - On 2026-07-30, an existing React 19/Vite 8/TypeScript frontend with public
   and admin mock screens was added under `frontend/`; it uses `pnpm` and is not
   yet connected to backend APIs.
-- On 2026-07-31, the Phase 0 foundation decisions below were approved. They
-  replace conflicting earlier planning assumptions, but remain unimplemented
-  until corresponding files and verified commands exist.
+- On 2026-07-31, the Phase 0 foundation decisions below were approved. The
+  non-Docker foundation is implemented; application services and real
+  infrastructure integration remain planned.
 
 Do not describe any planned component below as implemented unless the
 repository has subsequently gained and verified it. Update this section when
@@ -424,7 +438,7 @@ Required test layers:
   producer/consumer behavior, outbox publishing, idempotency, uniqueness, and
   story/publication concurrency.
 - Contract: OpenAPI behavior, event schemas, and producer/consumer compatibility.
-- End to end: mock source through collector, Kafka, article, intelligence, mock
+- End to end: mock source through Crawler, Kafka, Article, Intelligence, mock
   AI, review, publication, and public page.
 - Failure: 429, 500, timeout, duplicate event, restart, invalid AI output,
   concurrent story creation, duplicate publication, and defined Redis outage
@@ -441,19 +455,24 @@ the change. Never claim a command passed unless it was actually run.
 
 ### Commands
 
-There are currently no verified project commands.
+Phase 0 verified the Python setup, contract/unit tests and quality commands
+below without Docker. Other commands remain TBD.
 
 | Task | Current command |
 | --- | --- |
 | Local development | TBD |
 | Build | TBD |
-| Unit tests | TBD |
+| Python environment | `uv sync --all-packages --locked` |
+| Unit/contract/smoke tests | `uv run pytest -q` |
+| Event contract tests | `uv run pytest tests/contract -q` |
 | Integration tests | TBD |
 | End-to-end tests | TBD |
-| Python format/lint/type-check | TBD |
+| Python lint | `uv run ruff check .` |
+| Python format check | `uv run ruff format --check .` |
+| Python type-check | `uv run mypy packages tests` |
 | TypeScript lint/type-check/test | TBD |
 | Database migration | TBD |
-| Docker Compose startup | Planned target: `docker compose up --build`; unverified because no Compose file exists |
+| Docker Compose startup | Deferred to Phase 4; Compose file exists but startup/smoke is unverified |
 | Deterministic demo | TBD |
 
 When a command becomes supported, add its owning configuration/script, execute
@@ -462,17 +481,18 @@ verified command.
 
 ## Delivery priorities
 
-1. **Week 1 — infrastructure and ingestion:** planned Compose baseline,
-   PostgreSQL, Redis, Kafka, minimal Airflow, mock source, source configuration,
-   concurrent collector, retries/rate limits, raw events, article normalization,
-   exact duplicate detection, and initial integration path.
+1. **Week 1 — contracts and ingestion domain:** completed non-Docker
+   foundation, then source configuration, safe bounded collector,
+   retries/rate limits, event ports, article normalization and duplicate/
+   idempotency/outbox semantics using deterministic fakes.
 2. **Week 2 — intelligence and editorial backend:** entities/aliases,
    classification, story matching/fingerprints/timelines/confirmation,
    concurrency protection, deterministic AI generation, grounded references,
    revisions, review, approve/reject, and idempotent publication.
-3. **Week 3 — web, reliability, and demonstration:** public/admin pages,
-   Airflow workflows, retry/DLQ visibility, restart and end-to-end tests, load
-   measurements, fixtures, architecture/testing/demo documentation.
+3. **Week 3 — web, Docker integration, reliability, and demonstration:**
+   public/admin pages, Compose dependencies/services, real adapters, Airflow
+   workflows, retry/DLQ visibility, restart and end-to-end tests, load
+   measurements, architecture/testing/demo documentation.
 
 Do not advance optional breadth at the expense of the preceding week's
 end-to-end definition of done.

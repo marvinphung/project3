@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "clock": "2026-07-31T00:00:00Z",
+  "scenarios": [
+    {
+      "id": "transfer-rumour",
+      "available_after_step": 1,
+      "request": {"url": "http://mock-news.test/articles/transfer-rumour"},
+      "response": {
+        "status": 200,
+        "content_type": "text/html",
+        "fixture": "articles/transfer-rumour.html"
+      },
+      "expectation": {
+        "event_category": "TRANSFER",
+        "confirmation_level": "RUMOUR",
+        "canonical_entities": ["Manchester United", "Nguyễn An"]
+      }
+    },
+    {
+      "id": "transfer-alias-update",
+      "available_after_step": 2,
+      "request": {"url": "http://mock-news.test/articles/transfer-alias-update"},
+      "response": {
+        "status": 200,
+        "content_type": "text/html",
+        "fixture": "articles/transfer-alias-update.html"
+      },
+      "expectation": {
+        "same_story_as": "transfer-rumour",
+        "aliases": {"MUFC": "Manchester United", "Man United": "Manchester United"}
+      }
+    },
+    {
+      "id": "transfer-exact-url-duplicate",
+      "available_after_step": 2,
+      "request": {"url": "http://mock-news.test/articles/transfer-rumour"},
+      "response": {
+        "status": 200,
+        "content_type": "text/html",
+        "fixture": "articles/transfer-rumour.html"
+      },
+      "expectation": {"duplicate_of": "transfer-rumour", "duplicate_kind": "URL"}
+    },
+    {
+      "id": "transfer-exact-content-duplicate",
+      "available_after_step": 2,
+      "request": {"url": "http://mirror-news.test/posts/nguyen-an"},
+      "response": {
+        "status": 200,
+        "content_type": "text/html",
+        "fixture": "articles/transfer-rumour-copy.html"
+      },
+      "expectation": {
+        "duplicate_of": "transfer-rumour",
+        "duplicate_kind": "CONTENT"
+      }
+    },
+    {
+      "id": "transfer-near-duplicate",
+      "available_after_step": 3,
+      "request": {"url": "http://second-source.test/news/man-utd-nguyen-an"},
+      "response": {
+        "status": 200,
+        "content_type": "text/html",
+        "fixture": "articles/transfer-near-duplicate.html"
+      },
+      "expectation": {
+        "same_story_as": "transfer-rumour",
+        "duplicate_kind": "NEAR",
+        "contributes_new_source": true
+      }
+    },
+    {
+      "id": "transfer-official-update",
+      "available_after_step": 4,
+      "request": {"url": "http://official-club.test/news/nguyen-an-signs"},
+      "response": {
+        "status": 200,
+        "content_type": "text/html",
+        "fixture": "articles/transfer-official.html"
+      },
+      "expectation": {
+        "same_story_as": "transfer-rumour",
+        "event_category": "OFFICIAL_ANNOUNCEMENT",
+        "confirmation_level": "OFFICIAL"
+      }
+    },
+    {
+      "id": "unrelated-injury",
+      "available_after_step": 1,
+      "request": {"url": "http://mock-news.test/articles/injury"},
+      "response": {
+        "status": 200,
+        "content_type": "text/html",
+        "fixture": "articles/injury.html"
+      },
+      "expectation": {"event_category": "INJURY", "separate_story": true}
+    },
+    {
+      "id": "unrelated-match",
+      "available_after_step": 1,
+      "request": {"url": "http://mock-news.test/articles/match"},
+      "response": {
+        "status": 200,
+        "content_type": "text/html",
+        "fixture": "articles/match.html"
+      },
+      "expectation": {"event_category": "MATCH", "separate_story": true}
+    },
+    {
+      "id": "http-429",
+      "available_after_step": 1,
+      "request": {"url": "http://failure-source.test/429"},
+      "response": {
+        "status": 429,
+        "content_type": "text/html",
+        "headers": {"Retry-After": "2"}
+      },
+      "expectation": {"retryable": true}
+    },
+    {
+      "id": "http-500",
+      "available_after_step": 1,
+      "request": {"url": "http://failure-source.test/500"},
+      "response": {"status": 500, "content_type": "text/html"},
+      "expectation": {"retryable": true}
+    },
+    {
+      "id": "slow-response",
+      "available_after_step": 1,
+      "request": {"url": "http://failure-source.test/slow"},
+      "response": {
+        "status": 200,
+        "content_type": "text/html",
+        "fixture": "articles/transfer-rumour.html",
+        "delay_ms": 750
+      },
+      "expectation": {"within_default_timeout": true}
+    },
+    {
+      "id": "timeout",
+      "available_after_step": 1,
+      "request": {"url": "http://failure-source.test/timeout"},
+      "response": {
+        "status": 200,
+        "content_type": "text/html",
+        "fixture": "articles/transfer-rumour.html",
+        "delay_ms": 5000
+      },
+      "expectation": {"retryable": true, "timeout": true}
+    }
+  ]
+}
