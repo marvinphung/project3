@@ -1,5 +1,0 @@
-CREATE SCHEMA IF NOT EXISTS source_schema;
-CREATE SCHEMA IF NOT EXISTS intelligence_schema;
-CREATE SCHEMA IF NOT EXISTS ai_content_schema;
-CREATE SCHEMA IF NOT EXISTS content_schema;
-CREATE SCHEMA IF NOT EXISTS identity_schema;
