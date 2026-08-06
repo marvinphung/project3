@@ -86,6 +86,7 @@ timeline, editorial và public read model.
 | [Kiểm thử](docs/testing.md) | Deterministic acceptance, failure và recovery |
 | [Open Questions](docs/open-questions.md) | Các quyết định còn cần benchmark/contract |
 | [ADR local-first AI pipeline](docs/decisions/0001-local-first-ai-pipeline.md) | Lý do và hệ quả của thiết kế đã chốt |
+| [Implementation plan](docs/plans/2026-08-06-footballpulse-implementation.md) | 9 phase, Work Packages và Collaboration Gates |
 
 ## Ngoài MVP
 
