@@ -1,104 +1,141 @@
 # Kiến trúc logic
 
-## 1. Trạng thái và cách đọc
+## 1. Trạng thái và phạm vi
 
-Đây là **kiến trúc mục tiêu**, không phải mô tả deployment đã hoạt động. Tên
-service thể hiện ranh giới trách nhiệm; trong giai đoạn đầu, domain logic có thể
-được kiểm thử bằng adapter in-memory trước khi nối hạ tầng thật.
+Đây là **kiến trúc mục tiêu local-first**, chưa mô tả một hệ thống đã được triển
+khai hoặc smoke-test. FootballPulse chạy chủ yếu trên một máy bằng Docker
+Compose; Kaggle là compute mở rộng cho AI batch và không phải nguồn dữ liệu
+chuẩn. Mock AI bảo đảm demo vẫn chạy offline.
 
-## 2. Context tổng thể
+## 2. Pipeline tổng thể
 
 ```mermaid
 flowchart LR
-    Sources[RSS / HTML / Mock sources] --> Collector[Collector]
-    Collector --> Article[Article Processor]
-    Article --> Intel[Intelligence Layer]
-    Intel --> Story[Story Engine]
-    Story --> Generator[Content Generator]
-    Generator --> Editorial[Editorial System]
-    Editorial --> Public[Public Web]
-    Admin[Editor / Admin] --> Editorial
-    Admin --> Story
+    AF[Airflow mỗi 6 giờ] --> CR[Crawler Service]
+    RSS[RSS allowlist] --> CR
+    CR --> K[(Kafka)]
+    K --> AR[Article Service]
+    AR --> M[(MongoDB)]
+    AR --> IN[Intelligence Service]
+    IN --> AI[AI Content Service]
+    AI --> KG[Kaggle Qwen3-8B]
+    KG --> AI
+    AI --> IN
+    IN --> PG[(PostgreSQL + pgvector)]
+    IN --> CO[Content Service]
+    CO --> PG
+    GW[API Gateway] --> CO
+    WEB[React/Vite Web] --> GW
 ```
 
-Pipeline nghiệp vụ đi qua event bất đồng bộ để mỗi thành phần có thể xử lý,
-retry và mở rộng độc lập. HTTP phù hợp với query hoặc command cần phản hồi ngay,
-như mở draft hay approve; event phù hợp với thay đổi trạng thái giữa các service.
+Airflow điều phối **batch**, Kafka vận chuyển business event, còn Python worker
+xử lý article liên tục. Không tạo Airflow task cho từng article và không giữ
+Kafka consumer chờ một Kaggle job dài.
 
-## 3. Các module chính
+## 3. Sáu backend service
 
-| Module logic | Trách nhiệm | Không chịu trách nhiệm |
+| Service | Trách nhiệm | Dữ liệu sở hữu |
 | --- | --- | --- |
-| API Gateway | Public/admin entry point, auth, RBAC, validation, routing | Article, Story hay publish logic |
-| Collector | Source policy, crawl batch, bounded fetching, retry | Chuẩn hóa nghiệp vụ hoặc Story |
-| Article Processor | Evidence, normalization, duplicate relationships | Phân loại sự kiện và viết bài |
-| Intelligence Layer | Entity, alias, category, claims | Nội dung biên tập |
-| Story Engine | Candidate matching, Story, timeline, confirmation | Lưu full source body |
-| Content Generator | Draft có cấu trúc từ claims đã hỗ trợ | Tự quyết định publish |
-| Editorial System | Revision, audit, state transition, publication | Sửa bằng chứng gốc |
-| Web App | Public/admin experience | Sao chép business rule backend |
+| `api-gateway` | Public/admin entry point, auth, RBAC, validation | Identity và cross-cutting HTTP state |
+| `crawler-service` | RSS configuration, crawl batch, bounded HTTP fetching, retry | Source/crawl records trong PostgreSQL |
+| `article-service` | Clean HTML, immutable versions, URL/exact/near duplicate | Source Article và duplicate links trong MongoDB |
+| `intelligence-service` | GLiNER, alias, embedding, claims, Story matching, change detection | Entity, Story, claims và timeline state trong PostgreSQL |
+| `ai-content-service` | Kaggle batch, Qwen output import/validation, local/mock fallback | Enrichment/generation attempts trong MongoDB/PostgreSQL theo aggregate |
+| `content-service` | Timeline projection, drafts, revisions, editorial và publication | Content/public read model trong PostgreSQL |
 
-Trong deployment mục tiêu, Intelligence Layer và Story Engine có thể cùng nằm
-trong `intelligence-service` vì chúng chia sẻ transaction và domain model.
+`intelligence-service` thực hiện Story Engine vì entity, claim, matching và
+Story update cần chung transaction. Không tách các helper này thành network
+service riêng.
 
-## 4. Luồng tương tác
+## 4. Công nghệ mục tiêu
+
+| Capability | Lựa chọn |
+| --- | --- |
+| Backend | Python 3.12, FastAPI, Pydantic |
+| Event | Apache Kafka single-node KRaft cho localhost |
+| Workflow | Airflow 3 với executor local nhẹ, chưa chốt trước smoke test |
+| Evidence | MongoDB single-node replica set |
+| Product/read model | PostgreSQL + `pgvector` |
+| Cache/rate limit | Redis, không làm source of truth |
+| HTML extraction | Trafilatura; BeautifulSoup fallback theo source |
+| Entity extraction | `urchade/gliner_multi-v2.1` chạy local |
+| Embedding | `BAAI/bge-small-en-v1.5` chạy local, chỉ cho English |
+| AI chính | Qwen3-8B quantized 4-bit chạy batch trên Kaggle |
+| AI fallback | Qwen3-4B GGUF `Q4_K_M` chạy local, concurrency 1 |
+| Web | React/Vite hiện có |
+
+## 5. Luồng tương tác chính
 
 ```mermaid
 sequenceDiagram
-    participant C as Collector
-    participant A as Article Processor
-    participant I as Intelligence/Story
-    participant G as Generator
-    participant E as Editorial
-    participant W as Web
+    participant AF as Airflow
+    participant CR as Crawler
+    participant AR as Article
+    participant IN as Intelligence
+    participant AI as AI Content
+    participant KG as Kaggle
+    participant CO as Content
 
-    C->>A: ArticleDiscovered
-    A->>A: Normalize + duplicate check
-    A->>I: ArticleReady
-    I->>I: Entities + claims + match Story
-    I->>G: GenerationRequested(story version)
-    G->>E: ValidatedDraftCreated
-    E->>E: Edit / approve / publish
-    E->>W: PublishedArticle snapshot
+    AF->>CR: Tạo crawl batch 00/06/12/18
+    CR-->>AR: article.discovered.v1
+    AR->>AR: Clean, version, deduplicate
+    AR-->>IN: article.cleaned.v1
+    IN->>IN: GLiNER, alias, English embedding
+    IN-->>AI: article.enrichment.requested.v1
+    AI->>KG: Private JSONL batch
+    KG-->>AI: Partial/complete results.jsonl
+    AI->>AI: Schema và grounding validation
+    AI-->>IN: article.enriched.v1
+    IN->>IN: pgvector candidates + rule matching + claim diff
+    IN-->>CO: story.updated.v1 khi có material change
+    CO->>CO: Timeline EN/VI hoặc editorial draft
 ```
 
-## 5. Ownership dữ liệu
+## 6. Airflow workflows
 
-- Collector sở hữu source configuration và crawl history.
-- Article Processor sở hữu Source Article, processing record và duplicate link.
-- Intelligence/Story sở hữu entity, alias, Story, claim và timeline.
-- Generator sở hữu generation job, attempt và validation metadata.
-- Editorial sở hữu draft, revision, editorial action và publication.
-- Web chỉ đọc public projection; không trở thành nguồn dữ liệu chuẩn.
+- `footballpulse_collection`: chạy `00:00`, `06:00`, `12:00`, `18:00` theo
+  `Asia/Ho_Chi_Minh`; tạo batch, trigger collector, chờ và đóng batch.
+- `footballpulse_ai_enrichment`: chọn article `AI_PENDING`, tạo private Kaggle
+  dataset, trigger/poll notebook, tải và validate output, phát event kết quả.
+- `footballpulse_reprocess`: chạy thủ công theo article/story/model version;
+  không query chéo database ngoài API/port của owner.
 
-Service không query trực tiếp dữ liệu riêng của service khác. Nó nhận snapshot
-cần thiết qua event hoặc gọi API được công bố. Redis, cache hay read model không
-bao giờ là nguồn dữ liệu chuẩn.
+Một `batch_id` và `correlation_id` xuyên suốt crawl, AI, Story và timeline để
+Admin Dashboard truy vết được từng outcome.
 
-## 6. Reliability model
+## 7. Ownership và ngôn ngữ
 
-Event được giả định giao **ít nhất một lần**. Consumer lưu `event_id`, áp dụng
-unique constraint hoặc stable business key, chỉ xác nhận sau khi state bền vững
-được ghi. Khi thay đổi state cần phát event, dùng transactional outbox ở ranh
-giới storage hỗ trợ. Outbox có thể phát lặp nên consumer vẫn phải idempotent.
+- MongoDB lưu raw HTML, cleaned English content, immutable article versions và
+  English enrichment. Full evidence không được copy sang PostgreSQL.
+- PostgreSQL lưu source configuration, canonical entities, Story, claims,
+  embeddings, timeline English/Vietnamese, editorial và public read model.
+- English là dữ liệu chuẩn cho search, embedding, matching và change detection.
+- Vietnamese là projection được chuẩn bị sẵn trong PostgreSQL để API trả nhanh;
+  không embed hoặc dùng bản Việt để quyết định Story.
+- Frontend không query MongoDB và không gọi AI khi render trang.
 
-Lỗi được chia thành retryable, non-retryable và cần operator/editor. Retry có
-giới hạn với backoff; poison message cuối cùng vào nơi inspect/replay được và
-không chặn partition vô thời hạn. Không có cam kết global ordering hay
-system-wide exactly-once.
+## 8. Event và reliability
 
-## 7. Bảo mật và an toàn
+Topic diễn tả business event, không diễn tả database đích:
 
-Collector chỉ dùng HTTP/HTTPS và domain allowlist, kiểm tra IP sau DNS và mỗi
-redirect, giới hạn redirect/body/timeout. Loopback/private address chỉ được
-cho phép trong mock mode rõ ràng. API admin dùng authentication, RBAC, body
-limit, rate limit và error envelope nhất quán. Log không chứa secret hoặc toàn
-bộ nội dung bài scrape.
+```text
+article.discovered.v1
+article.cleaned.v1
+article.enrichment.requested.v1
+article.enriched.v1
+story.updated.v1
+timeline.created.v1
+```
 
-## 8. Lựa chọn kiến trúc
+Kafka được giả định giao ít nhất một lần. Consumer lưu `event_id`, dùng stable
+business key, chỉ commit offset sau durable write. State change cần phát event
+dùng outbox khi storage cho phép. Mỗi input retryable có tối đa một retry topic
+và một DLQ; không tuyên bố global ordering hoặc exactly-once toàn hệ thống.
 
-Kiến trúc microservices được dùng để thể hiện ownership và pipeline bất đồng
-bộ của đề tài, nhưng MVP giữ số service nhỏ. Không tách helper thành network
-service, không thêm vector store/search cluster, và không dùng hai queue cho
-cùng một job. Khi triển khai, Python domain code nên phụ thuộc vào protocol nhỏ
-để adapter HTTP, Kafka, database và mock có thể thay thế mà không đổi nghiệp vụ.
+## 9. Local-first boundary
+
+Compose được chia profile `core`, `airflow`, `demo`, `tools`. Kafka một broker,
+MongoDB một replica set local và PostgreSQL một node là đủ cho đồ án, không phải
+topology production chịu lỗi. Qwen3-8B chạy ngoài máy trên Kaggle; fallback 4B
+chỉ được nạp khi cần. Credential Kaggle nằm trong secret/environment, tuyệt đối
+không hard-code trong image hoặc repository.

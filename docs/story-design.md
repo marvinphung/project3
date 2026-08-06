@@ -1,88 +1,115 @@
-# Thiết kế Story
+# Thiết kế Story và timeline
 
-## 1. Vai trò của Story
+## 1. Story là trung tâm
 
-Story là mô hình của **một sự kiện bóng đá đang phát triển**, không phải folder
-chứa các bài giống nhau. Nó kết hợp entity, category, claims, nguồn và timeline
-để biểu diễn điều hệ thống biết tại từng thời điểm.
+Story mô hình hóa một sự kiện bóng đá đang phát triển, không chỉ là nhóm bài có
+từ khóa giống nhau. “Quan tâm”, “liên hệ”, “gửi đề nghị” và “hoàn tất chuyển
+nhượng” có thể là các bước của cùng Story; injury hoặc match cùng cầu thủ vẫn là
+Story khác.
 
-Ví dụ: “CLB A quan tâm cầu thủ X”, “CLB A gửi đề nghị” và “CLB B xác nhận chuyển
-nhượng” có thể là ba bước của cùng một transfer Story. Một bài về chấn thương
-của X vẫn là Story khác vì category và event intent khác.
-
-## 2. Pipeline cập nhật Story
+## 2. Pipeline cập nhật
 
 ```mermaid
 flowchart TD
-    A[Article đã chuẩn hóa] --> B[Resolve entities]
-    B --> C[Classify category]
-    C --> D[Extract supported claims]
-    D --> E[Retrieve candidate Stories]
-    E --> F[Score từng candidate]
-    F -->|Trên threshold| G[Attach vào Story]
-    F -->|Không đủ điểm| H[Tạo Story mới]
-    G --> I[Thêm nguồn/claim/timeline]
-    H --> I
-    I --> J[Recalculate confirmation]
-    J --> K[Tăng Story version]
+    A[Validated English enrichment] --> B[Hard filter category/time]
+    B --> C[pgvector top candidate retrieval]
+    C --> D[Rule scoring]
+    D -->|Đủ điểm| E[Attach existing Story]
+    D -->|Không đủ| F[Create Story]
+    D -->|Vùng mơ hồ| G[Needs Story Review]
+    E --> H[Upsert sources/claims]
+    F --> H
+    H --> I[Recalculate claim confirmation]
+    I --> J[Material Change Detector]
+    J -->|Không đổi| K[No timeline entry]
+    J -->|Có đổi| L[Aggregate window timeline EN/VI]
 ```
 
-## 3. Candidate retrieval và scoring
+## 3. Hybrid candidate matching
 
-MVP dùng quy tắc giải thích được thay vì embedding. Candidate được giới hạn bởi
-time window và category compatibility, sau đó chấm theo:
+Candidate retrieval gồm ba lớp:
 
-- trùng primary player, club, coach hoặc competition;
-- overlap entity có trọng số;
-- similarity của normalized title tokens;
-- key action/claim tương thích;
-- khoảng cách thời gian;
-- stable fingerprint từ category và entity chính.
+1. Hard filter theo event category, time window và Story lifecycle.
+2. `pgvector` lấy tập nhỏ Story gần nhất bằng English embedding.
+3. Rule engine chấm lại primary entity, entity overlap, predicate/qualifier,
+   source independence, title/claim compatibility và khoảng cách thời gian.
 
-Không dùng một ngưỡng duy nhất chưa đo để mô tả như fact. Threshold và trọng số
-phải được hiệu chỉnh bằng fixture, lưu reason breakdown và đưa vào
-[Open Questions](open-questions.md) cho tới khi có bằng chứng test.
+Vector không được tự merge Story. Category xung đột loại candidate dù cosine
+similarity cao. Score breakdown được lưu để editor hiểu quyết định; threshold
+được hiệu chỉnh bằng fixture, không chọn tùy ý rồi mô tả như fact.
 
-## 4. Claims
+## 4. Canonical entities
 
-Claim là đơn vị sự thật nhỏ nhất mà hệ thống có thể dẫn nguồn. Ví dụ:
+GLiNER tìm mention; alias resolver quyết định canonical ID từ catalog seed trong
+PostgreSQL. Ví dụ `Vini Jr`, `Vinicius Junior`, `Vinícius Júnior` cùng ánh xạ
+`player-vinicius-junior`. Qwen chỉ dùng canonical IDs hoặc trả
+`unresolved_entity`; model không tự tạo entity chuẩn.
+
+## 5. Predicate vocabulary
+
+Predicate được kiểm soát và version, không để model sinh tên tự do. Baseline:
+
+| Category | Predicates chính |
+| --- | --- |
+| TRANSFER | `INTERESTED_IN`, `CONTACTED`, `NEGOTIATING`, `SUBMITTED_BID`, `BID_REJECTED`, `BID_ACCEPTED`, `AGREEMENT_REACHED`, `TRANSFER_COMPLETED`, `CONTRACT_RENEWED` |
+| INJURY | `INJURED`, `DIAGNOSED`, `RECOVERY_UPDATE`, `RETURNED_TO_TRAINING`, `AVAILABLE_TO_PLAY` |
+| MATCH | `MATCH_SCHEDULED`, `LINEUP_CONFIRMED`, `MATCH_STARTED`, `GOAL_SCORED`, `MATCH_FINISHED` |
+| PRESS_CONFERENCE | `COMMENTED_ON`, `CONFIRMED`, `DENIED` |
+| OFFICIAL_ANNOUNCEMENT | `ANNOUNCED`, `CONFIRMED`, `DENIED`, `CORRECTED` |
+
+Official article về transfer vẫn có thể tạo predicate cụ thể như
+`TRANSFER_COMPLETED`; `OFFICIAL_ANNOUNCEMENT` không thay thế event intent.
+Hành động chưa biết dùng `OTHER` và review, không tự mở rộng enum.
+
+## 6. Claim và confirmation
+
+Claim gồm subject, predicate, object, qualifiers, confirmation và evidence
+quotes/source IDs. Mức xác thực:
+
+- `RUMOUR`: nguồn mô tả tin đồn/suy đoán.
+- `REPORTED`: một nguồn trực tiếp đưa claim rõ ràng.
+- `MULTI_SOURCE`: ít nhất hai nguồn độc lập hỗ trợ cùng claim.
+- `OFFICIAL`: nguồn có thẩm quyền xác nhận đúng claim đó.
+
+Exact duplicate, syndicated copy hoặc bài chỉ dẫn lại một nguồn không được tính
+thành nguồn độc lập. Official denial tạo claim phủ định/correction chính thức;
+nó không biến claim rumor trước đó thành official.
+
+## 7. Material Change Detector
+
+Change Detector dùng rule trên canonical claims, không giao quyền quyết định cho
+LLM. Material change gồm:
+
+- claim mới;
+- predicate/qualifier thay đổi, ví dụ giá `180m → 150m`;
+- correction hoặc denial;
+- confirmation của claim tăng/giảm theo policy.
+
+Nếu không đổi, Story vẫn nhận source support nhưng không tăng timeline. Summary
+khác câu chữ không được xem là thay đổi.
+
+## 8. Cửa sổ timeline
+
+Airflow chạy theo `00:00`, `06:00`, `12:00`, `18:00` tại Việt Nam. Một Story có
+tối đa một aggregated entry cho mỗi cửa sổ 6 giờ. Entry tổng hợp các material
+changes theo thời gian, nhưng vẫn giữ source publication times và claim IDs.
+
+Ví dụ:
 
 ```text
-subject: Club A
-predicate: interested_in
-object: Player X
-confirmation: REPORTED
-sources: [article-01]
+00:00 — Real Madrid đang đàm phán gia hạn với Vinícius.
+06:00 — Arsenal đã liên hệ với đại diện Vinícius.
+12:00 — Arsenal được cho là đã gửi đề nghị €180m; nhiều nguồn xác nhận.
+18:00 — Không có thay đổi → không tạo entry.
 ```
 
-Một article có thể bổ sung claim mới hoặc nguồn support mới cho claim cũ. Claim
-key được chuẩn hóa để chống duplicate delivery, nhưng qualifier quan trọng như
-giá trị đề nghị hoặc trạng thái “bị từ chối” phải tạo khác biệt có chủ đích.
+English timeline là dữ liệu chuẩn; Vietnamese timeline là projection phục vụ
+API. Translation có version và validation; thay đổi bản Việt không làm đổi
+claim, embedding hoặc Story match.
 
-## 5. Confirmation
+## 9. Concurrency và correction
 
-- `RUMOUR`: suy đoán/tin đồn chưa có nguồn báo chí đủ rõ.
-- `REPORTED`: ít nhất một nguồn đưa tin rõ ràng nhưng chưa chính thức.
-- `MULTI_SOURCE`: nhiều nguồn độc lập hỗ trợ cùng claim cốt lõi.
-- `OFFICIAL`: nguồn có thẩm quyền xác nhận sự kiện tương ứng.
-
-Số lượng bài không tự động đồng nghĩa nhiều nguồn độc lập; syndicated copy và
-exact duplicate chỉ là một cụm bằng chứng. Một official article chỉ nâng những
-claim nó xác nhận, không biến mọi chi tiết rumor trước đó thành official.
-
-## 6. Timeline và version
-
-Timeline entry được tạo khi có thay đổi có ý nghĩa: claim mới, confirmation đổi,
-official update hoặc editor correction. Mỗi update hợp lệ tăng Story version.
-Generation request dùng cặp `(story_id, story_version)` để draft luôn gắn với
-một snapshot xác định.
-
-## 7. Concurrency và thao tác editor
-
-Khi hai article cùng lúc tạo/cập nhật Story, stable fingerprint, unique links,
-unique claim keys và optimistic version ngăn duplicate/lost update. Conflict
-được đọc lại và retry có giới hạn.
-
-Editor có thể merge hai Story, reassign Source Article hoặc sửa entity mapping.
-Thao tác phải lưu actor, reason, before/after và phát thay đổi để projection hoặc
-draft liên quan được đánh dấu stale; không sửa âm thầm lịch sử bằng chứng.
+Unique fingerprint/link/claim/window keys và optimistic Story version ngăn
+duplicate Story, lost update và timeline lặp. Conflict được đọc lại và retry có
+giới hạn. Merge, reassign, alias correction và confirmation correction phải lưu
+actor, reason, before/after; các draft liên quan được đánh dấu stale.

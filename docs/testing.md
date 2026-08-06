@@ -2,63 +2,78 @@
 
 ## 1. Mục tiêu
 
-Kiểm thử phải chứng minh invariant nghiệp vụ và recovery, không chỉ chứng minh
-endpoint trả 200. Test/demo mặc định deterministic, offline và không cần
-external LLM credential.
+Test phải chứng minh evidence, grounding, Story matching, material change và
+recovery. Mặc định chạy deterministic/offline bằng mock RSS và mock Kaggle output;
+không cần external model hoặc credential.
 
-## 2. Test pyramid
+## 2. Test layers
 
 | Lớp | Trọng tâm |
 | --- | --- |
-| Unit | normalization, hashes, similarity, aliases, classification, scoring, confirmation, state machine |
-| Contract | event envelope/schema, producer-consumer compatibility, API behavior |
-| Service integration | repository, transaction, uniqueness, outbox, event acknowledgement |
-| End-to-end | mock source → pipeline → review → publication → public page |
-| Failure/recovery | retry, DLQ, duplicate delivery, restart, stale/concurrent write |
-| Load/concurrency | bounded collection, backpressure, contention và final invariants |
+| Unit | URL/text normalization, hash, article versions, duplicate, alias, claim diff, confirmation |
+| Model contract | GLiNER adapter, Qwen input/output JSON schema, evidence/translation validation |
+| Event/API contract | Event envelope/version, producer-consumer compatibility, Vietnamese API projection |
+| Integration | Mongo transaction/outbox, PostgreSQL+pgvector, Kafka commit/retry/DLQ, concurrency keys |
+| End-to-end | Mock RSS → crawl → AI import → Story/timeline → editorial → public UI |
+| Load/recovery | Bounded fetch, Kaggle batch size, backpressure, redelivery, restart, simultaneous updates |
 
-## 3. Kịch bản deterministic chuẩn
+## 3. Acceptance scenario theo cửa sổ
 
-1. Transfer rumor nguồn A dùng alias `Man Utd`.
-2. Nguồn B nói cùng sự kiện bằng `Manchester United`.
-3. URL duplicate có tracking parameter và exact-content copy.
-4. Near duplicate bổ sung chi tiết nhưng không tạo Story mới sai.
-5. Official club update nâng đúng confirmation của claims được xác nhận.
-6. Injury cùng club và match article được tách thành Story khác.
-7. Generator tạo draft có citation; editor sửa, approve; admin publish.
-8. Official update muộn nối vào cùng Story và tạo Story version mới.
-9. Event được giao lặp và worker restart; không nhân đôi Story/claim.
-10. Hai publish đồng thời/cùng key chỉ tạo một publication.
+| Window | Input | Kết quả bắt buộc |
+| --- | --- | --- |
+| 00:00 ngày 1 | Real Madrid đàm phán gia hạn Vinícius | Transfer Story, `REPORTED`, timeline entry |
+| 06:00 | Arsenal liên hệ đại diện; một exact duplicate | Same Story, new claim/entry; duplicate không chạy AI |
+| 12:00 | Arsenal gửi đề nghị €180m; hai nguồn độc lập | `MULTI_SOURCE`, one aggregated entry, long-form draft |
+| 18:00 | Chỉ bài viết lại thông tin cũ | Source được lưu/liên kết; **không có timeline entry** |
+| 00:00 ngày 2 | Real Madrid official phủ nhận đã nhận đề nghị | Official denial/correction entry; claim cũ không tự thành `OFFICIAL` |
 
-## 4. Failure tests
+Các fixture độc lập gồm injury của Vinícius và match Real Madrid–Arsenal; chúng
+không được merge vào Transfer Story. Aliases `Vini Jr`, `Vinicius Junior` và
+`Vinícius Júnior` phải resolve cùng entity.
 
-- 429 tôn trọng `Retry-After`; 500/timeout retry đúng loại và đúng giới hạn.
-- Redirect tới địa chỉ bị cấm bị chặn; response quá lớn bị dừng an toàn.
-- Invalid event/output không retry vô hạn và có error context inspect được.
-- Unsupported claim hoặc confirmation bị nâng làm generation validation fail.
-- Concurrent Story create/update không tạo duplicate hoặc mất timeline entry.
-- Offset không được xác nhận trước durable write; outbox recovery có thể phát
-  lặp nhưng consumer vẫn idempotent.
-- Redis outage tuân theo policy đã công bố, không âm thầm biến cache thành truth.
+## 4. AI/Kaggle tests
 
-## 5. Test oracle và fixture
+- Bài dài được chunk, claims merge deterministic và evidence quote còn truy được.
+- Manifest/article ID/input hash sai bị reject.
+- Partial Kaggle output import phần hợp lệ; phần thiếu về `AI_PENDING`.
+- Một claim invalid không làm mất claim hợp lệ khác.
+- Amount/date/score không có trong evidence bị reject.
+- Vietnamese output thêm fact so với English bị flag.
+- Kaggle unavailable giữ dữ liệu và retry/fallback đúng policy.
+- Mock provider và Kaggle importer dùng cùng output contract.
 
-Fixture cần stable title/body/time/ID. Expected result phải kiểm tra cả outcome
-và lý do: duplicate kind, matching score breakdown, supporting source IDs,
-confirmation transition và audit action. Snapshot chỉ dùng cho output ổn định;
-invariant quan trọng cần assertion trực tiếp.
+## 5. Duplicate, Story và timeline tests
 
-## 6. Load và concurrency
+- URL/exact duplicate không chạy AI; near duplicate vẫn có thể thêm claim.
+- Duplicate/syndicated source không nâng `MULTI_SOURCE`.
+- Hybrid matching luôn áp hard category filter trước vector candidates.
+- Similar injury/transfer embedding không được merge khi category xung đột.
+- Concurrent Story create/update không tạo duplicate/lost claim.
+- Claim mới, qualifier correction và confirmation change tạo material change.
+- Chỉ thay câu chữ summary không tạo material change.
+- Unique `(story_id, window_start)` ngăn hai timeline entries cùng window.
 
-Load test ghi rõ máy, resource limit, worker count, partition, payload, duration,
-p50/p95/p99, error và final invariant. Mục tiêu đầu tiên là chứng minh bounded
-concurrency/backpressure và correctness dưới tải; không bịa benchmark hoặc chọn
-SLO trước khi đo.
+## 6. Failure/recovery tests
 
-## 7. Cổng chất lượng
+- 429 tôn trọng `Retry-After`; selected 5xx/timeout retry đúng budget.
+- Unsafe redirect/oversized response bị chặn.
+- Duplicate Kafka delivery không tạo article/claim/timeline/publication lặp.
+- Worker restart sau durable write trước offset commit vẫn giữ invariant.
+- Invalid event/output không retry vô hạn và đi review/DLQ với redacted context.
+- Hai publish đồng thời/cùng idempotency key chỉ tạo một publication.
 
-Chạy test hẹp nhất trước rồi mở rộng theo rủi ro. Python dự kiến dùng Ruff, mypy,
-pytest/pytest-asyncio và `uv`; frontend giữ `pnpm`. Chỉ đưa command vào README
-như lệnh hỗ trợ sau khi configuration tồn tại và command đã thực sự chạy thành
-công. Docker smoke, integration và E2E chưa được coi là đạt cho tới khi có log
-xác minh.
+## 7. API và UI acceptance
+
+Timeline endpoint theo Player/Club/Coach/Competition chỉ trả Vietnamese projection,
+đúng thứ tự và pagination/filter. Một timeline row xuất hiện ở nhiều entity page
+qua relationship, không copy dữ liệu. Public request không truy MongoDB hoặc gọi
+AI. Admin Dashboard drill-down được từ batch tới source/article/enrichment/Story/
+timeline/failure.
+
+## 8. Load và quality gates
+
+Load report ghi máy, container limits, source/article counts, worker/partition,
+payload/context size, duration, p50/p95/p99, errors và final invariants. Không
+invent benchmark. Chạy test hẹp trước rồi broader verification. Exact `uv`,
+frontend, Docker, migration và E2E commands chỉ được công bố sau khi thực sự
+được cấu hình và chạy thành công.

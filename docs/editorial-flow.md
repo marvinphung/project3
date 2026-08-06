@@ -1,12 +1,29 @@
 # Luồng biên tập và xuất bản
 
-## 1. Mục tiêu
+## 1. Hai loại nội dung
 
-Editorial System là hàng rào giữa nội dung máy tạo và thông tin công khai. AI
-không có quyền approve hoặc publish. Editor kiểm tra claim/source support; Admin
-chịu trách nhiệm publication.
+- **Timeline entry ngắn**: tự động hiển thị khi claims, English/Vietnamese output
+  và source grounding đều valid; lỗi chuyển `NEEDS_CONTENT_REVIEW`.
+- **Generated Article dài**: luôn qua editor review; AI không có quyền approve
+  hoặc publish.
 
-## 2. State machine MVP
+## 2. Khi nào tạo long-form draft
+
+Draft được yêu cầu khi Story lần đầu đạt `MULTI_SOURCE`, đạt `OFFICIAL`, có
+milestone lớn như `SUBMITTED_BID|BID_ACCEPTED|TRANSFER_COMPLETED`, hoặc editor
+yêu cầu thủ công. Không tạo lại chỉ vì duplicate source hoặc câu chữ thay đổi.
+
+Business key:
+
+```text
+story_id + story_version + prompt_version
+```
+
+Input gồm structured claims, timeline, confirmation và source references; không
+gồm arbitrary raw pages. Output giữ headline/description/body bằng English và
+Vietnamese cùng citation mapping.
+
+## 3. State machine
 
 ```mermaid
 stateDiagram-v2
@@ -18,55 +35,43 @@ stateDiagram-v2
     APPROVED --> PUBLISHED: admin publish
 ```
 
-MVP không có scheduled publication. Correction/re-review của bài đã publish cần
-policy riêng và chưa được tự suy diễn; được ghi trong Open Questions.
+MVP không có scheduled publication.
 
-## 3. Draft và revision
+## 4. Draft và revision song ngữ
 
-Draft là aggregate workflow; revision là snapshot nội dung. Mỗi lần edit tạo
-revision mới thay vì overwrite lịch sử. Revision giữ headline, description,
-body, source/citation mapping, story version, author và thời gian.
+Draft là workflow aggregate; mỗi edit tạo immutable revision mới. Revision giữ
+EN/VI headline, description, body, claim/source citations, Story version,
+generation/translation metadata, editor và timestamp. English là nội dung chuẩn;
+Vietnamese là bản public. Sửa sau approve tạo revision mới và làm approval cũ
+hết hiệu lực.
 
-Nếu Story thay đổi sau khi draft được tạo, hệ thống hiển thị draft là stale.
-Việc có bắt buộc regenerate hay cho editor rebase thủ công phụ thuộc policy,
-nhưng stale revision không được publish âm thầm.
+Story update sau generation đánh dấu draft stale. Stale revision không được
+publish âm thầm; policy rebase/regenerate chi tiết vẫn cần chốt trước implementation.
 
-## 4. Review checklist
+## 5. Review checklist
 
-Editor cần thấy cạnh nội dung:
+Editor thấy cạnh nội dung:
 
-- confirmation hiện tại và lịch sử thay đổi;
-- từng claim cùng Source Articles hỗ trợ;
-- nguồn official và duplicate cluster;
-- cảnh báo unsupported claim hoặc citation thiếu;
-- input Story version và generation metadata;
-- khác biệt giữa các revision.
+- confirmation của từng claim và lịch sử thay đổi;
+- evidence quote và Source Articles hỗ trợ;
+- official source, duplicate/syndication cluster;
+- EN/VI comparison và cảnh báo bản dịch thêm fact;
+- model, prompt, input Story version và validation result;
+- diff giữa revisions.
 
-Approve áp dụng cho **một revision cụ thể**, không phải toàn bộ draft mãi mãi.
-Edit sau approve tạo revision mới và làm mất hiệu lực approval cũ.
+Approve áp dụng cho đúng revision hiện hành.
 
-## 5. Reject
+## 6. Reject và publish
 
-Reject kết thúc nhánh review hiện tại và lưu actor, reason, revision, timestamp.
-Nó không xóa draft, Story hoặc Source Article. Nếu muốn làm lại nội dung, hệ
-thống tạo generation/revision mới theo một hành động audit được.
-
-## 6. Publish
-
-Publish chỉ thành công khi:
-
-1. actor có role `ADMIN`;
-2. revision được yêu cầu là current revision;
-3. revision đó đang `APPROVED`;
-4. Story version/staleness thỏa policy;
-5. idempotency key chưa tạo publication khác.
-
-Conditional update, transaction và unique successful-publication constraint
-bảo vệ hai request đồng thời. Kết quả là immutable publication snapshot phục vụ
-public web. Retry cùng key trả lại kết quả cũ thay vì tạo bài thứ hai.
+Reject lưu actor, reason, revision và timestamp; không xóa evidence, Story hoặc
+draft. Publish chỉ thành công khi actor là `ADMIN`, revision hiện hành đã
+`APPROVED`, staleness policy thỏa và idempotency key chưa được dùng. Transaction,
+conditional update và unique successful-publication constraint bảo vệ request
+đồng thời. Kết quả là immutable public snapshot.
 
 ## 7. Audit
 
-Các action create, edit, submit, approve, reject và publish lưu actor, action ID,
-reason, from/to state, revision và correlation ID. Audit history chỉ append;
-không chứa secret hoặc raw provider response không cần thiết.
+Create, edit, submit, approve, reject, publish, timeline override, alias correction
+và Story merge/reassign đều append audit action với actor, reason, before/after,
+revision/version và correlation ID. Audit không chứa secret, raw provider output
+không cần thiết hoặc full scraped body.

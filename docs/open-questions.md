@@ -1,62 +1,57 @@
 # Open Questions
 
-Các mục dưới đây cố ý chưa được tự quyết định. Mỗi câu hỏi cần được khóa bằng
-ADR, contract hoặc kết quả implementation/test trước khi component phụ thuộc.
+Thiết kế pipeline đã được chốt. Các mục dưới đây cần benchmark, contract hoặc
+smoke test trước implementation phụ thuộc; không được tự điền bằng giả định.
 
-## 1. Story và intelligence
+## 1. Crawl và storage
 
-- Trọng số, time window và threshold cụ thể cho từng event category là bao nhiêu?
-- Tiêu chí nào chứng minh hai nguồn độc lập để đạt `MULTI_SOURCE`, đặc biệt với
-  syndicated content?
-- Confirmation có được hạ xuống không; nếu có, timeline và publication hiện hữu
-  biểu diễn correction như thế nào?
-- `OFFICIAL_ANNOUNCEMENT` là category độc lập hay là loại nguồn/update cho một
-  Story `TRANSFER`/`INJURY` trong từng tình huống?
-- Khi alias xung đột hoặc cùng tên, mức confidence nào bắt buộc editor xử lý?
+- Global/per-domain concurrency, timeout, response-size và retry budget cuối cùng?
+- Raw HTML compression/retention bao lâu trên ổ local?
+- Source-specific cleaner/parser nào cần thiết sau khi thử RSS thực tế?
+- Cách xác định syndicated source independence ngoài exact hash?
 
-## 2. Nội dung và editorial
+## 2. AI/Kaggle
 
-- Story update nào tự động yêu cầu regeneration, update nào chỉ đánh dấu stale?
-- Quy trình correction, unpublish, re-review và supersede bài đã publish là gì?
-- Draft đã approve có được publish khi Story có version mới nhưng claims dùng
-  trong draft không đổi không?
-- Citation hiển thị ở cấp câu, đoạn hay danh sách nguồn cuối bài?
-- Generated Article public cần nhãn minh bạch cụ thể như thế nào?
+- Batch article/token limit nào phù hợp Kaggle quota/runtime thực tế?
+- Qwen3-8B 4-bit format/runtime nào vượt benchmark chất lượng và thời gian?
+- Khi nào dùng Qwen3-4B local fallback thay vì đợi batch sau?
+- Prompt/schema version đầu tiên và repair budget cho invalid JSON?
+- Ngưỡng GLiNER/alias confidence nào bắt buộc review?
 
-## 3. API và event contracts
+## 3. Story và vector
 
-- Tên cuối cùng và payload tối thiểu của các event sau `article.discovered.v1`?
-- Public Story timeline expose toàn bộ hay chỉ projection đã biên tập?
-- Pagination dùng cursor hay offset cho từng collection?
-- Retention/replay policy của event và DLQ sau khi có số liệu local?
-- Exact contract cho internal authentication và key rotation?
+- `bge-small-en-v1.5` có đạt acceptance trên football fixtures hay cần model khác?
+- pgvector index type/config sau khi có dataset size và load measurement?
+- Rule weights, candidate count, category time windows và create/review thresholds?
+- Policy hạ confirmation và cách thể hiện conflicting claims?
+- `OFFICIAL_ANNOUNCEMENT` classification chi tiết cho update thuộc category khác?
 
-## 4. Triển khai
+## 4. Timeline và editorial
 
-- Partition count và retention sau load measurement là bao nhiêu?
-- Airflow 3 local executor nào vượt smoke test với resource budget của đồ án?
-- Resource budget mục tiêu cho full local stack và máy chuẩn dùng demo?
-- Search MVP dùng projection/query đơn giản hay cần capability riêng sau khi nối
-  frontend thật?
+- Khi nhiều correction trong cùng cửa sổ, summary policy ưu tiên/diễn đạt thế nào?
+- Translation validator tự động tới mức nào trước khi cần editor?
+- Stale approved draft được rebase, regenerate hay bắt buộc review lại?
+- Correction/unpublish/supersede cho publication đã phát hành?
+- Citation public ở cấp câu, đoạn hay danh sách nguồn?
 
-## 5. Frontend và trải nghiệm
+## 5. API và frontend
 
-- Public page có hiển thị Story độc lập hay chỉ Generated Article kèm timeline?
-- Editor cần compare revision ở mức text diff nào trong MVP?
-- UI xử lý entity correction và Story merge tới đâu trong ba tuần?
-- Metadata/SEO tối thiểu nào được yêu cầu cho đồ án dù Vite không SSR?
+- Cursor encoding và default page size cho timeline/article endpoints?
+- Story timeline public expose full entry hay editorial projection rút gọn?
+- Admin UI cho entity resolution/Story merge nằm trong MVP tới mức nào?
+- SEO metadata tối thiểu cho React/Vite không SSR?
 
-## 6. Kiểm thử và tiêu chí đo
+## 6. Local deployment và verification
 
-- Ngưỡng acceptance cho matching precision/recall trên fixture mở rộng?
-- SLO local nào đáng đo cho crawl-to-draft và publish-read visibility?
-- Policy chính xác khi Redis unavailable: fail closed, degraded local limit hay
-  từ chối capability nào?
-- Bộ command build, migration, startup, integration, E2E và demo cuối cùng sau
-  khi từng phần được triển khai và xác minh?
+- Airflow 3 local executor nào vượt smoke test với resource budget của máy?
+- Kafka partition/retention, Docker memory/CPU limits và full-stack idle footprint?
+- Redis outage policy cho rate limit/cache cụ thể?
+- Exact build, migration, startup, integration, E2E và demo commands sau khi chạy
+  xác minh?
+- SLO local nào đáng đo cho crawl-to-timeline và API visibility?
 
 ## 7. Cách đóng câu hỏi
 
-Mỗi quyết định cần ghi context, lựa chọn, alternatives và consequences. Thay
-đổi contract hoặc invariant phải có test tương ứng; thay đổi đắt đỏ hoặc ảnh
-hưởng nhiều service nên có ADR thay vì chỉ cập nhật một đoạn mô tả.
+Quyết định ảnh hưởng nhiều service hoặc khó đảo ngược phải có ADR. Threshold và
+resource number phải kèm fixture/benchmark. Contract/API/event thay đổi cần test
+compatibility; không silently cập nhật payload đã có consumer.

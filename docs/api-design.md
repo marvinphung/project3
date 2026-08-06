@@ -2,93 +2,120 @@
 
 ## 1. Mục tiêu
 
-Tài liệu này định nghĩa **capability và ranh giới**, chưa phải OpenAPI đã triển
-khai. HTTP dùng cho public query/admin command cần phản hồi; event dùng cho
-pipeline giữa các owner. Gateway không chứa business logic và service không
-truy cập database của nhau.
+Đây là capability design, chưa phải OpenAPI đã triển khai. HTTP phục vụ query và
+admin command cần phản hồi; Kafka vận chuyển business event giữa owner. Gateway
+không chứa crawl, Story, AI hay publication logic.
 
 ## 2. Quy ước HTTP
 
-- Prefix version: `/api/v1`; internal capability: `/internal/v1`.
-- ID và timestamp ổn định; timestamp biểu diễn UTC.
-- List endpoint có pagination, filter và stable ordering.
-- Mutation quan trọng nhận idempotency key và expected version khi phù hợp.
-- Error envelope tối thiểu: `code`, `message`, `request_id`, `details` an toàn.
-- Mọi request có request/correlation ID; internal call truyền tiếp identity đó.
+- Public/admin prefix `/api/v1`; internal capability `/internal/v1`.
+- ID ổn định, timestamp UTC; response timeline đổi sang timezone yêu cầu.
+- List endpoint dùng cursor pagination, stable ordering và filter rõ ràng.
+- Mutation quan trọng nhận `Idempotency-Key` và `expected_version`.
+- Error envelope: `code`, `message`, `request_id`, `details` đã sanitize.
+- UI mặc định `vi`; English fields không expose công khai trừ admin/debug scope.
 
-## 3. Public capabilities
+## 3. Public timeline API
 
-| Method/path logic | Mục đích |
+| Method/path | Mục đích |
 | --- | --- |
-| `GET /api/v1/articles` | Danh sách publication, filter category/entity |
-| `GET /api/v1/articles/{slug}` | Chi tiết snapshot đã publish và references |
-| `GET /api/v1/stories/{id}` | Story summary/timeline công khai nếu được expose |
-| `GET /api/v1/entities/{id}` | Entity cùng các publication liên quan |
+| `GET /api/v1/players/{slug}/timeline` | Timeline các Story liên quan cầu thủ |
+| `GET /api/v1/clubs/{slug}/timeline` | Timeline các Story liên quan CLB |
+| `GET /api/v1/coaches/{slug}/timeline` | Timeline các Story liên quan HLV |
+| `GET /api/v1/competitions/{slug}/timeline` | Timeline theo giải đấu |
+| `GET /api/v1/stories/{id}` | Story public projection và timeline |
+| `GET /api/v1/articles` | Danh sách Generated Articles đã publish |
+| `GET /api/v1/articles/{slug}` | Immutable publication snapshot |
 
-Public response chỉ dùng public projection, không lộ provider raw response,
-processing error nội bộ hay full scraped content.
+Timeline hỗ trợ `from`, `to`, `event_type` và cursor. Content Service query
+PostgreSQL read model; request UI không query MongoDB, chạy embedding hoặc gọi
+AI.
 
-## 4. Admin/editorial capabilities
+Response mẫu:
+
+```json
+{
+  "entity": {"id": "player-vinicius-junior", "name": "Vinícius Júnior"},
+  "timeline": [
+    {
+      "timestamp": "2026-08-01T12:00:00+07:00",
+      "summary": "Arsenal đã gửi đề nghị trị giá 180 triệu euro.",
+      "confirmation": "MULTI_SOURCE",
+      "story_id": "story-789",
+      "sources": [{"name": "BBC Sport", "url": "https://..."}]
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+Không trả entry cho cửa sổ không có material change.
+
+## 4. Admin capabilities
 
 | Capability | Quyền |
 | --- | --- |
-| Xem sources, crawl runs, Source Articles và failures | Editor/Admin tùy dữ liệu |
-| Trigger crawl/retry/replay | Admin |
-| Xem Story, claims, source support | Editor, Admin |
-| Sửa entity, reassign/merge Story | Admin |
-| Xem/sửa draft, tạo revision | Editor, Admin |
-| Submit review, approve, reject | Editor, Admin |
+| CRUD/toggle RSS source, crawl policy, reliability metadata | Admin |
+| Trigger crawl batch, retry/replay/reprocess | Admin |
+| Xem batch → source → article → enrichment → Story → timeline | Editor/Admin |
+| Xem raw evidence và AI validation reasons | Editor/Admin theo scope |
+| Resolve entity alias, reassign/merge Story | Admin |
+| Review timeline bị flag | Editor/Admin |
+| Edit/approve/reject long-form draft | Editor/Admin |
 | Publish approved current revision | Admin |
 
-Command sửa state phải gửi `expected_version`; conflict trả về lỗi rõ để UI tải
-lại state mới. Approve/reject/publish bắt buộc có actor và có thể có reason.
+Admin Dashboard đọc operational read models theo `batch_id`, không parse logs.
+State command gửi `expected_version`; conflict yêu cầu UI tải lại state.
 
 ## 5. Internal capabilities
 
-Các capability như tạo crawl batch, đọc batch status, yêu cầu reprocess hoặc lấy
-evidence detail chỉ dành cho service/orchestrator đã xác thực. Chúng không được
-expose như arbitrary crawl proxy và không cho phép service query trực tiếp
-storage của owner khác.
+- Tạo/đọc/đóng crawl batch.
+- Lấy enabled sources đến hạn.
+- Tạo AI batch manifest, cập nhật Kaggle job status và import partial results.
+- Yêu cầu reprocess theo article/story/model/prompt version.
+- Lấy bounded evidence detail theo owner API khi event snapshot không đủ.
+
+Internal API dùng configured service identity/token trong local Compose network.
+Nó không phải arbitrary crawl proxy và không cho query storage chéo ownership.
 
 ## 6. Event envelope
-
-Mỗi event quan trọng gồm:
 
 ```json
 {
   "event_id": "stable-unique-id",
-  "event_type": "article.discovered",
+  "event_type": "article.enriched",
   "schema_version": 1,
   "occurred_at": "UTC timestamp",
-  "producer": "crawler-service",
-  "correlation_id": "trace-id",
-  "causation_id": "previous-event-id-or-null",
-  "aggregate_id": "domain-id",
+  "producer": "ai-content-service",
+  "correlation_id": "batch-trace-id",
+  "causation_id": "previous-event-id",
+  "aggregate_id": "article-version-id",
   "payload": {}
 }
 ```
 
-Topic vật lý theo `<domain>.<event>.v1`; thay đổi breaking tạo version mới.
-Payload phải bounded, validate được và chỉ mang dữ liệu consumer cần.
+Topic vật lý theo `<domain>.<event>.v1`; breaking change tạo version mới. Event
+không chứa raw HTML hoặc secret.
 
-## 7. Event flow tối thiểu
+## 7. Event catalog tối thiểu
 
-| Event logic | Producer → Consumer | Ý nghĩa |
+| Topic | Producer → Consumer | Payload cốt lõi |
 | --- | --- | --- |
-| `article.discovered` | Collector → Article | Snapshot nguồn đã thu thập |
-| `article.ready` | Article → Intelligence | Evidence normalized cần phân tích |
-| `article.duplicate` | Article → Ops/read model | Quan hệ duplicate để truy vết |
-| `story.updated` | Intelligence → downstream | Story snapshot/version thay đổi |
-| `content.generation.requested` | Intelligence → Generator | Claims cho một Story version |
-| `content.draft.created` | Generator → Editorial | Draft đã qua structured validation |
-| `publication.published` | Editorial → Public projection | Snapshot xuất bản thành công |
+| `article.discovered.v1` | Crawler → Article | source/batch IDs, URL, bounded fetch snapshot |
+| `article.cleaned.v1` | Article → Intelligence | article version ID, hash, cleaned snapshot, duplicate result |
+| `article.duplicate.v1` | Article → Ops projection | duplicate IDs, type, score/reason |
+| `article.enrichment.requested.v1` | Intelligence → AI Content | article ID/hash, canonical entities, embedding reference |
+| `article.enriched.v1` | AI Content → Intelligence | validated English summary/claims and model metadata |
+| `story.updated.v1` | Intelligence → Content | Story/version, material changes, claims/source snapshots |
+| `timeline.created.v1` | Content → Public projection | window, EN/VI summary, confirmation, sources |
+| `content.generation.requested.v1` | Intelligence/Admin → AI Content | Story/version/claims/prompt version |
+| `content.draft.created.v1` | AI Content → Content | validated bilingual draft and citations |
+| `publication.published.v1` | Content → Public projection | immutable publication snapshot identity |
 
-Tên event cuối cùng phải được khóa bằng contract catalog trước implementation;
-không silently đổi payload đã có consumer.
+## 8. Retry, DLQ và idempotency
 
-## 8. Retry và idempotency
-
-Input retryable có tối đa một retry topic và một DLQ trong MVP. Retry giữ original
-event, attempt, next-attempt time và error code đã redact. Consumer deduplicate
-bằng event ID, nhưng dùng thêm business key cho Story link, claim, generation và
-publication. Offset chỉ được commit sau durable state.
+Mỗi retryable input có tối đa `<base>.retry.v1` và `<base>.dlq.v1`. Retry giữ
+original event, attempt, `next_attempt_at` và redacted error. Offset chỉ commit
+sau durable state. Event ID chống redelivery; stable business keys bảo vệ
+article version, StorySource, claim, `(story_id, window_start)`, generation và
+publication khỏi lặp.

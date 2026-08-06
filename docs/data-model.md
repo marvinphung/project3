@@ -6,89 +6,172 @@
 Source Article != Story != Generated Article
 ```
 
-Ba aggregate có lifecycle, ownership và mục đích khác nhau. Không overwrite
-Source Article bằng nội dung sinh; không dùng Generated Article làm bằng chứng;
-không xóa evidence chỉ vì nó là duplicate.
+Source Article là evidence bất biến; Story là sự kiện đang phát triển;
+Generated Article là sản phẩm biên tập. Không overwrite evidence bằng AI output
+và không dùng bản dịch tiếng Việt làm dữ liệu quyết định nghiệp vụ.
 
-## 2. Quan hệ chính
+## 2. Data ownership
 
 ```mermaid
 erDiagram
-    SOURCE ||--o{ SOURCE_ARTICLE : provides
-    SOURCE_ARTICLE ||--o{ DUPLICATE_LINK : participates
-    SOURCE_ARTICLE }o--o{ ENTITY : mentions
+    SOURCE ||--o{ CRAWL_BATCH : schedules
+    SOURCE ||--o{ SOURCE_ARTICLE_VERSION : provides
+    SOURCE_ARTICLE_VERSION ||--o{ ARTICLE_ENRICHMENT : enriched_as
+    SOURCE_ARTICLE_VERSION ||--o{ DUPLICATE_LINK : participates
+    ENTITY ||--o{ ENTITY_ALIAS : has
+    STORY }o--o{ ENTITY : tagged_with
     STORY ||--o{ STORY_SOURCE : supported_by
-    SOURCE_ARTICLE ||--o{ STORY_SOURCE : links
     STORY ||--o{ CLAIM : contains
-    CLAIM }o--o{ SOURCE_ARTICLE : supported_by
     STORY ||--o{ TIMELINE_ENTRY : evolves_through
     STORY ||--o{ GENERATED_ARTICLE : generates
     GENERATED_ARTICLE ||--o{ REVISION : has
     REVISION ||--o| PUBLICATION : published_as
 ```
 
-## 3. Aggregate và trường cốt lõi
+### MongoDB: evidence và enrichment
 
-### Source và Crawl
+#### `source_articles`
 
-`Source` giữ tên, domain, kiểu RSS/HTML/mock, trạng thái và policy. `CrawlBatch`
-và `CrawlAttempt` giữ trigger, khoảng thời gian, outcome, attempt và lỗi đã
-redact. Chúng mô tả quá trình thu thập, không sở hữu nội dung bài.
+Mỗi document là một immutable version:
 
-### Source Article
+```json
+{
+  "_id": "article-version-2",
+  "canonical_article_id": "bbc-article-123",
+  "version": 2,
+  "previous_version_id": "article-version-1",
+  "source_id": "bbc-sport",
+  "original_url": "...",
+  "canonical_url": "...",
+  "raw_html": "...",
+  "cleaned_content": "English text",
+  "content_hash": "sha256",
+  "published_at": "UTC",
+  "collected_at": "UTC",
+  "status": "AI_PENDING"
+}
+```
 
-Giữ stable ID, source/crawl reference, original URL, canonical URL, original
-title, parsed content, author/publication time nếu có, collected time, normalized
-hash, processing status và metadata cần truy vết. Record evidence là bất biến;
-kết quả xử lý bổ sung được lưu dưới record/version liên quan.
+Raw HTML được giữ để reprocess cleaner mà không crawl lại; retention/compression
+chỉ được chốt sau khi đo dung lượng.
 
-`DuplicateLink` nối hai article với loại `URL`, `EXACT_CONTENT` hoặc
-`NEAR_DUPLICATE`, score, reason và thời điểm phát hiện. Near duplicate không mặc
-định bị loại khỏi Story processing vì có thể chứa claim mới.
+#### `article_enrichments`
 
-### Entity và Alias
+Lưu kết quả theo input/model/prompt version, không overwrite lần chạy cũ:
 
-`Entity` có loại `PLAYER`, `COACH`, `CLUB`, `COMPETITION`, canonical name và
-metadata tối thiểu. `EntityAlias` ánh xạ normalized alias tới entity, lưu nguồn
-của quyết định và trạng thái correction. Mention trong từng article giữ surface
-text, vị trí, phương pháp và confidence.
+```json
+{
+  "_id": "enrichment-456",
+  "article_id": "article-version-2",
+  "input_hash": "sha256",
+  "model": "Qwen3-8B-4bit",
+  "prompt_version": "article-enrichment-v1",
+  "summary_en": "...",
+  "entities": [],
+  "claims": [],
+  "validation_status": "VALIDATED",
+  "processed_at": "UTC"
+}
+```
 
-### Story, Claim và Timeline
+MongoDB không cần giữ `summary_vi` làm source of truth. Vietnamese timeline và
+content projection được materialize trong PostgreSQL.
 
-`Story` giữ headline làm việc, category, canonical entities, confirmation,
-editorial status, stable fingerprint, version và timestamps. `StorySource` là
-liên kết duy nhất giữa Story và Source Article.
+#### `duplicate_links`
 
-`Claim` biểu diễn một phát biểu có cấu trúc: subject, predicate, object,
-qualifier, confirmation và tập source ID. Claim giống nhau có stable key để
-chống insert lặp. `TimelineEntry` ghi điều gì thay đổi, khi nào, dựa trên claims
-nào; timeline không chỉ là danh sách ngày publish của báo.
+Giữ `article_id`, `primary_article_id`, loại `URL|EXACT_CONTENT|NEAR_DUPLICATE`,
+score, reason và timestamp. Duplicate vẫn là evidence và không bị xóa.
 
-### Generated Article, Revision và Publication
+### PostgreSQL: product và API data
 
-`GeneratedArticle` giữ story ID/version đầu vào, prompt/provider/model metadata,
-validation result và trạng thái biên tập. Nội dung editable nằm trong các
-`Revision`; mỗi revision giữ headline, description, body, citation mapping,
-editor và timestamp.
+#### Source/crawl
 
-`Publication` là snapshot bất biến của đúng revision được publish, có slug,
-published time và stable idempotency key. Sửa draft sau publish không làm thay
-đổi snapshot cũ.
+`sources` giữ RSS URL, allowed domains, source type, reliability tier, enabled,
+crawl interval/concurrency và operational timestamps. `crawl_batches` và
+`crawl_attempts` giữ schedule window, counts, outcome và redacted failure.
+
+#### Entity catalog
+
+`entities` có loại `PLAYER|COACH|CLUB|COMPETITION`, canonical name và stable
+slug. `entity_aliases` ánh xạ normalized alias tới entity, kèm resolver version,
+actor/source và review status. Catalog được seed có kiểm soát và mở rộng qua
+Admin review.
+
+#### Story và claims
+
+`stories` giữ category, working headline English, confirmation tổng quan,
+fingerprint, English embedding, version và timestamps. `story_entities` và
+`story_sources` là link duy nhất; source link chỉ giữ Mongo article ID và bounded
+snapshot.
+
+`story_claims` giữ:
+
+```json
+{
+  "subject_id": "club-arsenal",
+  "predicate": "SUBMITTED_BID",
+  "object_id": "player-vinicius-junior",
+  "qualifiers": {"amount": 180000000, "currency": "EUR"},
+  "confirmation": "MULTI_SOURCE",
+  "source_article_ids": []
+}
+```
+
+Claim có stable key từ subject/predicate/object/qualifiers để chống duplicate
+delivery. Confirmation thuộc từng claim; Story confirmation chỉ là projection
+tổng quan.
+
+#### Timeline
+
+`timeline_entries` giữ một entry tối đa cho mỗi `(story_id, window_start)`:
+
+```json
+{
+  "story_id": "story-789",
+  "window_start": "UTC",
+  "window_end": "UTC",
+  "summary_en": "Arsenal have submitted ...",
+  "summary_vi": "Arsenal đã gửi ...",
+  "confirmation": "MULTI_SOURCE",
+  "used_claim_ids": [],
+  "source_article_ids": [],
+  "translation_model": "Qwen3-8B",
+  "translation_status": "VALIDATED"
+}
+```
+
+English là bản chuẩn cho search/change/retranslation; Vietnamese là projection
+API đã chuẩn bị sẵn. Nếu không có material change thì không có row cho cửa sổ.
+
+#### Editorial
+
+`generated_articles`, `revisions`, `editorial_actions`, `publications` giữ bản
+EN/VI, citation mapping, input Story version, generation metadata và audit.
+Publication là immutable snapshot của đúng approved revision.
+
+## 3. AI batch và failures
+
+`ai_batch_jobs` giữ job/crawl batch ID, manifest hash, model/prompt version và
+state `PREPARING → UPLOADED → RUNNING → DOWNLOADING → VALIDATING → COMPLETED`.
+Partial result được ghi theo article. Failure/review record giữ stage, attempt,
+error code, retryability và redacted context; không chứa secret hoặc raw HTML.
 
 ## 4. Identity, version và thời gian
 
-- ID ổn định, không suy ra từ title có thể đổi.
-- Timestamp lưu UTC; UI tự chuyển timezone hiển thị.
-- Story và draft dùng optimistic version cho conditional update.
-- Business key bảo vệ link, claim, generation request và publication khỏi lặp.
-- Event ID phục vụ delivery idempotency, không thay thế business key.
+- Stable ID không suy ra từ title có thể đổi.
+- Timestamp lưu UTC; batch schedule dùng `Asia/Ho_Chi_Minh` và API đổi timezone.
+- Article, enrichment, Story, draft và translation đều có version rõ ràng.
+- Story/draft dùng optimistic version; publication dùng stable idempotency key.
+- Event ID chống delivery lặp; business key chống state nghiệp vụ lặp.
 
 ## 5. Invariant dữ liệu
 
-1. Source Article luôn truy được về Source và crawl context.
-2. StorySource không lặp cùng cặp Story–Article.
-3. Claim không có source support không được dùng làm factual content.
-4. Confirmation mới không cao hơn bằng chứng tốt nhất theo policy đã duyệt.
-5. Generation gắn với đúng Story version; draft stale không được tự publish.
-6. Chỉ một successful publication cho cùng revision/idempotency key.
-7. Mọi merge, reassign, approve, reject và publish đều có audit actor.
+1. Mọi article version truy được về source, crawl batch và previous version.
+2. URL/exact duplicate không chạy AI lại; near duplicate vẫn có thể bổ sung claim.
+3. Entity trong claim phải canonical hoặc có review state rõ ràng.
+4. Evidence quote và factual qualifier phải tồn tại trong cleaned content.
+5. Claim confirmation không cao hơn nguồn hỗ trợ; duplicate không là nguồn độc lập.
+6. Vector chỉ retrieval, không phải quyết định merge.
+7. Không tạo timeline row nếu material change là false.
+8. Chỉ một timeline entry cho mỗi Story/window và một successful publication
+   cho mỗi revision/idempotency key.

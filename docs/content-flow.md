@@ -4,68 +4,127 @@
 
 ```mermaid
 flowchart TD
-    A[Fetch source] --> B[Parse bounded content]
-    B --> C[Persist Source Article]
-    C --> D{Duplicate type?}
-    D -->|URL / exact| E[Giữ evidence + duplicate link]
-    D -->|Near / unique| F[Entity + category + claims]
-    F --> G[Match hoặc create Story]
-    G --> H[Update timeline/confirmation/version]
-    H --> I[Build generation input]
-    I --> J[Generate structured draft]
-    J --> K{Validate grounding}
-    K -->|Invalid| L[Needs operator/editor attention]
-    K -->|Valid| M[Create editorial draft]
-    M --> N[Review / edit / approve]
-    N --> O[Publish revision snapshot]
+    A[RSS được cấu hình] --> B[Crawl HTML]
+    B --> C[Trafilatura / BeautifulSoup]
+    C --> D[Normalize + immutable version]
+    D --> E{Duplicate?}
+    E -->|URL / exact| F[Lưu evidence và duplicate link]
+    E -->|Near / unique| G[GLiNER + alias + English embedding]
+    G --> H[Private Kaggle AI batch]
+    H --> I[English claims + summary EN/VI]
+    I --> J[Local schema/grounding validation]
+    J --> K[Hybrid Story matching]
+    K --> L[Rule-based material change detection]
+    L -->|Không đổi| M[Chỉ nối source vào Story]
+    L -->|Có đổi| N[Tạo một timeline entry EN/VI]
+    N --> O[PostgreSQL → API → UI tiếng Việt]
 ```
 
-## 2. Thu thập
+## 2. RSS và crawl HTML
 
-Collector chạy theo source/batch với concurrency và queue hữu hạn. Nó dùng một
-HTTP client được tái sử dụng, deadline, response-size limit, redirect limit và
-retry policy. `Retry-After` được tôn trọng khi hợp lệ. Kết quả phát hiện mang
-snapshot đã parse và giới hạn kích thước, không mang full raw HTML không kiểm
-soát.
+Admin cấu hình trước RSS URL, allowed domains, reliability tier và crawl policy
+trong PostgreSQL. Airflow tạo batch mỗi 6 giờ; Crawler đọc các source đang bật,
+lấy URL từ RSS rồi tải HTML của từng bài.
 
-## 3. Chuẩn hóa và duplicate
+Collector dùng global/per-domain concurrency hữu hạn, client tái sử dụng,
+connect/read timeout, redirect và response-size limit. `429` tôn trọng
+`Retry-After`; selected `5xx` và timeout được retry có backoff. Public user không
+được cung cấp crawl target.
 
-Canonical URL loại fragment và tracking parameter đã biết, chuẩn hóa scheme/
-host và trailing slash an toàn. Text normalization phải deterministic trước khi
-tạo content hash. URL/exact duplicate vẫn được lưu và liên kết với evidence
-chính; near duplicate tiếp tục sang Intelligence vì có thể bổ sung chi tiết.
+## 3. Clean và version
 
-## 4. Hiểu nội dung và tạo Story
+Trafilatura trích nội dung chính; BeautifulSoup là fallback cho source có cấu
+trúc đặc biệt. Cleaner:
 
-Entity extraction ưu tiên alias dictionary và rules. Category cùng structured
-claims được tạo trước khi matching. Story Engine lấy candidate, chấm điểm và
-ghi reason. Article chỉ được attach khi vượt policy; nếu không, tạo Story mới.
-Mọi thay đổi được bảo vệ khỏi event lặp và concurrent update.
+- chuyển newline, tab và nhóm whitespace thành một dấu cách;
+- decode HTML entity và normalize Unicode;
+- loại control/zero-width character, menu, quảng cáo và paragraph trùng;
+- giữ dấu câu, ký hiệu tiền tệ và số liệu như `€180m`.
 
-## 5. Chuẩn bị generation input
+Không overwrite bài khi cùng canonical URL thay đổi. Mỗi content hash mới tạo
+một immutable article version với `previous_version_id`. Nếu ETag/Last-Modified
+hoặc hash không đổi, không chạy lại AI.
 
-Generator chỉ nhận snapshot gồm Story ID/version, category, confirmation,
-entities, claims và source references cần thiết. Nó không được suy luận từ full
-web page ngoài tập bằng chứng đã duyệt. Mock generator deterministic là mặc
-định cho test/demo; external provider là adapter tùy chọn.
+## 4. Duplicate trước AI
 
-## 6. Validation nội dung sinh
+- URL duplicate: canonicalize scheme/host, fragment và tracking parameter.
+- Exact duplicate: SHA-256 trên cleaned content; vẫn lưu evidence nhưng không
+  gửi Kaggle.
+- Near duplicate: title/content/entity/time similarity; vẫn xử lý AI vì có thể
+  bổ sung claim mới.
 
-Output phải có schema rõ ràng cho headline, description, body sections và
-citation mapping. Validation từ chối hoặc gắn cờ khi:
+Duplicate/syndicated copy không được tính thành nguồn độc lập để nâng
+confirmation.
 
-- tham chiếu claim/source không tồn tại;
-- câu factual không có support;
-- confirmation bị nâng quá mức;
-- output thiếu trường hoặc sai cấu trúc;
-- input Story version đã stale theo policy editorial.
+## 5. Entity và English embedding
 
-Không tự động chuyển sang provider khác hoặc mock để che lỗi production. Failure
-được ghi cùng attempt và error context đã redact.
+GLiNER local nhận cleaned English content với labels `football player`,
+`football club`, `football coach`, `football competition`. Alias resolver ánh
+xạ mention về canonical entity ID trong PostgreSQL. Entity chưa resolve được
+đưa vào `NEEDS_ENTITY_REVIEW`, không tự tạo canonical record.
 
-## 7. Editorial và publication
+`bge-small-en-v1.5` tạo embedding từ English title, event type, entity và claim
+text. Vietnamese không tham gia embedding hoặc similarity.
 
-Draft hợp lệ bắt đầu ở `NEEDS_REVIEW` theo góc nhìn editorial, được sửa thành
-revision mới và chỉ publish khi revision hiện hành đã `APPROVED`. Publication
-lưu snapshot riêng để public page ổn định. Story update sau đó tạo nhu cầu draft
-mới hoặc đánh dấu nội dung cũ cần xem lại, không rewrite bài đã publish.
+## 6. Kaggle AI batch
+
+AI Content Service gom các article `AI_PENDING` thành private JSONL dataset:
+
+```json
+{
+  "article_id": "article-version-2",
+  "input_hash": "sha256",
+  "title": "English title",
+  "cleaned_content": "English evidence text",
+  "known_entities": []
+}
+```
+
+Không upload raw HTML, secret hoặc database endpoint. Qwen3-8B 4-bit xử lý bài
+dài theo `chunk → extract claims → merge duplicates → final summary`. Article
+enrichment output có English structured claims, `summary_en`, model/prompt
+version và evidence quote. Partial output hợp lệ được import; article còn thiếu
+quay lại `AI_PENDING`.
+
+Qwen3-4B GGUF local là fallback khi Kaggle không sẵn sàng. Mock provider dùng
+cùng schema để test/demo offline.
+
+## 7. Validation output
+
+Local validator kiểm tra từng claim:
+
+1. JSON đúng schema và input hash đúng manifest.
+2. Entity ID tồn tại hoặc được đánh dấu unresolved.
+3. Predicate thuộc vocabulary đã version.
+4. Evidence quote xuất hiện trong cleaned content.
+5. Số tiền, ngày, tỷ số và qualifier có trong evidence.
+6. Certainty không mạnh hơn ngôn ngữ nguồn.
+7. English summary chỉ dùng claim hợp lệ.
+8. Khi tạo timeline/content, Vietnamese projection không thêm fact so với English.
+
+Cho phép partial success: giữ claim hợp lệ, reject claim lỗi kèm reason. Không
+còn claim hợp lệ thì article chuyển `NEEDS_CONTENT_REVIEW`.
+
+## 8. Story và timeline 6 giờ
+
+PostgreSQL lọc cứng theo event type/time, dùng pgvector lấy candidate gần nhất,
+rồi rule engine chấm entity, predicate, qualifier và source independence.
+Vector chỉ retrieval; nó không tự quyết định merge.
+
+Change Detector deterministic so sánh claim mới với Story hiện tại. Material
+change gồm claim mới, claim thay đổi, correction hoặc confirmation thay đổi.
+Nếu không đổi, hệ thống chỉ nối Source Article; không gọi timeline generator.
+
+Mỗi Story có tối đa một aggregated timeline entry trong cửa sổ
+`00–06`, `06–12`, `12–18`, `18–24`. Entry lưu `summary_en`, `summary_vi`, claim
+IDs, source IDs, confirmation và window timestamps. Timeline Generator dùng
+validated material changes để tạo hai bản trong cùng structured output; local
+validator so sánh số liệu/entity trước khi ghi. API chỉ trả projection tiếng
+Việt cho giao diện.
+
+## 9. Generated Article
+
+Long-form draft chỉ được tạo khi Story lần đầu đạt `MULTI_SOURCE`, đạt
+`OFFICIAL`, có milestone lớn hoặc editor yêu cầu. Business key là
+`story_id + story_version + prompt_version`. Timeline hợp lệ có thể tự hiển thị;
+bài dài luôn đi qua editorial review trước publish.

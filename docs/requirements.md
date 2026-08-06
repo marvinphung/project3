@@ -1,80 +1,89 @@
 # Yêu cầu hệ thống
 
-## 1. Yêu cầu chức năng
+## 1. Thu thập và evidence
 
-### Thu thập và bằng chứng
+- Admin quản lý RSS URL, allowed domains, source type/reliability, enabled state
+  và crawl policy trong PostgreSQL.
+- Airflow tạo crawl batch lúc `00:00`, `06:00`, `12:00`, `18:00` theo Việt Nam.
+- Collector lấy URL từ RSS rồi tải HTML với global/per-domain concurrency hữu hạn.
+- Trafilatura trích nội dung; BeautifulSoup fallback theo source.
+- Newline/tab/control character được normalize an toàn; dấu câu, tiền tệ và số
+  liệu phải được giữ.
+- Mỗi thay đổi content tạo immutable article version; raw HTML và cleaned English
+  text được lưu MongoDB.
+- URL/exact duplicate không chạy AI; near duplicate vẫn được enrichment.
 
-- Quản lý danh sách nguồn tin được phép và chính sách thu thập cơ bản.
-- Đọc RSS, trang HTML đơn giản và deterministic mock source.
-- Lưu URL gốc, URL canonical, title, content đã parse, thời gian và nguồn.
-- Ghi lại lỗi 429, 5xx, timeout và kết quả retry thay vì bỏ qua im lặng.
-- Không nhận URL crawl tùy ý trực tiếp từ public user.
+## 2. Local intelligence và AI batch
 
-### Xử lý Article
+- GLiNER local nhận diện Player/Club/Coach/Competition.
+- Alias resolver chỉ trả canonical ID từ catalog hoặc review state.
+- `bge-small-en-v1.5` tạo English embedding; không embed Vietnamese.
+- AI Content Service tạo private JSONL Kaggle batch với manifest/input hash.
+- Qwen3-8B 4-bit xử lý `chunk → claims → merge → summary`; Qwen3-4B local và
+  mock provider dùng cùng contract.
+- Partial Kaggle result được import; phần thiếu về `AI_PENDING`.
+- Mọi claim phải có evidence quote, canonical/unresolved entity, controlled
+  predicate và certainty hợp lệ.
+- English là source of truth; Vietnamese output không được thêm fact.
 
-- Chuẩn hóa URL, title và content theo quy tắc deterministic.
-- Phát hiện URL duplicate, exact content duplicate và near duplicate cơ bản.
-- Giữ mọi Source Article; duplicate là một quan hệ, không phải lý do xóa.
-- Xử lý lại cùng event mà không tạo bản ghi nghiệp vụ lặp.
+## 3. Story và timeline
 
-### Intelligence và Story
+- Candidate retrieval: hard category/time filter → pgvector top candidates →
+  deterministic rule scoring.
+- Vector không tự quyết định attach/merge.
+- Confirmation được tính theo từng claim; duplicate/syndicated source không là
+  hai nguồn độc lập.
+- Material Change Detector, không phải LLM, quyết định tạo timeline.
+- Claim mới/thay đổi, correction hoặc confirmation change là material change.
+- Không có material change thì chỉ liên kết article; không tạo timeline entry.
+- Một Story có tối đa một aggregated entry mỗi cửa sổ 6 giờ.
+- Timeline PostgreSQL giữ `summary_en` và `summary_vi`; API public trả Vietnamese.
 
-- Nhận diện `Player`, `Coach`, `Club`, `Competition` cùng alias.
-- Phân loại bài vào một trong năm category MVP.
-- Trích xuất claim kèm nguồn và mức xác thực.
-- Khớp Source Article với Story có sẵn hoặc tạo Story mới bằng quy tắc giải thích
-  được.
-- Cập nhật timeline, confirmation và version khi có diễn biến mới.
-- Cho phép editor sửa entity, reassign hoặc merge Story có audit trail.
+## 4. Editorial và web
 
-### Tạo và biên tập nội dung
+- Timeline đã grounded/validated có thể tự động hiển thị; output lỗi vào review.
+- Long-form draft được tạo ở milestone quan trọng hoặc theo editor request và
+  luôn qua `DRAFT → NEEDS_REVIEW → APPROVED/REJECTED → PUBLISHED`.
+- Public API cung cấp timeline theo Player, Club, Coach, Competition và Story.
+- UI request chỉ đọc PostgreSQL read model, không query MongoDB hoặc gọi AI.
+- Admin Dashboard drill-down batch → source → article → enrichment → Story →
+  timeline/failure.
 
-- Tạo draft từ structured claims, không dùng trang scrape tùy ý làm prompt.
-- Mọi fact trong draft phải truy được về claim và Source Article.
-- Lưu provider/model/prompt version/input Story version và validation result.
-- Hỗ trợ edit, review, approve, reject và publish theo quyền.
-- Publish một revision đã approve theo cách idempotent.
-
-### Web
-
-- Public: danh sách tin, chi tiết bài, nguồn tham khảo và Story timeline.
-- Admin: xem source/article/story/draft, xử lý review và publish theo quyền.
-- Hiển thị rõ loading, empty và error state; không âm thầm dùng mock khi API lỗi.
-
-## 2. Yêu cầu phi chức năng
+## 5. Phi chức năng
 
 | Thuộc tính | Yêu cầu MVP |
 | --- | --- |
-| Correctness | Không làm mạnh hơn mức chắc chắn của nguồn; giữ invariant dữ liệu |
-| Reliability | Chịu event lặp, retry có giới hạn, lỗi hết lượt được lưu để xử lý |
-| Concurrency | Mọi queue, worker, request và provider call đều có giới hạn |
-| Security | Chỉ crawl domain cho phép; chống SSRF; auth/RBAC cho admin |
-| Traceability | Có correlation, causation, source reference và audit history |
-| Offline | Test/demo không phụ thuộc Internet hoặc external LLM credential |
-| Observability | Log có cấu trúc, health/readiness và số đếm vận hành cục bộ |
-| Maintainability | Business logic tách khỏi HTTP, worker và storage adapter |
+| Correctness | Không nâng certainty, không tạo unsupported fact/translation |
+| Reliability | At-least-once, idempotent consumers, bounded retry, DLQ/review |
+| Concurrency | Queue, fetch, Kafka, DB, AI và fallback concurrency đều bounded |
+| Security | Source allowlist/SSRF protection; Kaggle dataset private; secret không commit |
+| Traceability | Batch/correlation/causation/article/story IDs và audit history |
+| Local-first | Một máy Compose; single-node dependency; resource usage được đo |
+| Offline | Mock RSS/Kaggle/AI; không cần Internet/model credential trong demo |
+| Observability | Health/readiness, structured logs, operational read models |
 
-## 3. Quyền truy cập
+## 6. Quyền truy cập
 
-- Public read không cần đăng nhập.
-- `EDITOR`: xem bằng chứng, sửa draft, review, approve và reject.
-- `ADMIN`: có toàn bộ quyền Editor; thêm publish, quản lý source/crawl/retry và
-  merge/reassign Story.
-- Internal command dùng danh tính nội bộ được cấu hình, không dùng public token.
+- Public read không cần token.
+- `EDITOR`: evidence/claims review, draft edit/approve/reject.
+- `ADMIN`: thêm source/crawl/retry, alias/Story admin và publish.
+- Internal API dùng configured service identity trong local Compose network.
 
-## 4. Tiêu chí chấp nhận MVP
+## 7. Acceptance criteria
 
-1. Một lần chạy deterministic đi xuyên suốt từ mock source tới public web.
-2. Alias `Manchester United`, `Man United`, `Man Utd`, `MUFC` về cùng Club.
-3. Exact duplicate không đi lại toàn pipeline nhưng vẫn xem được nguồn.
-4. Near duplicate có thể bổ sung bằng chứng mà không tạo Story sai.
-5. Official update nối vào Story cũ và không biến rumor thành fact trước thời điểm.
-6. Duplicate delivery và worker restart không tạo dữ liệu nghiệp vụ lặp.
-7. Chỉ revision hiện hành đã approve mới publish; gọi lặp chỉ có một kết quả.
-8. Injury và match fixture không bị gom vào transfer Story.
+1. Full mock pipeline đi từ RSS tới Vietnamese entity timeline/publication.
+2. Aliases `Vini Jr`, `Vinicius Junior`, `Vinícius Júnior` về cùng Player.
+3. Exact duplicate không chạy Kaggle; near duplicate có thể thêm claim.
+4. 00/06/12 windows tạo đúng Story updates; 18h không đổi không tạo entry.
+5. Hai nguồn độc lập nâng `MULTI_SOURCE`; duplicate không nâng.
+6. Official denial/correction tạo update nhưng không biến claim cũ thành official.
+7. Injury và match không merge vào transfer dù có cùng entity.
+8. Partial Kaggle output, duplicate event và restart không làm mất/nhân đôi state.
+9. Hai publish đồng thời/cùng key chỉ có một publication.
 
-## 5. Ràng buộc
+## 8. Ràng buộc
 
-- Thời gian thực hiện ba tuần; ưu tiên một vertical slice hoàn chỉnh.
-- Python là ngôn ngữ backend chính; frontend React/Vite hiện có được giữ lại.
-- Không đưa công nghệ mở rộng vào chỉ để tăng độ phức tạp kiến trúc.
+- Ba tuần, ưu tiên một vertical slice hoàn chỉnh.
+- Python 3.12 cho backend; React/Vite hiện có được giữ.
+- Local machine không có CUDA/ROCm; AI mạnh chạy Kaggle, fallback 4B dùng CPU.
+- Không thêm separate vector database/search cluster hoặc hạ tầng production.

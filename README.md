@@ -1,94 +1,94 @@
 # FootballPulse
 
 **FootballPulse — Automated Football News Intelligence Platform** là đồ án xây
-dựng nền tảng tự động thu thập, tổng hợp và xuất bản tin tức bóng đá. Hệ thống
-biến nhiều bài báo rời rạc thành các `Story` có diễn biến, bằng chứng và mức độ
-xác thực rõ ràng, sau đó hỗ trợ biên tập viên tạo, duyệt và xuất bản bài tổng hợp.
+dựng nền tảng tự động thu thập, hiểu, tổng hợp và xuất bản tin tức bóng đá.
+Nhiều bài báo rời rạc được giữ làm bằng chứng, gom vào `Story`, chuyển thành
+timeline có mức xác thực và bài tổng hợp qua editorial review.
 
 > Tên đề tài: Thiết kế và xây dựng nền tảng tự động thu thập, tổng hợp và xuất
 > bản tin tức bóng đá theo kiến trúc microservices<br>
 > Sinh viên: Phùng Minh Vũ — 20235252
 
-## Trạng thái tài liệu
+## Trạng thái
 
-Bộ tài liệu này mô tả **thiết kế mục tiêu của MVP**, không khẳng định hệ thống
-đã được triển khai. Repository hiện có giao diện React/Vite dạng mock; các
-backend service, tích hợp dữ liệu, hạ tầng và luồng end-to-end vẫn là công việc
-tương lai. Python là ngôn ngữ chính dự kiến cho backend và worker.
+Tài liệu hiện mô tả **thiết kế mục tiêu đã chốt**, không khẳng định backend,
+Kaggle integration, database, Kafka, Airflow hoặc Docker Compose đã hoạt động.
+Frontend React/Vite hiện có vẫn là mock. Exact build/start/migration/demo command
+chỉ được công bố sau khi implementation và verification tồn tại.
 
-## Bài toán
-
-Tin bóng đá thường bị đăng lặp lại, phân tán giữa nhiều nguồn và thay đổi theo
-thời gian. Một tin đồn chuyển nhượng có thể dần được nhiều nguồn xác nhận rồi
-trở thành thông báo chính thức. FootballPulse cần giữ nguyên từng nguồn như
-bằng chứng, nhận biết chúng nói về cùng một sự kiện và kể lại diễn biến mà
-không làm sai lệch mức độ chắc chắn.
-
-Ba khái niệm không được đồng nhất:
+## Invariant trung tâm
 
 ```text
 Source Article != Story != Generated Article
 ```
 
-- **Source Article**: bản ghi bất biến của bài viết gốc, dùng làm bằng chứng.
-- **Story**: sự kiện bóng đá đang phát triển, liên kết nhiều nguồn và claims.
-- **Generated Article**: nội dung tổng hợp được tạo từ Story và phải qua biên tập.
+- **Source Article**: evidence bất biến từ một article version của nguồn.
+- **Story**: sự kiện bóng đá đang phát triển, có canonical entities, claims,
+  confirmation và timeline.
+- **Generated Article**: nội dung biên tập song ngữ, chỉ sinh từ supported claims.
 
-## Luồng MVP
+## Pipeline local-first
 
 ```mermaid
 flowchart LR
-    A[Nguồn tin] --> B[Thu thập]
-    B --> C[Chuẩn hóa và phát hiện trùng]
-    C --> D[Nhận diện entity và loại sự kiện]
-    D --> E[Khớp hoặc tạo Story]
-    E --> F[Cập nhật claims và timeline]
-    F --> G[Tạo bản nháp có dẫn nguồn]
-    G --> H[Duyệt và chỉnh sửa]
-    H --> I[Xuất bản]
-    I --> J[Web công khai]
+    A[Airflow mỗi 6 giờ] --> B[RSS allowlist]
+    B --> C[Crawl và clean HTML]
+    C --> D[MongoDB evidence]
+    D --> E[Duplicate + GLiNER + alias + embedding EN]
+    E --> F[Kaggle Qwen3-8B batch]
+    F --> G[Validate English claims]
+    G --> H[pgvector candidates + rule Story matching]
+    H --> I[Material Change Detector]
+    I -->|Có đổi| J[Timeline EN/VI trong PostgreSQL]
+    I -->|Không đổi| K[Chỉ liên kết source]
+    J --> L[FastAPI → UI tiếng Việt]
 ```
 
-## Phạm vi MVP
+English là dữ liệu chuẩn cho AI validation, search, embedding và Story logic.
+Vietnamese được materialize trong PostgreSQL để API trả nhanh cho toàn bộ giao
+diện. MongoDB giữ raw HTML, cleaned English content, immutable article versions
+và enrichment; PostgreSQL giữ source config, entity catalog, Story, claims,
+timeline, editorial và public read model.
 
-MVP ưu tiên một vertical slice chạy được hoàn toàn trên localhost và không cần
-Internet hay khóa LLM bên ngoài. Luồng phải bao phủ thu thập, chuẩn hóa, exact/
-near duplicate, entity, phân loại sự kiện, Story, tạo nội dung deterministic,
-duyệt, publish và hiển thị web.
+## Công nghệ mục tiêu
 
-Các hạng mục như vector database, recommendation, social feature, Kubernetes,
-live score, search engine nâng cao và tự động publish nội dung độ tin cậy thấp
-không thuộc MVP.
+- Python 3.12, FastAPI/Pydantic và sáu backend service.
+- Kafka single-node KRaft; Airflow 3 chỉ điều phối batch.
+- MongoDB replica set cho evidence; PostgreSQL + pgvector cho product data.
+- Redis cho cache/rate limit tạm thời.
+- Trafilatura/BeautifulSoup cho HTML extraction.
+- GLiNER multi-v2.1 và `bge-small-en-v1.5` chạy local.
+- Qwen3-8B 4-bit chạy batch trên Kaggle; Qwen3-4B GGUF local là fallback.
+- React/Vite và Docker Compose profiles `core`, `airflow`, `demo`, `tools`.
+
+## Quy tắc timeline
+
+- Pipeline chạy các cửa sổ `00`, `06`, `12`, `18` giờ Việt Nam.
+- Chỉ tạo entry khi có claim mới/thay đổi, correction hoặc confirmation đổi.
+- Một Story có tối đa một aggregated entry cho mỗi cửa sổ 6 giờ.
+- Article mới nhưng không có material change vẫn được lưu/liên kết; timeline
+  không thêm dòng.
+- Timeline hợp lệ tự hiển thị; Generated Article dài phải qua review/approve.
 
 ## Bản đồ tài liệu
 
 | Tài liệu | Nội dung |
 | --- | --- |
-| [Tổng quan](docs/overview.md) | Tầm nhìn, giá trị và ranh giới sản phẩm |
-| [Yêu cầu](docs/requirements.md) | Yêu cầu chức năng, phi chức năng và tiêu chí thành công |
-| [Kiến trúc](docs/architecture.md) | Thành phần, trách nhiệm, tương tác và reliability |
-| [Mô hình dữ liệu](docs/data-model.md) | Entity logic, quan hệ và invariant |
-| [Thiết kế Story](docs/story-design.md) | Matching, claims, timeline và confirmation |
-| [Luồng nội dung](docs/content-flow.md) | Từ nguồn tin đến bài tổng hợp |
-| [Thiết kế API](docs/api-design.md) | Các capability HTTP/event ở mức logic |
-| [Luồng biên tập](docs/editorial-flow.md) | Revision, duyệt, từ chối và publish |
-| [Triển khai](docs/deployment.md) | Mô hình localhost/offline và hướng mở rộng |
-| [Kiểm thử](docs/testing.md) | Chiến lược test và kịch bản demo |
-| [Câu hỏi mở](docs/open-questions.md) | Các quyết định cần xác nhận sau |
+| [Tổng quan](docs/overview.md) | Tầm nhìn, người dùng và phạm vi |
+| [Yêu cầu](docs/requirements.md) | Yêu cầu và tiêu chí chấp nhận |
+| [Kiến trúc](docs/architecture.md) | Service, công nghệ, ownership, Airflow/Kafka |
+| [Mô hình dữ liệu](docs/data-model.md) | MongoDB/PostgreSQL aggregates và invariants |
+| [Story và timeline](docs/story-design.md) | pgvector hybrid matching, claims, cửa sổ 6 giờ |
+| [Luồng nội dung](docs/content-flow.md) | Crawl, clean, Kaggle AI, validation và generation |
+| [API và event](docs/api-design.md) | Public/admin capabilities và event catalog |
+| [Biên tập](docs/editorial-flow.md) | Timeline automation và long-form review/publish |
+| [Triển khai](docs/deployment.md) | Local topology, profiles, resources và offline mode |
+| [Kiểm thử](docs/testing.md) | Deterministic acceptance, failure và recovery |
+| [Open Questions](docs/open-questions.md) | Các quyết định còn cần benchmark/contract |
+| [ADR local-first AI pipeline](docs/decisions/0001-local-first-ai-pipeline.md) | Lý do và hệ quả của thiết kế đã chốt |
 
-## Nguyên tắc thiết kế
+## Ngoài MVP
 
-- Story là trung tâm của trải nghiệm tổng hợp, nhưng Source Article mới là bằng
-  chứng gốc.
-- Không xóa nguồn chỉ vì trùng; chỉ ghi rõ quan hệ duplicate.
-- Không nâng mức độ chắc chắn khi nguồn không hỗ trợ.
-- Mỗi module có một trách nhiệm nghiệp vụ và sở hữu dữ liệu của mình.
-- Luồng bất đồng bộ phải chịu được giao hàng lặp; không tuyên bố exactly-once.
-- Mock source và mock generator deterministic là thành phần bắt buộc của demo.
-
-## Hướng phát triển
-
-Thiết kế được chia theo ba chặng: hoàn thiện ingestion và contracts; xây dựng
-Story cùng editorial backend; cuối cùng nối web, hạ tầng localhost, kiểm thử
-recovery và demo end-to-end. Các lệnh build, migration, khởi động và demo chỉ
-được công bố là hỗ trợ sau khi đã được triển khai và chạy xác minh.
+Arbitrary-site crawling, Kubernetes/cloud production, separate vector database,
+recommendation, social features, comments, live scores, advanced search cluster,
+full multilingual processing và autonomous long-form publication không thuộc MVP.
