@@ -1,0 +1,87 @@
+# Environment variables and credentials
+.env
+.env.*
+!.env.example
+.envrc
+.direnv/
+.kaggle/
+kaggle.json
+*.pem
+*.key
+*.crt
+
+# Python and uv
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+*.egg-info/
+.eggs/
+build/
+dist/
+site/
+
+# Jupyter and local model artifacts
+.ipynb_checkpoints/
+models/
+.cache/huggingface/
+huggingface/
+*.gguf
+*.safetensors
+
+# Node, pnpm, Vite and frontend reports
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+.vite/
+*.tsbuildinfo
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+
+# CodeGraph local indexes; keep initialization metadata
+**/.codegraph/*
+!**/.codegraph/.gitignore
+
+# Runtime data, logs and process state
+logs/
+*.log
+*.pid
+*.pid.lock
+airflow/logs/
+airflow/.airflowignore.local
+.local-data/
+runtime/
+tmp/
+temp/
+
+# Kaggle batch working files
+kaggle/input/
+kaggle/output/
+kaggle/working/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Operating-system artifacts
+.DS_Store
+Thumbs.db
+Desktop.ini
