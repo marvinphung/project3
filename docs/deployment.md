@@ -65,8 +65,8 @@ Compose hiện giới hạn lần lượt Kafka 1 GiB/1.5 CPU, MongoDB 1 GiB/1 C
 PostgreSQL 768 MiB/1 CPU và Redis 256 MiB/0.5 CPU. Các giới hạn sẽ được đo lại
 khi full stack chạy.
 
-GLiNER là optional model dependency, không bắt buộc cho mock/offline test. Cài
-runtime thật bằng:
+GLiNER và BGE là optional model dependencies, không bắt buộc cho mock/offline
+test. Cài runtime thật bằng:
 
 ```bash
 uv sync --package footballpulse-intelligence-service --extra models --group dev --locked
@@ -74,7 +74,8 @@ uv sync --package footballpulse-intelligence-service --extra models --group dev 
 
 Workspace pin `torch` vào PyTorch CPU index; lockfile không kéo CUDA/NVIDIA hay
 Triton trên máy local. Trọng số model được Hugging Face tải vào cache người dùng ở
-lần chạy thật đầu tiên; worker không tải lại model theo từng article.
+lần chạy thật đầu tiên; worker không tải lại model theo từng article. BGE dùng
+batch 16, context 512 tokens và concurrency 1 mặc định/tối đa 2.
 
 ## 5. Kaggle execution
 

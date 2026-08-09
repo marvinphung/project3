@@ -7,6 +7,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Connection, Engine, RowMapping
 from sqlalchemy.exc import IntegrityError
 
+from footballpulse_intelligence_service.domain.embedding import (
+    EmbeddingRecord,
+    EmbeddingVector,
+)
 from footballpulse_intelligence_service.domain.entity import (
     AliasReviewStatus,
     AliasSource,
@@ -23,6 +27,7 @@ from footballpulse_intelligence_service.domain.unresolved import (
     UnresolvedReviewStatus,
 )
 from footballpulse_intelligence_service.persistence.postgres_tables import (
+    article_embeddings,
     entities,
     entity_aliases,
     entity_audit_log,
@@ -384,3 +389,72 @@ class PostgresUnresolvedMentionRepository:
                     .one()
                 )
         return _unresolved_from_row(row)
+
+
+def _embedding_values(record: EmbeddingRecord) -> dict[str, object]:
+    return {
+        "id": record.id,
+        "article_version_id": record.article_version_id,
+        "input_hash": record.input_hash,
+        "input_builder_version": record.input_builder_version,
+        "model_name": record.model_name,
+        "model_version": record.model_version,
+        "dimensions": record.dimensions,
+        "embedding": list(record.vector.values),
+        "token_count": record.token_count,
+        "embedded_token_count": record.embedded_token_count,
+        "truncated": record.truncated,
+        "created_at": record.created_at,
+    }
+
+
+def _embedding_from_row(row: RowMapping) -> EmbeddingRecord:
+    return EmbeddingRecord(
+        id=row["id"],
+        article_version_id=row["article_version_id"],
+        input_hash=row["input_hash"],
+        input_builder_version=row["input_builder_version"],
+        model_name=row["model_name"],
+        model_version=row["model_version"],
+        vector=EmbeddingVector.create(list(row["embedding"])),
+        dimensions=row["dimensions"],
+        token_count=row["token_count"],
+        embedded_token_count=row["embedded_token_count"],
+        truncated=row["truncated"],
+        created_at=row["created_at"],
+    )
+
+
+class PostgresEmbeddingRepository:
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+
+    def add_once(self, record: EmbeddingRecord) -> EmbeddingRecord:
+        statement = (
+            insert(article_embeddings)
+            .values(**_embedding_values(record))
+            .on_conflict_do_nothing(index_elements=[article_embeddings.c.id])
+            .returning(*article_embeddings.c)
+        )
+        with self._engine.begin() as connection:
+            row = connection.execute(statement).mappings().one_or_none()
+            if row is None:
+                row = (
+                    connection.execute(
+                        sa.select(article_embeddings).where(article_embeddings.c.id == record.id)
+                    )
+                    .mappings()
+                    .one()
+                )
+        return _embedding_from_row(row)
+
+    def get(self, embedding_id: UUID) -> EmbeddingRecord | None:
+        with self._engine.connect() as connection:
+            row = (
+                connection.execute(
+                    sa.select(article_embeddings).where(article_embeddings.c.id == embedding_id)
+                )
+                .mappings()
+                .one_or_none()
+            )
+        return None if row is None else _embedding_from_row(row)

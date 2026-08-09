@@ -27,6 +27,6 @@ Canonical detailed plan:
 
 ## Current next action
 
-WP 3.2 was approved after Collaboration Gate 3.2. The next action is the WP 3.3
-Kickoff for the English embedding adapter; do not implement it before the user
-approves that kickoff.
+WP 3.3 was approved after Collaboration Gate 3.3. The next action is the WP 3.4
+Kickoff for AI contracts and grounding validation; do not implement it before the
+user approves that kickoff.

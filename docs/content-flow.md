@@ -111,8 +111,17 @@ chỉ được tạo sau khi Admin chọn canonical entity cho unresolved mentio
 mới approve/reject hoặc disable, mọi thay đổi giữ audit actor/reason và không
 hard-delete evidence. Mock adapter deterministic dùng cho test/demo offline.
 
-`bge-small-en-v1.5` tạo embedding từ English title, event type, entity và claim
-text. Vietnamese không tham gia embedding hoặc similarity.
+`BAAI/bge-small-en-v1.5` tạo vector English 384 chiều bằng CPU. Input WP 3.3 là
+chuỗi deterministic theo thứ tự `title`, canonical entity names đã sort/deduplicate,
+rồi `cleaned_content`; raw HTML, unresolved entity và tiếng Việt không tham gia.
+Tokenizer đúng model giữ tối đa 512 tokens nên title/entity luôn được ưu tiên ở đầu.
+Metadata giữ full input hash, token count trước/sau và trạng thái truncated.
+
+Model load một lần, encode batch mặc định 16, worker concurrency mặc định 1 và tối
+đa 2. Vector bắt buộc finite, đúng dimension và L2-normalized. Runtime lỗi trả
+`EMBEDDING_FAILED`, không tự chuyển mock. Khi WP 3.4 có validated claims/event type,
+input builder version mới sẽ tạo embedding version mới thay vì overwrite.
+Similarity chỉ retrieval candidate; nó không tự quyết định merge Story.
 
 ## 6. Kaggle AI batch
 

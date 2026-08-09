@@ -14,6 +14,11 @@ from footballpulse_intelligence_service.application.entity_catalog import (
     AliasDecision,
     EntityCatalogService,
 )
+from footballpulse_intelligence_service.domain.embedding import (
+    EMBEDDING_DIMENSIONS,
+    EmbeddingRecord,
+    EmbeddingVector,
+)
 from footballpulse_intelligence_service.domain.entity import EntityType
 from footballpulse_intelligence_service.domain.errors import EntityConflictError
 from footballpulse_intelligence_service.domain.extraction import (
@@ -23,6 +28,7 @@ from footballpulse_intelligence_service.domain.extraction import (
 )
 from footballpulse_intelligence_service.domain.unresolved import UnresolvedEntityMention
 from footballpulse_intelligence_service.persistence.postgres_repository import (
+    PostgresEmbeddingRepository,
     PostgresEntityCatalogRepository,
     PostgresUnresolvedMentionRepository,
 )
@@ -204,4 +210,26 @@ def test_seed_resolution_admin_review_audit_and_atomic_conflict(
             sa.text("SELECT count(*) FROM intelligence_schema.unresolved_entity_mentions")
         ).scalar_one()
     assert unresolved_count == 1
+
+    embedding = EmbeddingRecord.create(
+        article_version_id=uuid4(),
+        input_hash="a" * 64,
+        input_builder_version="article-embedding-input-v1",
+        model_name="mock-bge",
+        model_version="fixture-v1",
+        vector=EmbeddingVector.create([1.0] + [0.0] * (EMBEDDING_DIMENSIONS - 1)),
+        token_count=20,
+        embedded_token_count=20,
+        truncated=False,
+        now=NOW,
+    )
+    embedding_repository = PostgresEmbeddingRepository(engine)
+    assert embedding_repository.add_once(embedding) == embedding
+    assert embedding_repository.add_once(embedding) == embedding
+    assert embedding_repository.get(embedding.id) == embedding
+    with engine.connect() as connection:
+        embedding_count = connection.execute(
+            sa.text("SELECT count(*) FROM intelligence_schema.article_embeddings")
+        ).scalar_one()
+    assert embedding_count == 1
     engine.dispose()

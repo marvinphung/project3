@@ -19,6 +19,7 @@ erDiagram
     SOURCE_ARTICLE_VERSION ||--o{ ARTICLE_ENRICHMENT : enriched_as
     SOURCE_ARTICLE_VERSION ||--o{ DUPLICATE_LINK : participates
     SOURCE_ARTICLE_VERSION ||--o{ UNRESOLVED_ENTITY_MENTION : produces
+    SOURCE_ARTICLE_VERSION ||--o{ ARTICLE_EMBEDDING : embedded_as
     ENTITY ||--o{ ENTITY_ALIAS : has
     ENTITY ||--o{ UNRESOLVED_ENTITY_MENTION : resolves_to
     STORY }o--o{ ENTITY : tagged_with
@@ -186,6 +187,18 @@ deterministic từ article/offset/type/model nên replay không ghi lặp. Menti
 từ `0.75` mới vào queue; kết quả từ `0.50–0.75` vẫn tồn tại trong enrichment nhưng
 không tạo review noise. Khi Admin resolve, row trỏ tới canonical entity đã chọn rồi
 workflow mới tạo/review alias; không có FK xuyên MongoDB và PostgreSQL.
+
+#### English article embedding
+
+`article_embeddings` giữ immutable pgvector `VECTOR(384)` cùng
+`article_version_id`, SHA-256 của full deterministic input, input-builder version,
+model name/version, dimensions, token counts, truncated flag và timestamp. Unique
+business key `(article_version_id, input_hash, model_name, model_version)` cộng
+stable UUID làm replay idempotent. Article ID chỉ là logical Mongo reference, không
+tạo FK xuyên database.
+
+MVP dùng exact pgvector scan, chưa tạo HNSW/IVFFlat khi chưa có dataset/load
+measurement. Input/model đổi tạo row mới; historical vector không bị overwrite.
 
 #### Story và claims
 

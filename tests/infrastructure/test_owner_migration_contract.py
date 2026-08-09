@@ -105,3 +105,18 @@ def test_intelligence_migration_adds_unresolved_review_queue() -> None:
     assert "PENDING_REVIEW" in migration
     assert "article_version_id" in migration
     assert "resolved_entity_id" in migration
+
+
+def test_intelligence_migration_adds_versioned_pgvector_embeddings() -> None:
+    migration = (
+        ROOT
+        / "services/intelligence-service/migrations/versions/"
+        / "intelligence_0003_add_article_embeddings.py"
+    ).read_text()
+
+    assert "CREATE EXTENSION IF NOT EXISTS vector" in migration
+    assert "article_embeddings" in migration
+    assert "VECTOR(384)" in migration
+    assert "uq_article_embeddings_input_model" in migration
+    assert "hnsw" not in migration.casefold()
+    assert "ivfflat" not in migration.casefold()

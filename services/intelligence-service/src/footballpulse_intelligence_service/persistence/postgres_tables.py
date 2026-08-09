@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlalchemy as sa
+from pgvector.sqlalchemy import VECTOR
 from sqlalchemy.dialects import postgresql
 
 metadata = sa.MetaData(schema="intelligence_schema")
@@ -69,5 +70,22 @@ unresolved_entity_mentions = sa.Table(
     sa.Column("reviewed_by", sa.String(length=200), nullable=True),
     sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),
     sa.Column("resolution_note", sa.Text(), nullable=True),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+)
+
+article_embeddings = sa.Table(
+    "article_embeddings",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("article_version_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("input_hash", sa.String(length=64), nullable=False),
+    sa.Column("input_builder_version", sa.String(length=100), nullable=False),
+    sa.Column("model_name", sa.String(length=200), nullable=False),
+    sa.Column("model_version", sa.String(length=200), nullable=False),
+    sa.Column("dimensions", sa.SmallInteger(), nullable=False),
+    sa.Column("embedding", VECTOR(384), nullable=False),
+    sa.Column("token_count", sa.Integer(), nullable=False),
+    sa.Column("embedded_token_count", sa.Integer(), nullable=False),
+    sa.Column("truncated", sa.Boolean(), nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
 )

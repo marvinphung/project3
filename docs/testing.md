@@ -63,6 +63,20 @@ Baseline ngày 2026-08-10 trên máy tham chiếu đạt precision `1.000`, reca
 nhỏ để khóa adapter và baseline threshold, không phải quality claim cho news corpus
 thực; cần mở rộng annotated fixture trước khi đổi model hoặc threshold.
 
+BGE acceptance thật kiểm tra transfer retrieval với injury/match negative controls
+và in cold/warm latency cùng peak RSS:
+
+```bash
+FOOTBALLPULSE_RUN_BGE_ACCEPTANCE=1 uv run pytest -q -s \
+  services/intelligence-service/tests/test_bge_model_acceptance.py
+```
+
+Baseline cached ngày 2026-08-10: transfer similarity `0.9600`, injury `0.8170`,
+match `0.8075`; cold load + first batch `9.861s`, warm single `0.018s`, warm batch
+16 `0.115s`, peak RSS delta khoảng `549 MiB`. Lần chạy đầu gồm tải model mất
+`22.946s` và đạt cùng thứ tự similarity. Đây là fixture nhỏ; vector chỉ retrieval
+candidate và không thay rule/category merge.
+
 FastAPI TestClient của Starlette 1.6 dùng `httpx2`. Trong Codex sandbox, test
 này cần chạy ngoài sandbox vì blocking portal cần thread/event-loop; đây không
 phải yêu cầu khi developer chạy trực tiếp trên máy local.

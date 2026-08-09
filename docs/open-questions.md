@@ -21,7 +21,8 @@ smoke test trước implementation phụ thuộc; không được tự điền b
 
 ## 3. Story và vector
 
-- `bge-small-en-v1.5` có đạt acceptance trên football fixtures hay cần model khác?
+- `bge-small-en-v1.5` đã đạt fixture baseline; thứ tự retrieval có giữ đúng trên
+  annotated corpus lớn hơn và peak RSS full-stack có chấp nhận được không?
 - pgvector index type/config sau khi có dataset size và load measurement?
 - Rule weights, candidate count, category time windows và create/review thresholds?
 - Policy hạ confirmation và cách thể hiện conflicting claims?

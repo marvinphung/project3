@@ -93,6 +93,7 @@ def test_owner_migrations_upgrade_idempotently_and_downgrade_cleanly(
             ("intelligence_schema", "entity_aliases"),
             ("intelligence_schema", "entity_audit_log"),
             ("intelligence_schema", "unresolved_entity_mentions"),
+            ("intelligence_schema", "article_embeddings"),
             ("intelligence_schema", "alembic_version_intelligence"),
         } <= tables
         seed_counts = connection.execute(
@@ -123,6 +124,7 @@ def test_owner_migrations_upgrade_idempotently_and_downgrade_cleanly(
             "WHERE table_schema IN ('source_schema', 'intelligence_schema') "
             "AND table_name IN "
             "('sources', 'crawl_batches', 'crawl_attempts', 'entities', "
-            "'entity_aliases', 'entity_audit_log', 'unresolved_entity_mentions')"
+            "'entity_aliases', 'entity_audit_log', 'unresolved_entity_mentions', "
+            "'article_embeddings')"
         ).fetchone()
         assert product_table_count == (0,)
