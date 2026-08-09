@@ -4,7 +4,7 @@
 
 FootballPulse chủ yếu chạy trên một máy local bằng Docker Compose. Topology này
 ưu tiên tái lập, quan sát được và demo offline; nó không đại diện production
-cluster chịu lỗi. Chưa có Compose startup hoặc smoke command được xác minh.
+cluster chịu lỗi. WP 1.1 mới hiện thực bốn dependency nền, chưa gồm application.
 
 ## 2. Topology
 
@@ -30,14 +30,25 @@ chuẩn; Kaggle outage không làm mất crawl data.
 
 | Profile | Thành phần |
 | --- | --- |
-| `core` | Kafka, MongoDB, PostgreSQL+pgvector, Redis, sáu backend service, frontend |
+| `core` | Hiện có Kafka, MongoDB, PostgreSQL+pgvector, Redis; service/frontend sẽ được thêm dần |
 | `airflow` | Airflow scheduler/API và metadata database cần thiết |
 | `demo` | Mock News Source, mock Kaggle/AI results và deterministic scenario control |
 | `tools` | Kafka UI hoặc database admin tool tùy chọn |
 
-Sử dụng thường ngày là `core + airflow`; demo offline là
-`core + airflow + demo`. Tên command cụ thể vẫn TBD tới khi Compose được tạo và
-smoke-test.
+Sử dụng thường ngày sau MVP là `core + airflow`; demo offline là
+`core + airflow + demo`.
+
+### Dependency baseline đã xác minh
+
+| Dependency | Image | Host port |
+| --- | --- | --- |
+| Kafka KRaft | `apache/kafka:4.3.1` | `127.0.0.1:9092` |
+| MongoDB replica set | `mongo:7.0.37-jammy` | `127.0.0.1:27017` |
+| PostgreSQL + pgvector | `pgvector/pgvector:0.8.5-pg17-bookworm` | `127.0.0.1:5432` |
+| Redis | `redis:7.2.14-alpine` | `127.0.0.1:6379` |
+
+MongoDB 7 được pin vì MongoDB 8.x gặp lỗi đã biết trên kernel Linux 6.19 của máy
+local. Khi nâng version phải chạy lại transaction smoke test trên kernel đích.
 
 ## 4. Resource strategy
 
@@ -50,7 +61,9 @@ có CUDA/ROCm. Vì vậy:
 - Kafka một broker, database pool và worker concurrency đều nhỏ/có giới hạn;
 - Airflow dùng executor local nhẹ, không dùng CeleryExecutor cho MVP.
 
-Con số RAM/CPU limit cuối cùng phải được đo khi full stack chạy, không dự đoán.
+Compose hiện giới hạn lần lượt Kafka 1 GiB/1.5 CPU, MongoDB 1 GiB/1 CPU,
+PostgreSQL 768 MiB/1 CPU và Redis 256 MiB/0.5 CPU. Các giới hạn sẽ được đo lại
+khi full stack chạy.
 
 ## 5. Kaggle execution
 
@@ -74,7 +87,37 @@ username/key trong Dockerfile, notebook metadata hoặc Git.
 - Không cần Internet, Kaggle quota, Hugging Face download hoặc API credential.
 - Dữ liệu MongoDB/PostgreSQL dùng local volumes để restart không làm mất state.
 
-## 7. Startup và shutdown mục tiêu
+## 7. Startup và shutdown
+
+Tạo `.env` local rồi chạy smoke test idempotent:
+
+```bash
+cp .env.example .env
+./scripts/smoke-dependencies.sh
+```
+
+Script thực hiện health wait, bootstrap quyền volume Kafka, khởi tạo MongoDB
+replica set, tạo Kafka smoke topic bằng `--if-not-exists`, commit MongoDB
+transaction, kiểm tra extension `vector` và Redis `PONG`.
+
+Có thể khởi động thủ công:
+
+```bash
+docker compose --env-file .env --profile core up -d --wait kafka mongodb postgres redis
+docker compose --env-file .env --profile core run --rm mongodb-init
+```
+
+Dừng container nhưng giữ dữ liệu:
+
+```bash
+docker compose --env-file .env --profile core down
+```
+
+Không dùng `down -v` nếu muốn giữ local state. MongoDB hiện không bật auth và
+toàn bộ port chỉ bind loopback; PostgreSQL/Redis dùng development credential từ
+`.env`, không tái sử dụng cho môi trường ngoài máy cá nhân.
+
+Thứ tự mở rộng mục tiêu:
 
 1. Kafka, MongoDB, PostgreSQL và Redis health.
 2. Init Kafka topics, Mongo replica set và owner migrations.

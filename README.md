@@ -11,10 +11,10 @@ timeline có mức xác thực và bài tổng hợp qua editorial review.
 
 ## Trạng thái
 
-Phase 0 đã hoàn tất và được duyệt: Python workspace, sáu service skeleton,
-runtime configuration, hai event contracts đầu tiên và deterministic offline
-fixtures. Chưa có business service, Kaggle integration, database, Kafka, Airflow
-hoặc Docker Compose hoạt động. Frontend React/Vite hiện có vẫn là mock.
+Phase 0 đã hoàn tất và được duyệt. Phase 1 đang triển khai; bộ dependency local
+Kafka, MongoDB replica set, PostgreSQL+pgvector và Redis đã có Docker Compose và
+smoke test. Chưa có business service, Kaggle integration hoặc Airflow hoạt động.
+Frontend React/Vite hiện có vẫn là mock.
 
 ## Python workspace
 
@@ -28,6 +28,17 @@ uv run ruff format --check .
 uv run ruff check .
 uv run mypy
 ```
+
+Khởi động và kiểm tra các dependency local:
+
+```bash
+cp .env.example .env
+./scripts/smoke-dependencies.sh
+docker compose --env-file .env --profile core down
+```
+
+Script có thể chạy lặp lại, không xóa named volumes. Các port chỉ bind vào
+`127.0.0.1`; credential trong `.env.example` chỉ dành cho phát triển local.
 
 Root project chỉ quản lý workspace và công cụ phát triển, không chứa business
 package. Sáu service hiện chỉ có importable package và liveness entrypoint; chưa
