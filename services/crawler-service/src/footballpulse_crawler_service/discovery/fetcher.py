@@ -20,38 +20,38 @@ _FEED_CONTENT_TYPES = {
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 
 
-class RssFetchError(Exception):
-    """Base error for a bounded RSS fetch."""
+class BoundedFetchError(Exception):
+    """Base error for a bounded HTTP fetch."""
 
 
-class ResponseLimitError(RssFetchError):
+class ResponseLimitError(BoundedFetchError):
     """Raised when declared or streamed response size crosses the limit."""
 
 
-class UnsupportedContentTypeError(RssFetchError):
-    """Raised when the endpoint did not return a feed-like media type."""
+class UnsupportedContentTypeError(BoundedFetchError):
+    """Raised when the endpoint returned an unexpected media type."""
 
 
-class RedirectLimitError(RssFetchError):
-    """Raised when a feed crosses the configured redirect limit."""
+class RedirectLimitError(BoundedFetchError):
+    """Raised when a resource crosses the configured redirect limit."""
 
 
-class FetchHttpStatusError(RssFetchError):
+class FetchHttpStatusError(BoundedFetchError):
     def __init__(self, status_code: int, headers: httpx.Headers) -> None:
-        super().__init__(f"RSS endpoint returned HTTP {status_code}")
+        super().__init__(f"HTTP endpoint returned status {status_code}")
         self.status_code = status_code
         self.headers = headers
 
 
 @dataclass(frozen=True, slots=True)
-class FetchedRss:
+class FetchedHttpResponse:
     final_url: str
     status_code: int
     content: bytes
     content_type: str
 
 
-def create_rss_http_client(
+def create_http_client(
     *,
     max_connections: int = 20,
     max_keepalive_connections: int = 10,
@@ -65,11 +65,11 @@ def create_rss_http_client(
         ),
         follow_redirects=False,
         trust_env=False,
-        headers={"User-Agent": "FootballPulse/0.1 RSS discovery"},
+        headers={"User-Agent": "FootballPulse/0.1 crawler"},
     )
 
 
-class RssFetcher:
+class BoundedHttpFetcher:
     def __init__(
         self,
         *,
@@ -79,6 +79,8 @@ class RssFetcher:
         max_response_bytes: int = 2 * 1024 * 1024,
         max_redirects: int = 3,
         sleep: Sleep = asyncio.sleep,
+        accepted_content_types: frozenset[str],
+        resource_name: str,
     ) -> None:
         if max_response_bytes < 1 or max_redirects < 0:
             raise ValueError("response and redirect limits must not be negative")
@@ -88,8 +90,12 @@ class RssFetcher:
         self._max_response_bytes = max_response_bytes
         self._max_redirects = max_redirects
         self._sleep = sleep
+        if not accepted_content_types or not resource_name:
+            raise ValueError("content types and resource name are required")
+        self._accepted_content_types = accepted_content_types
+        self._resource_name = resource_name
 
-    async def fetch(self, url: str, *, allowed_domains: tuple[str, ...]) -> FetchedRss:
+    async def fetch(self, url: str, *, allowed_domains: tuple[str, ...]) -> FetchedHttpResponse:
         for attempt in range(1, self._retry.max_attempts + 1):
             try:
                 return await self._fetch_once(url, allowed_domains=allowed_domains)
@@ -113,7 +119,7 @@ class RssFetcher:
         url: str,
         *,
         allowed_domains: tuple[str, ...],
-    ) -> FetchedRss:
+    ) -> FetchedHttpResponse:
         validated = await self._safety.validate(url, allowed_domains=allowed_domains)
         redirects = 0
         while True:
@@ -121,9 +127,9 @@ class RssFetcher:
                 if response.status_code in _REDIRECT_STATUSES:
                     location = response.headers.get("Location")
                     if location is None:
-                        raise RssFetchError("redirect response omitted Location")
+                        raise BoundedFetchError("redirect response omitted Location")
                     if redirects >= self._max_redirects:
-                        raise RedirectLimitError("RSS redirect limit exceeded")
+                        raise RedirectLimitError(f"{self._resource_name} redirect limit exceeded")
                     validated = await self._safety.validate_redirect(
                         current_url=validated.url,
                         location=location,
@@ -135,9 +141,10 @@ class RssFetcher:
                     raise FetchHttpStatusError(response.status_code, response.headers)
 
                 content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
-                if content_type not in _FEED_CONTENT_TYPES:
+                if content_type not in self._accepted_content_types:
                     raise UnsupportedContentTypeError(
-                        f"unsupported RSS content type: {content_type or 'missing'}"
+                        f"unsupported {self._resource_name} content type: "
+                        f"{content_type or 'missing'}"
                     )
                 declared_length = response.headers.get("Content-Length")
                 if declared_length is not None:
@@ -146,20 +153,47 @@ class RssFetcher:
                         if parsed_length < 0:
                             raise ValueError
                         if parsed_length > self._max_response_bytes:
-                            raise ResponseLimitError("RSS response exceeds declared size limit")
+                            raise ResponseLimitError(
+                                f"{self._resource_name} response exceeds declared size limit"
+                            )
                     except ValueError as exc:
-                        raise RssFetchError("invalid Content-Length header") from exc
+                        raise BoundedFetchError("invalid Content-Length header") from exc
 
                 chunks: list[bytes] = []
                 received = 0
                 async for chunk in response.aiter_bytes():
                     received += len(chunk)
                     if received > self._max_response_bytes:
-                        raise ResponseLimitError("RSS response exceeds streamed size limit")
+                        raise ResponseLimitError(
+                            f"{self._resource_name} response exceeds streamed size limit"
+                        )
                     chunks.append(chunk)
-                return FetchedRss(
+                return FetchedHttpResponse(
                     final_url=validated.url,
                     status_code=response.status_code,
                     content=b"".join(chunks),
                     content_type=content_type,
                 )
+
+
+class RssFetcher(BoundedHttpFetcher):
+    def __init__(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        safety_policy: UrlSafetyPolicy,
+        retry_policy: RetryPolicy | None = None,
+        max_response_bytes: int = 2 * 1024 * 1024,
+        max_redirects: int = 3,
+        sleep: Sleep = asyncio.sleep,
+    ) -> None:
+        super().__init__(
+            client=client,
+            safety_policy=safety_policy,
+            retry_policy=retry_policy,
+            max_response_bytes=max_response_bytes,
+            max_redirects=max_redirects,
+            sleep=sleep,
+            accepted_content_types=frozenset(_FEED_CONTENT_TYPES),
+            resource_name="RSS",
+        )

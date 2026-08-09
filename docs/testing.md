@@ -58,6 +58,10 @@ content hashes, local RSS/HTML paths, transport failures và expected timeline
 outcome. `tests/fixtures/ai/` giữ valid, invalid và partial JSONL. Mọi fixture
 test chạy offline; thay nội dung HTML bắt buộc cập nhật hash có chủ đích.
 
+Extraction fixtures khóa exact cleaned output cho transfer, injury, match và duplicate.
+Assertions kiểm tra fallback/failed diagnostics, loại navigation/script và giữ
+nguyên Unicode, punctuation, tỷ số cùng currency như `€180m`.
+
 ## 4. AI/Kaggle tests
 
 - Bài dài được chunk, claims merge deterministic và evidence quote còn truy được.

@@ -46,13 +46,23 @@ network policy.
 
 ## 3. Clean và version
 
-Trafilatura trích nội dung chính; BeautifulSoup là fallback cho source có cấu
-trúc đặc biệt. Cleaner:
+Article HTML dùng cùng SSRF/redirect/retry policy với RSS, chỉ nhận `text/html`
+hoặc XHTML và có response cap 5 MiB. Output trước persistence giữ raw HTML bytes,
+requested/final URL, MIME và cleaned projection để WP 2.4 tạo immutable version.
+
+Trafilatura trích nội dung chính với comments/tables bị tắt và ưu tiên precision;
+BeautifulSoup là fallback deterministic khi primary không có content hữu ích.
+Primary thành công có trạng thái `SUCCESS`; fallback có `PARTIAL`; cả hai không
+lấy được bài trả `FAILED` kèm diagnostics thay vì tạo empty article. Cleaner:
 
 - chuyển newline, tab và nhóm whitespace thành một dấu cách;
 - decode HTML entity và normalize Unicode;
 - loại control/zero-width character, menu, quảng cáo và paragraph trùng;
 - giữ dấu câu, ký hiệu tiền tệ và số liệu như `€180m`.
+
+Normalization chỉ chuẩn hóa representation, không dịch, sửa câu hoặc diễn giải
+nội dung. Source-specific parser chưa thuộc MVP và chỉ được thêm khi fixture từ
+RSS thực tế chứng minh extractor chung không đủ.
 
 Không overwrite bài khi cùng canonical URL thay đổi. Mỗi content hash mới tạo
 một immutable article version với `previous_version_id`. Nếu ETag/Last-Modified
