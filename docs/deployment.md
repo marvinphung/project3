@@ -72,6 +72,17 @@ test. Cài runtime thật bằng:
 uv sync --package footballpulse-intelligence-service --extra models --group dev --locked
 ```
 
+Local Qwen cũng là optional và không kéo vào môi trường Kaggle/mock mặc định:
+
+```bash
+uv sync --package footballpulse-ai-content-service --extra local-model --group dev --locked
+```
+
+Lệnh này cài `llama-cpp-python` CPU và có thể cần compiler nếu không dùng được
+prebuilt wheel. File GGUF phải được tải riêng, đặt ngoài Git, rồi cấu hình
+`FOOTBALLPULSE_LOCAL_MODEL_PATH` và SHA-256 nếu muốn pin artifact. Service lazy-load
+model, concurrency 1, batch tối đa 20 article và unload sau 15 phút idle.
+
 Workspace pin `torch` vào PyTorch CPU index; lockfile không kéo CUDA/NVIDIA hay
 Triton trên máy local. Trọng số model được Hugging Face tải vào cache người dùng ở
 lần chạy thật đầu tiên; worker không tải lại model theo từng article. BGE dùng
@@ -97,6 +108,11 @@ trong Dockerfile, kernel metadata hoặc Git.
 Kernel dùng Qwen3-8B 4-bit attachment đã pin, `is_private=true`, GPU bật và Internet
 tắt. Dataset phải được tạo private trước lần version đầu tiên. Real smoke cần kiểm
 tra lại privacy trên Kaggle UI/CLI trước khi upload nội dung thật.
+
+Provider mặc định là `kaggle`. Fallback sang local chỉ áp dụng cho lỗi
+network/service/quota/GPU/kernel timeout hoặc infrastructure đã phân loại; lỗi
+credential/privacy/integrity/schema/grounding không fallback. `mock` chỉ được bật
+rõ trong môi trường `test|demo` và bắt buộc có fixture JSONL.
 
 ## 6. Offline demo
 

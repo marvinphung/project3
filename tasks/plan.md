@@ -27,6 +27,7 @@ Canonical detailed plan:
 
 ## Current next action
 
-WP 3.5 was approved after Collaboration Gate 3.5. The next action is the WP 3.6
-Kickoff for the local Qwen/mock fallback; do not implement it before the user
-approves that kickoff.
+WP 3.6 and Collaboration Gate 3.6 are complete. The next action is the Phase 3
+review: report the article → entities/embedding → Kaggle/local/mock → validated
+English enrichment path, actual smoke evidence and remaining model questions before
+starting Phase 4.

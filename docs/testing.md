@@ -120,6 +120,14 @@ nguyên Unicode, punctuation, tỷ số cùng currency như `€180m`.
   rollback record hợp lệ khác.
 - Kaggle unavailable giữ dữ liệu và retry/fallback đúng policy.
 - Mock provider và Kaggle importer dùng cùng output contract.
+- Mock fixture lookup fail closed theo article/input hash và bị cấm ngoài
+  `test|demo`.
+- Local provider test bằng fake runtime: GGUF checksum, lazy load/idle unload,
+  concurrency boundary, chunk/repair, timeout isolation và batch limit 20.
+- Fallback decision table chứng minh chỉ lỗi hạ tầng allow-list được Kaggle → local;
+  integrity/config/programming error không bị che.
+- llama.cpp adapter test JSON Schema mode, deterministic temperature, output token
+  budget, deadline stopping và fatal native error mà không cần cài model runtime.
 - Kaggle CLI unit test khóa argument array, timeout, redaction và output allow-list.
 - Batch importer test partial/missing/unknown/hash mismatch/conflicting duplicate và
   binding của `job-report` với manifest.
@@ -133,6 +141,10 @@ FOOTBALLPULSE_RUN_MONGO_INTEGRATION=1 uv run pytest -q \
 
 Real Kaggle smoke chỉ chạy khi user duyệt network/quota; báo runtime, quota và chất
 lượng output riêng, không gộp với offline test pass/fail.
+
+Local Qwen acceptance cũng opt-in vì cần cài optional native dependency và tải GGUF.
+Nó phải báo model checksum, peak RSS, load time, latency/chunk, latency/article và
+grounding result; unit suite mặc định không tải hoặc load model.
 
 Event contract suite còn khóa payload bounded cho `article.enriched.v1` và
 `article.enrichment.failed.v1`; full summary/evidence/raw output bị cấm trong Kafka.

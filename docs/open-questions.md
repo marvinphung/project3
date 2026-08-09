@@ -15,6 +15,8 @@ smoke test trước implementation phụ thuộc; không được tự điền b
 - Batch article/token limit nào phù hợp Kaggle quota/runtime thực tế?
 - Qwen3-8B 4-bit format/runtime nào vượt benchmark chất lượng và thời gian?
 - Khi nào dùng Qwen3-4B local fallback thay vì đợi batch sau?
+- GGUF Qwen3-4B `Q4_K_M` artifact/checksum nào đạt local acceptance trên máy tham
+  chiếu, và 5 phút/article có đủ sau benchmark thực?
 - `article-enrichment.v1` và một structural repair attempt đã khóa; prompt wording
   nào đạt acceptance tốt nhất trên Kaggle fixture?
 - `DISCIPLINARY` và `OTHER` đang fail closed vì predicate v1 chưa có action tương

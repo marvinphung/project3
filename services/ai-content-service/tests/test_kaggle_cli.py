@@ -7,6 +7,7 @@ import pytest
 from footballpulse_ai_content_service.batch.kaggle_cli import (
     KaggleCli,
     KaggleCliError,
+    KaggleFailureKind,
     KaggleKernelState,
 )
 
@@ -107,9 +108,14 @@ def test_status_is_normalized(output: str, expected: KaggleKernelState) -> None:
 
 def test_cli_failure_is_bounded_and_redacts_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("KAGGLE_USERNAME", "private-user")
-    monkeypatch.setenv("KAGGLE_KEY", "super-secret-key")
+    monkeypatch.setenv("KAGGLE_API_TOKEN", "super-secret-token")
     runner = RecordingRunner(
-        [completed(stderr="private-user super-secret-key " + "x" * 3_000, returncode=1)]
+        [
+            completed(
+                stderr="authentication failed private-user super-secret-token " + "x" * 3_000,
+                returncode=1,
+            )
+        ]
     )
     cli = KaggleCli(runner=runner)
 
@@ -118,5 +124,6 @@ def test_cli_failure_is_bounded_and_redacts_credentials(monkeypatch: pytest.Monk
 
     message = str(error.value)
     assert "private-user" not in message
-    assert "super-secret-key" not in message
+    assert "super-secret-token" not in message
     assert len(message) < 1_500
+    assert error.value.kind is KaggleFailureKind.CREDENTIAL_INVALID

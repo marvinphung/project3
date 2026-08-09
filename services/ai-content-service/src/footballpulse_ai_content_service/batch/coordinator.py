@@ -201,11 +201,16 @@ class KaggleBatchCoordinator:
                 error_detail=str(error)[:500],
             )
         except (KaggleCliError, TimeoutError, EnrichmentPersistenceUnavailable, OSError) as error:
+            error_code = (
+                error.kind.value
+                if isinstance(error, KaggleCliError)
+                else type(error).__name__.upper()
+            )
             return self._transition(
                 batch_id,
                 current,
                 AiBatchStatus.FAILED_RETRYABLE,
-                error_code=type(error).__name__.upper(),
+                error_code=error_code,
                 error_detail=str(error)[:500],
             )
         finally:

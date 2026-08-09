@@ -159,8 +159,14 @@ và SHA-256 của `articles.jsonl`. `job-report.json` phải khớp toàn bộ b
 MongoDB `ai_batch_jobs` giữ lifecycle/retry/counts; single-flight lease có expiry.
 Artifact local bất biến hỗ trợ debug/replay và MVP chỉ dọn thủ công sau 30 ngày.
 
-Qwen3-4B GGUF local là fallback khi Kaggle không sẵn sàng. Mock provider dùng
-cùng schema để test/demo offline.
+Qwen3-4B GGUF local chỉ fallback cho lỗi hạ tầng đã allow-list. Model lazy-load,
+CPU concurrency 1, batch tối đa 20 article, timeout 5 phút/article và giữ trong RAM
+tối đa 15 phút idle. Load/native runtime failure dừng batch; timeout hoặc output
+invalid chỉ tạo ERROR cho article liên quan.
+
+Mock provider tra fixture bằng `article_version_id + input_hash`; không có fixture
+thì trả `MOCK_RESULT_NOT_FOUND`, không tự sinh fact. Local/mock cùng đi qua identity
+check, grounding validator và Mongo English persistence như Kaggle.
 
 ## 7. Validation output
 

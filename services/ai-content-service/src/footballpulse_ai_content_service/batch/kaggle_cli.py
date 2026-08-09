@@ -11,6 +11,19 @@ from typing import Protocol
 class KaggleCliError(RuntimeError):
     """A bounded, credential-redacted Kaggle CLI failure."""
 
+    def __init__(self, message: str, *, kind: KaggleFailureKind | None = None) -> None:
+        super().__init__(message)
+        self.kind = kind or KaggleFailureKind.UNKNOWN
+
+
+class KaggleFailureKind(StrEnum):
+    NETWORK_UNAVAILABLE = "KAGGLE_NETWORK_UNAVAILABLE"
+    SERVICE_UNAVAILABLE = "KAGGLE_SERVICE_UNAVAILABLE"
+    QUOTA_EXHAUSTED = "KAGGLE_QUOTA_EXHAUSTED"
+    GPU_UNAVAILABLE = "KAGGLE_GPU_UNAVAILABLE"
+    CREDENTIAL_INVALID = "KAGGLE_CREDENTIAL_INVALID"
+    UNKNOWN = "KAGGLE_FAILURE_UNKNOWN"
+
 
 class KaggleKernelState(StrEnum):
     PENDING = "PENDING"
@@ -134,11 +147,27 @@ class KaggleCli:
     def _execute(self, command: list[str]) -> subprocess.CompletedProcess[str]:
         try:
             result = self._runner.run(command, timeout_seconds=self._command_timeout_seconds)
-        except (OSError, subprocess.TimeoutExpired) as error:
-            raise KaggleCliError(self._redact(f"Kaggle CLI unavailable: {error}")) from error
+        except FileNotFoundError as error:
+            raise KaggleCliError(
+                self._redact(f"Kaggle CLI unavailable: {error}"),
+                kind=KaggleFailureKind.UNKNOWN,
+            ) from error
+        except subprocess.TimeoutExpired as error:
+            raise KaggleCliError(
+                self._redact(f"Kaggle CLI timed out: {error}"),
+                kind=KaggleFailureKind.SERVICE_UNAVAILABLE,
+            ) from error
+        except OSError as error:
+            raise KaggleCliError(
+                self._redact(f"Kaggle CLI unavailable: {error}"),
+                kind=KaggleFailureKind.NETWORK_UNAVAILABLE,
+            ) from error
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
-            raise KaggleCliError(self._redact(f"Kaggle CLI failed: {detail}"))
+            raise KaggleCliError(
+                self._redact(f"Kaggle CLI failed: {detail}"),
+                kind=self._classify_failure(detail),
+            )
         return result
 
     @classmethod
@@ -149,8 +178,27 @@ class KaggleCli:
     @staticmethod
     def _redact(message: str) -> str:
         bounded = message[:1_024]
-        for variable in ("KAGGLE_USERNAME", "KAGGLE_KEY"):
+        for variable in ("KAGGLE_USERNAME", "KAGGLE_API_TOKEN", "KAGGLE_KEY"):
             secret = os.environ.get(variable)
             if secret:
                 bounded = bounded.replace(secret, "[REDACTED]")
         return bounded
+
+    @staticmethod
+    def _classify_failure(detail: str) -> KaggleFailureKind:
+        normalized = detail.casefold()
+        if any(
+            marker in normalized for marker in ("unauthorized", "forbidden", "credential", "auth")
+        ):
+            return KaggleFailureKind.CREDENTIAL_INVALID
+        if any(marker in normalized for marker in ("quota", "limit exceeded")):
+            return KaggleFailureKind.QUOTA_EXHAUSTED
+        if any(marker in normalized for marker in ("gpu unavailable", "accelerator unavailable")):
+            return KaggleFailureKind.GPU_UNAVAILABLE
+        if any(
+            marker in normalized for marker in ("network", "connection", "timed out", "timeout")
+        ):
+            return KaggleFailureKind.NETWORK_UNAVAILABLE
+        if any(marker in normalized for marker in ("service unavailable", "internal server error")):
+            return KaggleFailureKind.SERVICE_UNAVAILABLE
+        return KaggleFailureKind.UNKNOWN
