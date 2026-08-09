@@ -82,6 +82,24 @@ content projection được materialize trong PostgreSQL.
 Giữ `article_id`, `primary_article_id`, loại `URL|EXACT_CONTENT|NEAR_DUPLICATE`,
 score, reason và timestamp. Duplicate vẫn là evidence và không bị xóa.
 
+#### `processed_events` và `outbox`
+
+`processed_events.event_id` là idempotency marker của consumed event. Marker giữ
+`article_id`, `outbox_event_id` và `processed_at`, nhờ đó replay trả lại đúng
+identity của lần xử lý đầu thay vì ghi thêm dữ liệu.
+
+`outbox.event_id` là duy nhất; document có `status`, `created_at`, `available_at`
+và `publish_attempts` để publisher ở Phase 2 có thể retry có giới hạn. Article
+Service ghi ba document trong cùng MongoDB replica-set transaction:
+
+```text
+source_articles + processed_events + outbox → commit hoặc rollback cùng nhau
+```
+
+Các collection còn lại có unique compound indexes cho article version,
+enrichment run và duplicate relationship. Index bootstrap có tên cố định và có
+thể chạy lặp mà không tạo index dư.
+
 ### PostgreSQL: product và API data
 
 #### Source/crawl

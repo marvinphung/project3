@@ -27,6 +27,6 @@ Canonical detailed plan:
 
 ## Current next action
 
-WP 1.2 was approved after Collaboration Gate 1.2. The next action is the WP 1.3
-Kickoff for Mongo indexes, processed events and outbox; do not implement it
-before the user approves that kickoff.
+WP 1.3 was approved after Collaboration Gate 1.3. The next action is Phase Gate
+1 for the complete local data plane; do not start Phase 2 before the user
+approves that gate.

@@ -17,6 +17,17 @@ không cần external model hoặc credential.
 | End-to-end | Mock RSS → crawl → AI import → Story/timeline → editorial → public UI |
 | Load/recovery | Bounded fetch, Kaggle batch size, backpressure, redelivery, restart, simultaneous updates |
 
+Mongo transaction integration test cần replica set local và chỉ thao tác trên
+database tạm có tên ngẫu nhiên, sau đó tự xóa:
+
+```bash
+FOOTBALLPULSE_RUN_MONGO_INTEGRATION=1 uv run pytest -q \
+  services/article-service/tests/test_mongo_article_store_integration.py
+```
+
+Test chứng minh index bootstrap chạy lặp, event replay không ghi thêm và unique
+outbox conflict rollback cả article lẫn processed-event marker.
+
 ## 3. Acceptance scenario theo cửa sổ
 
 | Window | Input | Kết quả bắt buộc |

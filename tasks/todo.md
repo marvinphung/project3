@@ -16,7 +16,7 @@
 
 - [x] WP 1.1 Minimal Compose dependencies
 - [x] WP 1.2 Source/identity migrations
-- [ ] WP 1.3 Mongo indexes, processed events and outbox
+- [x] WP 1.3 Mongo indexes, processed events and outbox
 - [ ] Phase Gate 1 approved
 
 ## Phase 2 — RSS to evidence
