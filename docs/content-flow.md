@@ -154,6 +154,11 @@ Mỗi JSONL record độc lập: record hợp lệ vẫn import khi record khác
 validate riêng nên partial success giữ claim tốt; không còn claim hợp lệ hoặc
 summary thêm factual anchor thì chuyển `NEEDS_CONTENT_REVIEW`.
 
+`manifest.json` khóa batch ID, article identities, input hashes, model/prompt version
+và SHA-256 của `articles.jsonl`. `job-report.json` phải khớp toàn bộ binding này.
+MongoDB `ai_batch_jobs` giữ lifecycle/retry/counts; single-flight lease có expiry.
+Artifact local bất biến hỗ trợ debug/replay và MVP chỉ dọn thủ công sau 30 ngày.
+
 Qwen3-4B GGUF local là fallback khi Kaggle không sẵn sàng. Mock provider dùng
 cùng schema để test/demo offline.
 

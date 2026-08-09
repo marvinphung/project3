@@ -66,6 +66,7 @@ logs/
 airflow/logs/
 airflow/.airflowignore.local
 .local-data/
+.footballpulse/
 runtime/
 tmp/
 temp/

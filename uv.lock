@@ -295,12 +295,14 @@ source = { editable = "services/ai-content-service" }
 dependencies = [
     { name = "footballpulse-event-contracts" },
     { name = "pydantic" },
+    { name = "pymongo" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "footballpulse-event-contracts", editable = "packages/event-contracts" },
     { name = "pydantic", specifier = ">=2.12,<3" },
+    { name = "pymongo", specifier = ">=4.16,<5" },
 ]
 
 [[package]]

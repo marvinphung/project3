@@ -80,16 +80,23 @@ batch 16, context 512 tokens và concurrency 1 mặc định/tối đa 2.
 ## 5. Kaggle execution
 
 AI Enrichment DAG tạo private dataset gồm `manifest.json` và `articles.jsonl`,
-trigger notebook, poll status, tải `results.jsonl`/`job-report.json`, validate và
+trigger private kernel, poll status, tải `results.jsonl`/`job-report.json`, validate và
 import partial results. State:
 
 ```text
-PREPARING → UPLOADED → RUNNING → DOWNLOADING → VALIDATING → COMPLETED
+PREPARING → DATASET_UPLOADED → KERNEL_SUBMITTED → RUNNING
+→ DOWNLOADING → IMPORTING → COMPLETED|PARTIAL
 ```
 
-Lỗi chuyển `RETRY_PENDING` hoặc `FAILED`; article chưa có output quay lại
-`AI_PENDING`. Kaggle credentials chỉ ở local secret/environment. Không hard-code
-username/key trong Dockerfile, notebook metadata hoặc Git.
+CLI/network/timeout chuyển `FAILED_RETRYABLE`; manifest/report/output conflict
+chuyển `FAILED_TERMINAL`. Article chưa có output đi vào retry batch. Mongo lease có
+expiry chỉ cho một job chạy; artifact local mặc định ở `.footballpulse/ai-batches`.
+Kaggle credentials chỉ ở local secret/environment. Không hard-code username/key
+trong Dockerfile, kernel metadata hoặc Git.
+
+Kernel dùng Qwen3-8B 4-bit attachment đã pin, `is_private=true`, GPU bật và Internet
+tắt. Dataset phải được tạo private trước lần version đầu tiên. Real smoke cần kiểm
+tra lại privacy trên Kaggle UI/CLI trước khi upload nội dung thật.
 
 ## 6. Offline demo
 

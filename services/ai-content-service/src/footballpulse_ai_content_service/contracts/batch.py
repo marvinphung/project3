@@ -26,6 +26,7 @@ class FailedBatchRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
 
     article_version_id: UUID
+    input_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     status: Literal["ERROR"]
     error_code: str = Field(min_length=1, max_length=80, pattern=r"^[A-Z][A-Z0-9_]*$")
     error: str = Field(min_length=1, max_length=500)

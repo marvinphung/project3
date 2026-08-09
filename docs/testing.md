@@ -120,6 +120,19 @@ nguyên Unicode, punctuation, tỷ số cùng currency như `€180m`.
   rollback record hợp lệ khác.
 - Kaggle unavailable giữ dữ liệu và retry/fallback đúng policy.
 - Mock provider và Kaggle importer dùng cùng output contract.
+- Kaggle CLI unit test khóa argument array, timeout, redaction và output allow-list.
+- Batch importer test partial/missing/unknown/hash mismatch/conflicting duplicate và
+  binding của `job-report` với manifest.
+- Mongo integration test khóa single-flight lease, atomic status transition và
+  idempotent English enrichment persistence:
+
+```bash
+FOOTBALLPULSE_RUN_MONGO_INTEGRATION=1 uv run pytest -q \
+  services/ai-content-service/tests/test_mongo_batch_repository_integration.py
+```
+
+Real Kaggle smoke chỉ chạy khi user duyệt network/quota; báo runtime, quota và chất
+lượng output riêng, không gộp với offline test pass/fail.
 
 Event contract suite còn khóa payload bounded cho `article.enriched.v1` và
 `article.enrichment.failed.v1`; full summary/evidence/raw output bị cấm trong Kafka.

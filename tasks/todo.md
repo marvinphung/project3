@@ -31,10 +31,10 @@
 ## Phase 3 — Intelligence and AI
 
 - [x] WP 3.1 Canonical entity catalog
-- [ ] WP 3.2 GLiNER adapter and resolution
-- [ ] WP 3.3 English embedding adapter
-- [ ] WP 3.4 AI contracts and grounding validator
-- [ ] WP 3.5 Kaggle batch adapter
+- [x] WP 3.2 GLiNER adapter and resolution
+- [x] WP 3.3 English embedding adapter
+- [x] WP 3.4 AI contracts and grounding validator
+- [x] WP 3.5 Kaggle batch adapter
 - [ ] WP 3.6 Local Qwen/mock fallback
 - [ ] Phase Gate 3 approved
 

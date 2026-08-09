@@ -27,6 +27,6 @@ Canonical detailed plan:
 
 ## Current next action
 
-WP 3.4 was approved after Collaboration Gate 3.4. The next action is the WP 3.5
-Kickoff for the Kaggle batch adapter; do not implement it before the user approves
-that kickoff.
+WP 3.5 was approved after Collaboration Gate 3.5. The next action is the WP 3.6
+Kickoff for the local Qwen/mock fallback; do not implement it before the user
+approves that kickoff.
