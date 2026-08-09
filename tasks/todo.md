@@ -30,7 +30,7 @@
 
 ## Phase 3 — Intelligence and AI
 
-- [ ] WP 3.1 Canonical entity catalog
+- [x] WP 3.1 Canonical entity catalog
 - [ ] WP 3.2 GLiNER adapter and resolution
 - [ ] WP 3.3 English embedding adapter
 - [ ] WP 3.4 AI contracts and grounding validator

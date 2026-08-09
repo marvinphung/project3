@@ -97,6 +97,11 @@ GLiNER local nhận cleaned English content với labels `football player`,
 xạ mention về canonical entity ID trong PostgreSQL. Entity chưa resolve được
 đưa vào `NEEDS_ENTITY_REVIEW`, không tự tạo canonical record.
 
+Catalog normalize alias bằng Unicode casefold, bỏ khác biệt dấu/punctuation nhẹ
+và collapse whitespace. Alias seed/admin có thể được approve có kiểm soát; alias
+do pipeline phát hiện luôn bắt đầu ở `PENDING_REVIEW`. Chỉ admin mới approve/reject
+hoặc disable, mọi thay đổi giữ audit actor/reason và không hard-delete evidence.
+
 `bge-small-en-v1.5` tạo embedding từ English title, event type, entity và claim
 text. Vietnamese không tham gia embedding hoặc similarity.
 

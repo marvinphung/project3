@@ -11,7 +11,7 @@ import pytest
 from psycopg import sql
 
 ROOT = Path(__file__).parents[2]
-SERVICES = ("crawler-service", "api-gateway")
+SERVICES = ("crawler-service", "api-gateway", "intelligence-service")
 
 
 def postgres_connection_url(database: str) -> str:
@@ -79,7 +79,8 @@ def test_owner_migrations_upgrade_idempotently_and_downgrade_cleanly(
         tables = set(
             connection.execute(
                 "SELECT table_schema, table_name FROM information_schema.tables "
-                "WHERE table_schema IN ('source_schema', 'identity_schema')"
+                "WHERE table_schema IN ('source_schema', 'identity_schema', "
+                "'intelligence_schema')"
             ).fetchall()
         )
         assert {
@@ -88,7 +89,17 @@ def test_owner_migrations_upgrade_idempotently_and_downgrade_cleanly(
             ("source_schema", "crawl_attempts"),
             ("source_schema", "alembic_version_source"),
             ("identity_schema", "alembic_version_identity"),
+            ("intelligence_schema", "entities"),
+            ("intelligence_schema", "entity_aliases"),
+            ("intelligence_schema", "entity_audit_log"),
+            ("intelligence_schema", "alembic_version_intelligence"),
         } <= tables
+        seed_counts = connection.execute(
+            "SELECT "
+            "(SELECT count(*) FROM intelligence_schema.entities), "
+            "(SELECT count(*) FROM intelligence_schema.entity_aliases)"
+        ).fetchone()
+        assert seed_counts == (5, 7)
         cross_owner_foreign_keys = connection.execute(
             "SELECT count(*) FROM pg_constraint c "
             "JOIN pg_class child ON child.oid = c.conrelid "
@@ -96,7 +107,8 @@ def test_owner_migrations_upgrade_idempotently_and_downgrade_cleanly(
             "JOIN pg_class parent ON parent.oid = c.confrelid "
             "JOIN pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace "
             "WHERE c.contype = 'f' AND child_ns.nspname <> parent_ns.nspname "
-            "AND child_ns.nspname IN ('source_schema', 'identity_schema')"
+            "AND child_ns.nspname IN "
+            "('source_schema', 'identity_schema', 'intelligence_schema')"
         ).fetchone()
         assert cross_owner_foreign_keys == (0,)
 
@@ -107,7 +119,9 @@ def test_owner_migrations_upgrade_idempotently_and_downgrade_cleanly(
     with psycopg.connect(postgres_connection_url(database)) as connection:
         product_table_count = connection.execute(
             "SELECT count(*) FROM information_schema.tables "
-            "WHERE table_schema = 'source_schema' "
-            "AND table_name IN ('sources', 'crawl_batches', 'crawl_attempts')"
+            "WHERE table_schema IN ('source_schema', 'intelligence_schema') "
+            "AND table_name IN "
+            "('sources', 'crawl_batches', 'crawl_attempts', 'entities', "
+            "'entity_aliases', 'entity_audit_log')"
         ).fetchone()
         assert product_table_count == (0,)

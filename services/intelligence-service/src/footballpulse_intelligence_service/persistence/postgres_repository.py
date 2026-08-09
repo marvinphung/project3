@@ -1,0 +1,313 @@
+from __future__ import annotations
+
+from uuid import UUID
+
+import sqlalchemy as sa
+from sqlalchemy.engine import Connection, Engine, RowMapping
+from sqlalchemy.exc import IntegrityError
+
+from footballpulse_intelligence_service.domain.entity import (
+    AliasReviewStatus,
+    AliasSource,
+    Entity,
+    EntityAlias,
+    EntityAuditRecord,
+    EntityStatus,
+    EntityType,
+)
+from footballpulse_intelligence_service.domain.errors import EntityConflictError
+from footballpulse_intelligence_service.persistence.postgres_tables import (
+    entities,
+    entity_aliases,
+    entity_audit_log,
+)
+
+
+def _entity_values(entity: Entity) -> dict[str, object]:
+    return {
+        "id": entity.id,
+        "entity_type": entity.entity_type.value,
+        "canonical_name": entity.canonical_name,
+        "slug": entity.slug,
+        "status": entity.status.value,
+        "version": entity.version,
+        "created_at": entity.created_at,
+        "updated_at": entity.updated_at,
+    }
+
+
+def _entity_from_row(row: RowMapping) -> Entity:
+    return Entity(
+        id=row["id"],
+        entity_type=EntityType(row["entity_type"]),
+        canonical_name=row["canonical_name"],
+        slug=row["slug"],
+        status=EntityStatus(row["status"]),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        version=row["version"],
+    )
+
+
+def _alias_values(alias: EntityAlias) -> dict[str, object]:
+    return {
+        "id": alias.id,
+        "entity_id": alias.entity_id,
+        "alias": alias.alias,
+        "normalized_alias": alias.normalized_alias,
+        "review_status": alias.review_status.value,
+        "resolver_version": alias.resolver_version,
+        "source": alias.source.value,
+        "created_by": alias.actor,
+        "reviewed_by": alias.reviewed_by,
+        "reviewed_at": alias.reviewed_at,
+        "disabled_at": alias.disabled_at,
+        "version": alias.version,
+        "created_at": alias.created_at,
+        "updated_at": alias.updated_at,
+    }
+
+
+def _alias_from_row(row: RowMapping) -> EntityAlias:
+    return EntityAlias(
+        id=row["id"],
+        entity_id=row["entity_id"],
+        alias=row["alias"],
+        normalized_alias=row["normalized_alias"],
+        review_status=AliasReviewStatus(row["review_status"]),
+        resolver_version=row["resolver_version"],
+        source=AliasSource(row["source"]),
+        actor=row["created_by"],
+        created_at=row["created_at"],
+        reviewed_at=row["reviewed_at"],
+        reviewed_by=row["reviewed_by"],
+        disabled_at=row["disabled_at"],
+        updated_at=row["updated_at"],
+        version=row["version"],
+    )
+
+
+def _audit_values(audit: EntityAuditRecord) -> dict[str, object]:
+    return {
+        "id": audit.id,
+        "resource_type": audit.resource_type,
+        "resource_id": audit.resource_id,
+        "action": audit.action,
+        "actor": audit.actor,
+        "reason": audit.reason,
+        "details": audit.details,
+        "occurred_at": audit.occurred_at,
+    }
+
+
+def _constraint_name(error: IntegrityError) -> str | None:
+    diagnostic = getattr(error.orig, "diag", None)
+    value = getattr(diagnostic, "constraint_name", None)
+    return value if isinstance(value, str) else None
+
+
+def _raise_conflict(error: IntegrityError) -> None:
+    constraint = _constraint_name(error)
+    if constraint == "uq_entity_aliases_resolvable_normalized":
+        raise EntityConflictError("approved normalized alias already exists") from error
+    if constraint == "uq_entities_slug":
+        raise EntityConflictError("entity slug already exists") from error
+    raise EntityConflictError("entity catalog write conflicts with existing data") from error
+
+
+class PostgresEntityCatalogRepository:
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+
+    def create_entity(
+        self,
+        entity: Entity,
+        canonical_alias: EntityAlias,
+        audit: EntityAuditRecord,
+    ) -> Entity:
+        try:
+            with self._engine.begin() as connection:
+                row = (
+                    connection.execute(
+                        entities.insert().values(**_entity_values(entity)).returning(*entities.c)
+                    )
+                    .mappings()
+                    .one()
+                )
+                connection.execute(entity_aliases.insert().values(**_alias_values(canonical_alias)))
+                self._insert_audit(connection, audit)
+        except IntegrityError as error:
+            _raise_conflict(error)
+        assert row is not None
+        return _entity_from_row(row)
+
+    def get_entity(self, entity_id: UUID) -> Entity | None:
+        with self._engine.connect() as connection:
+            row = (
+                connection.execute(sa.select(entities).where(entities.c.id == entity_id))
+                .mappings()
+                .one_or_none()
+            )
+        return None if row is None else _entity_from_row(row)
+
+    def find_entity_by_slug(self, slug: str) -> Entity | None:
+        with self._engine.connect() as connection:
+            row = (
+                connection.execute(sa.select(entities).where(entities.c.slug == slug))
+                .mappings()
+                .one_or_none()
+            )
+        return None if row is None else _entity_from_row(row)
+
+    def save_entity(
+        self,
+        entity: Entity,
+        *,
+        expected_version: int,
+        audit: EntityAuditRecord,
+    ) -> Entity:
+        values = _entity_values(entity)
+        values.pop("id")
+        values.pop("created_at")
+        try:
+            with self._engine.begin() as connection:
+                row = (
+                    connection.execute(
+                        entities.update()
+                        .where(entities.c.id == entity.id, entities.c.version == expected_version)
+                        .values(**values)
+                        .returning(*entities.c)
+                    )
+                    .mappings()
+                    .one_or_none()
+                )
+                if row is None:
+                    raise EntityConflictError("entity version changed before update")
+                self._insert_audit(connection, audit)
+        except IntegrityError as error:
+            _raise_conflict(error)
+        assert row is not None
+        return _entity_from_row(row)
+
+    def rename_entity(
+        self,
+        entity: Entity,
+        canonical_alias: EntityAlias,
+        *,
+        expected_version: int,
+        audit: EntityAuditRecord,
+    ) -> Entity:
+        values = _entity_values(entity)
+        values.pop("id")
+        values.pop("created_at")
+        try:
+            with self._engine.begin() as connection:
+                row = (
+                    connection.execute(
+                        entities.update()
+                        .where(entities.c.id == entity.id, entities.c.version == expected_version)
+                        .values(**values)
+                        .returning(*entities.c)
+                    )
+                    .mappings()
+                    .one_or_none()
+                )
+                if row is None:
+                    raise EntityConflictError("entity version changed before update")
+                connection.execute(entity_aliases.insert().values(**_alias_values(canonical_alias)))
+                self._insert_audit(connection, audit)
+        except IntegrityError as error:
+            _raise_conflict(error)
+        assert row is not None
+        return _entity_from_row(row)
+
+    def add_alias(self, alias: EntityAlias, audit: EntityAuditRecord) -> EntityAlias:
+        try:
+            with self._engine.begin() as connection:
+                row = (
+                    connection.execute(
+                        entity_aliases.insert()
+                        .values(**_alias_values(alias))
+                        .returning(*entity_aliases.c)
+                    )
+                    .mappings()
+                    .one()
+                )
+                self._insert_audit(connection, audit)
+        except IntegrityError as error:
+            _raise_conflict(error)
+        assert row is not None
+        return _alias_from_row(row)
+
+    def get_alias(self, alias_id: UUID) -> EntityAlias | None:
+        with self._engine.connect() as connection:
+            row = (
+                connection.execute(sa.select(entity_aliases).where(entity_aliases.c.id == alias_id))
+                .mappings()
+                .one_or_none()
+            )
+        return None if row is None else _alias_from_row(row)
+
+    def save_alias(
+        self,
+        alias: EntityAlias,
+        *,
+        expected_version: int,
+        audit: EntityAuditRecord,
+    ) -> EntityAlias:
+        values = _alias_values(alias)
+        for immutable_field in ("id", "entity_id", "created_by", "created_at"):
+            values.pop(immutable_field)
+        try:
+            with self._engine.begin() as connection:
+                row = (
+                    connection.execute(
+                        entity_aliases.update()
+                        .where(
+                            entity_aliases.c.id == alias.id,
+                            entity_aliases.c.version == expected_version,
+                        )
+                        .values(**values)
+                        .returning(*entity_aliases.c)
+                    )
+                    .mappings()
+                    .one_or_none()
+                )
+                if row is None:
+                    raise EntityConflictError("alias version changed before update")
+                self._insert_audit(connection, audit)
+        except IntegrityError as error:
+            _raise_conflict(error)
+        assert row is not None
+        return _alias_from_row(row)
+
+    def resolve_alias(self, normalized_alias: str) -> Entity | None:
+        statement = (
+            sa.select(entities)
+            .join(entity_aliases, entity_aliases.c.entity_id == entities.c.id)
+            .where(
+                entity_aliases.c.normalized_alias == normalized_alias,
+                entity_aliases.c.review_status == AliasReviewStatus.APPROVED.value,
+                entity_aliases.c.disabled_at.is_(None),
+                entities.c.status == EntityStatus.ACTIVE.value,
+            )
+        )
+        with self._engine.connect() as connection:
+            row = connection.execute(statement).mappings().one_or_none()
+        return None if row is None else _entity_from_row(row)
+
+    def list_pending_aliases(self, *, limit: int, offset: int) -> list[EntityAlias]:
+        statement = (
+            sa.select(entity_aliases)
+            .where(entity_aliases.c.review_status == AliasReviewStatus.PENDING_REVIEW.value)
+            .order_by(entity_aliases.c.created_at, entity_aliases.c.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        with self._engine.connect() as connection:
+            rows = connection.execute(statement).mappings().all()
+        return [_alias_from_row(row) for row in rows]
+
+    @staticmethod
+    def _insert_audit(connection: Connection, audit: EntityAuditRecord) -> None:
+        connection.execute(entity_audit_log.insert().values(**_audit_values(audit)))

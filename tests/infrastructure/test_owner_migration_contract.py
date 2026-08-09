@@ -10,6 +10,7 @@ ROOT = Path(__file__).parents[2]
 OWNER_MIGRATIONS = {
     "crawler-service": ("source_schema", "alembic_version_source"),
     "api-gateway": ("identity_schema", "alembic_version_identity"),
+    "intelligence-service": ("intelligence_schema", "alembic_version_intelligence"),
 }
 
 
@@ -39,6 +40,7 @@ def test_each_database_owner_has_an_independent_alembic_environment(
     [
         ("crawler-service", "source_schema", "identity_schema"),
         ("api-gateway", "identity_schema", "source_schema"),
+        ("intelligence-service", "intelligence_schema", "source_schema"),
     ],
 )
 def test_owner_migrations_render_schema_qualified_sql_without_cross_owner_references(
@@ -76,3 +78,17 @@ def test_source_migrations_add_optimistic_version_and_batch_idempotency() -> Non
     assert '"version"' in migration
     assert '"idempotency_key"' in migration
     assert "uq_crawl_batches_idempotency_key" in migration
+
+
+def test_intelligence_migration_seeds_reviewed_mvp_entities_and_aliases() -> None:
+    migration = (
+        ROOT
+        / "services/intelligence-service/migrations/versions/"
+        / "intelligence_0001_create_entity_catalog.py"
+    ).read_text()
+
+    for value in ("Vinícius Júnior", "Real Madrid", "Arsenal", "Xabi Alonso", "La Liga"):
+        assert value in migration
+    assert "uq_entity_aliases_resolvable_normalized" in migration
+    assert "PENDING_REVIEW" in migration
+    assert "entity_audit_log" in migration

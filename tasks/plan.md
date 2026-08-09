@@ -27,6 +27,6 @@ Canonical detailed plan:
 
 ## Current next action
 
-Phase Gate 2 was approved after the complete RSS-to-Mongo evidence slice and its
-failure/duplicate matrix passed. The next action is the WP 3.1 Kickoff for the
-canonical entity catalog; do not implement it before the user approves that kickoff.
+WP 3.1 was approved after Collaboration Gate 3.1. The next action is the WP 3.2
+Kickoff for the GLiNER adapter and resolution pipeline; do not implement it before
+the user approves that kickoff.

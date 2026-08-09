@@ -108,12 +108,14 @@ Sau khi PostgreSQL healthy, từng service owner tự chạy migration của mì
 ```bash
 uv run alembic -c services/crawler-service/alembic.ini upgrade head
 uv run alembic -c services/api-gateway/alembic.ini upgrade head
+uv run alembic -c services/intelligence-service/alembic.ini upgrade head
 ```
 
 Có thể đặt `FOOTBALLPULSE_DATABASE_URL` để override connection URL; nếu không,
 Alembic dùng các biến `FOOTBALLPULSE_POSTGRES_*`. Crawler ghi version vào
-`source_schema.alembic_version_source`, còn API Gateway ghi vào
-`identity_schema.alembic_version_identity`.
+`source_schema.alembic_version_source`, API Gateway ghi vào
+`identity_schema.alembic_version_identity`, còn Intelligence ghi vào
+`intelligence_schema.alembic_version_intelligence`.
 
 Crawler Source API yêu cầu `FOOTBALLPULSE_CRAWLER_ADMIN_TOKEN` và
 `FOOTBALLPULSE_CRAWLER_INTERNAL_TOKEN`; service từ chối khởi động nếu thiếu một

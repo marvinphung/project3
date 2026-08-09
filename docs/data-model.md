@@ -166,7 +166,16 @@ auth quá sớm. Không có FK hoặc migration xuyên owner.
 `entities` có loại `PLAYER|COACH|CLUB|COMPETITION`, canonical name và stable
 slug. `entity_aliases` ánh xạ normalized alias tới entity, kèm resolver version,
 actor/source và review status. Catalog được seed có kiểm soát và mở rộng qua
-Admin review.
+Admin review. MVP seed `Vinícius Júnior`, `Real Madrid`, `Arsenal`, `Xabi Alonso`,
+`La Liga` và các alias đã duyệt như `Vini Jr`, `Gunners`.
+
+Alias có trạng thái `PENDING_REVIEW|APPROVED|REJECTED`; chỉ alias `APPROVED` chưa
+disable và entity `ACTIVE` mới được resolve. Partial unique index trên normalized
+alias resolvable ngăn một mention active trỏ tới hai entity. Rename canonical name
+giữ UUID/slug và thêm canonical alias mới; đổi slug là admin command riêng. Mọi
+mutation dùng optimistic version và ghi `actor`, `reason`, details vào append-only
+`entity_audit_log` trong cùng transaction. Disable thay cho delete để không mất
+lịch sử.
 
 #### Story và claims
 
