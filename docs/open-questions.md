@@ -16,7 +16,8 @@ smoke test trước implementation phụ thuộc; không được tự điền b
 - Qwen3-8B 4-bit format/runtime nào vượt benchmark chất lượng và thời gian?
 - Khi nào dùng Qwen3-4B local fallback thay vì đợi batch sau?
 - Prompt/schema version đầu tiên và repair budget cho invalid JSON?
-- Ngưỡng GLiNER/alias confidence nào bắt buộc review?
+- GLiNER `0.50` detection/`0.75` review đã đạt fixture baseline; có giữ được chất
+  lượng khi mở rộng annotated football news corpus không?
 
 ## 3. Story và vector
 

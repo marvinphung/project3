@@ -18,7 +18,9 @@ erDiagram
     SOURCE ||--o{ SOURCE_ARTICLE_VERSION : provides
     SOURCE_ARTICLE_VERSION ||--o{ ARTICLE_ENRICHMENT : enriched_as
     SOURCE_ARTICLE_VERSION ||--o{ DUPLICATE_LINK : participates
+    SOURCE_ARTICLE_VERSION ||--o{ UNRESOLVED_ENTITY_MENTION : produces
     ENTITY ||--o{ ENTITY_ALIAS : has
+    ENTITY ||--o{ UNRESOLVED_ENTITY_MENTION : resolves_to
     STORY }o--o{ ENTITY : tagged_with
     STORY ||--o{ STORY_SOURCE : supported_by
     STORY ||--o{ CLAIM : contains
@@ -176,6 +178,14 @@ giữ UUID/slug và thêm canonical alias mới; đổi slug là admin command r
 mutation dùng optimistic version và ghi `actor`, `reason`, details vào append-only
 `entity_audit_log` trong cùng transaction. Disable thay cho delete để không mất
 lịch sử.
+
+`unresolved_entity_mentions` là queue review có evidence: article version Mongo
+ID, field `TITLE|CONTENT`, mention text, global offsets, predicted type, score,
+model name/version và trạng thái `PENDING_REVIEW|RESOLVED|REJECTED`. ID được tạo
+deterministic từ article/offset/type/model nên replay không ghi lặp. Mention score
+từ `0.75` mới vào queue; kết quả từ `0.50–0.75` vẫn tồn tại trong enrichment nhưng
+không tạo review noise. Khi Admin resolve, row trỏ tới canonical entity đã chọn rồi
+workflow mới tạo/review alias; không có FK xuyên MongoDB và PostgreSQL.
 
 #### Story và claims
 

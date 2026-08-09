@@ -49,3 +49,25 @@ entity_audit_log = sa.Table(
     sa.Column("details", postgresql.JSONB(), nullable=False),
     sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
 )
+
+unresolved_entity_mentions = sa.Table(
+    "unresolved_entity_mentions",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("article_version_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("source_field", sa.String(length=16), nullable=False),
+    sa.Column("mention_text", sa.String(length=200), nullable=False),
+    sa.Column("normalized_alias", sa.String(length=200), nullable=False),
+    sa.Column("predicted_type", sa.String(length=32), nullable=False),
+    sa.Column("start_offset", sa.Integer(), nullable=False),
+    sa.Column("end_offset", sa.Integer(), nullable=False),
+    sa.Column("score", sa.Float(), nullable=False),
+    sa.Column("model_name", sa.String(length=200), nullable=False),
+    sa.Column("model_version", sa.String(length=100), nullable=False),
+    sa.Column("status", sa.String(length=32), nullable=False),
+    sa.Column("resolved_entity_id", postgresql.UUID(as_uuid=True), nullable=True),
+    sa.Column("reviewed_by", sa.String(length=200), nullable=True),
+    sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),
+    sa.Column("resolution_note", sa.Text(), nullable=True),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+)

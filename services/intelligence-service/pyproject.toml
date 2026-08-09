@@ -8,6 +8,20 @@ dependencies = [
     "sqlalchemy>=2.0,<3",
 ]
 
+[project.optional-dependencies]
+models = [
+    "gliner>=0.2.27,<0.3",
+    "torch>=2,<3",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [project.scripts]
 footballpulse-intelligence-service-health = "footballpulse_intelligence_service.health:main"
 

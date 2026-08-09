@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Connection, Engine, RowMapping
 from sqlalchemy.exc import IntegrityError
 
@@ -16,10 +17,16 @@ from footballpulse_intelligence_service.domain.entity import (
     EntityType,
 )
 from footballpulse_intelligence_service.domain.errors import EntityConflictError
+from footballpulse_intelligence_service.domain.extraction import SourceField
+from footballpulse_intelligence_service.domain.unresolved import (
+    UnresolvedEntityMention,
+    UnresolvedReviewStatus,
+)
 from footballpulse_intelligence_service.persistence.postgres_tables import (
     entities,
     entity_aliases,
     entity_audit_log,
+    unresolved_entity_mentions,
 )
 
 
@@ -311,3 +318,69 @@ class PostgresEntityCatalogRepository:
     @staticmethod
     def _insert_audit(connection: Connection, audit: EntityAuditRecord) -> None:
         connection.execute(entity_audit_log.insert().values(**_audit_values(audit)))
+
+
+def _unresolved_values(mention: UnresolvedEntityMention) -> dict[str, object]:
+    return {
+        "id": mention.id,
+        "article_version_id": mention.article_version_id,
+        "source_field": mention.source_field.value,
+        "mention_text": mention.mention_text,
+        "normalized_alias": mention.normalized_alias,
+        "predicted_type": mention.predicted_type.value,
+        "start_offset": mention.start,
+        "end_offset": mention.end,
+        "score": mention.score,
+        "model_name": mention.model_name,
+        "model_version": mention.model_version,
+        "status": mention.status.value,
+        "resolved_entity_id": None,
+        "reviewed_by": None,
+        "reviewed_at": None,
+        "resolution_note": None,
+        "created_at": mention.created_at,
+    }
+
+
+def _unresolved_from_row(row: RowMapping) -> UnresolvedEntityMention:
+    return UnresolvedEntityMention(
+        id=row["id"],
+        article_version_id=row["article_version_id"],
+        source_field=SourceField(row["source_field"]),
+        mention_text=row["mention_text"],
+        normalized_alias=row["normalized_alias"],
+        predicted_type=EntityType(row["predicted_type"]),
+        start=row["start_offset"],
+        end=row["end_offset"],
+        score=row["score"],
+        model_name=row["model_name"],
+        model_version=row["model_version"],
+        status=UnresolvedReviewStatus(row["status"]),
+        created_at=row["created_at"],
+    )
+
+
+class PostgresUnresolvedMentionRepository:
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+
+    def add_once(self, mention: UnresolvedEntityMention) -> UnresolvedEntityMention:
+        statement = (
+            insert(unresolved_entity_mentions)
+            .values(**_unresolved_values(mention))
+            .on_conflict_do_nothing(index_elements=[unresolved_entity_mentions.c.id])
+            .returning(*unresolved_entity_mentions.c)
+        )
+        with self._engine.begin() as connection:
+            row = connection.execute(statement).mappings().one_or_none()
+            if row is None:
+                row = (
+                    connection.execute(
+                        sa.select(unresolved_entity_mentions).where(
+                            unresolved_entity_mentions.c.id == mention.id
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+        return _unresolved_from_row(row)

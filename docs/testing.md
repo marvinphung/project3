@@ -48,6 +48,21 @@ FOOTBALLPULSE_RUN_ENTITY_INTEGRATION=1 uv run pytest -q \
   services/intelligence-service/tests/test_postgres_entity_catalog_integration.py
 ```
 
+GLiNER mặc định dùng mock và không tải model. Acceptance thật dùng đúng model CPU,
+threshold `0.50` và 11 entity trong ba fixture transfer/match/injury:
+
+```bash
+FOOTBALLPULSE_RUN_GLINER_ACCEPTANCE=1 uv run \
+  --package footballpulse-intelligence-service --extra models --group dev \
+  pytest -q -s \
+  services/intelligence-service/tests/test_gliner_model_acceptance.py
+```
+
+Baseline ngày 2026-08-10 trên máy tham chiếu đạt precision `1.000`, recall `1.000`
+(11 true positive/11 predicted/11 expected, không có mention dư). Đây là fixture
+nhỏ để khóa adapter và baseline threshold, không phải quality claim cho news corpus
+thực; cần mở rộng annotated fixture trước khi đổi model hoặc threshold.
+
 FastAPI TestClient của Starlette 1.6 dùng `httpx2`. Trong Codex sandbox, test
 này cần chạy ngoài sandbox vì blocking portal cần thread/event-loop; đây không
 phải yêu cầu khi developer chạy trực tiếp trên máy local.

@@ -92,15 +92,24 @@ confirmation.
 
 ## 5. Entity và English embedding
 
-GLiNER local nhận cleaned English content với labels `football player`,
-`football club`, `football coach`, `football competition`. Alias resolver ánh
-xạ mention về canonical entity ID trong PostgreSQL. Entity chưa resolve được
-đưa vào `NEEDS_ENTITY_REVIEW`, không tự tạo canonical record.
+`urchade/gliner_small-v2.1` chạy local bằng CPU, nhận lần lượt English `title` và
+`cleaned_content` với labels `football player`, `football club`, `football coach`,
+`football competition`. Mỗi field được chia khoảng 300 từ, overlap 40 từ; offset
+được quy đổi về field gốc và mention trùng ở vùng overlap chỉ giữ score cao nhất.
+Model được load một lần, worker mặc định concurrency 1 và không được vượt 2.
+
+Detection threshold mặc định là `0.50` và có thể cấu hình. Resolver chỉ chấp nhận
+normalized exact match với alias `APPROVED` có cùng entity type. Mention resolve
+được gắn canonical entity ID; mention chưa resolve vẫn nằm trong extraction result.
+Nếu score từ `0.75`, mention còn được ghi idempotent vào
+`unresolved_entity_mentions` để Admin review. Model không tự tạo entity hoặc alias;
+lỗi runtime trả `ENTITY_EXTRACTION_FAILED`, không tự chuyển sang mock.
 
 Catalog normalize alias bằng Unicode casefold, bỏ khác biệt dấu/punctuation nhẹ
 và collapse whitespace. Alias seed/admin có thể được approve có kiểm soát; alias
-do pipeline phát hiện luôn bắt đầu ở `PENDING_REVIEW`. Chỉ admin mới approve/reject
-hoặc disable, mọi thay đổi giữ audit actor/reason và không hard-delete evidence.
+chỉ được tạo sau khi Admin chọn canonical entity cho unresolved mention. Chỉ admin
+mới approve/reject hoặc disable, mọi thay đổi giữ audit actor/reason và không
+hard-delete evidence. Mock adapter deterministic dùng cho test/demo offline.
 
 `bge-small-en-v1.5` tạo embedding từ English title, event type, entity và claim
 text. Vietnamese không tham gia embedding hoặc similarity.

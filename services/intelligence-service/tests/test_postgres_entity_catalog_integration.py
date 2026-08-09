@@ -16,8 +16,15 @@ from footballpulse_intelligence_service.application.entity_catalog import (
 )
 from footballpulse_intelligence_service.domain.entity import EntityType
 from footballpulse_intelligence_service.domain.errors import EntityConflictError
+from footballpulse_intelligence_service.domain.extraction import (
+    EntityLabel,
+    SourceField,
+    SpanPrediction,
+)
+from footballpulse_intelligence_service.domain.unresolved import UnresolvedEntityMention
 from footballpulse_intelligence_service.persistence.postgres_repository import (
     PostgresEntityCatalogRepository,
+    PostgresUnresolvedMentionRepository,
 )
 from psycopg import sql
 from sqlalchemy import create_engine
@@ -172,4 +179,29 @@ def test_seed_resolution_admin_review_audit_and_atomic_conflict(
         "DISABLE_ALIAS",
         "DISABLE_ENTITY",
     } <= audit_actions
+
+    source_text = "Mystery FC joined the talks."
+    unresolved = UnresolvedEntityMention.from_prediction(
+        article_version_id=uuid4(),
+        prediction=SpanPrediction.create(
+            source_field=SourceField.CONTENT,
+            source_text=source_text,
+            label=EntityLabel.CLUB,
+            start=0,
+            end=10,
+            score=0.82,
+        ),
+        predicted_type=EntityType.CLUB,
+        model_name="mock-gliner",
+        model_version="fixture-v1",
+        now=NOW,
+    )
+    unresolved_repository = PostgresUnresolvedMentionRepository(engine)
+    assert unresolved_repository.add_once(unresolved) == unresolved
+    assert unresolved_repository.add_once(unresolved) == unresolved
+    with engine.connect() as connection:
+        unresolved_count = connection.execute(
+            sa.text("SELECT count(*) FROM intelligence_schema.unresolved_entity_mentions")
+        ).scalar_one()
+    assert unresolved_count == 1
     engine.dispose()

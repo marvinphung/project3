@@ -92,3 +92,16 @@ def test_intelligence_migration_seeds_reviewed_mvp_entities_and_aliases() -> Non
     assert "uq_entity_aliases_resolvable_normalized" in migration
     assert "PENDING_REVIEW" in migration
     assert "entity_audit_log" in migration
+
+
+def test_intelligence_migration_adds_unresolved_review_queue() -> None:
+    migration = (
+        ROOT
+        / "services/intelligence-service/migrations/versions/"
+        / "intelligence_0002_add_unresolved_entity_mentions.py"
+    ).read_text()
+
+    assert "unresolved_entity_mentions" in migration
+    assert "PENDING_REVIEW" in migration
+    assert "article_version_id" in migration
+    assert "resolved_entity_id" in migration

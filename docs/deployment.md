@@ -57,13 +57,24 @@ có CUDA/ROCm. Vì vậy:
 
 - Qwen3-8B 4-bit chạy trên Kaggle theo batch;
 - Qwen3-4B GGUF `Q4_K_M` chỉ là local fallback, nạp khi cần, concurrency 1;
-- GLiNER và `bge-small-en-v1.5` chạy CPU local;
+- `urchade/gliner_small-v2.1` và `bge-small-en-v1.5` chạy CPU local;
 - Kafka một broker, database pool và worker concurrency đều nhỏ/có giới hạn;
 - Airflow dùng executor local nhẹ, không dùng CeleryExecutor cho MVP.
 
 Compose hiện giới hạn lần lượt Kafka 1 GiB/1.5 CPU, MongoDB 1 GiB/1 CPU,
 PostgreSQL 768 MiB/1 CPU và Redis 256 MiB/0.5 CPU. Các giới hạn sẽ được đo lại
 khi full stack chạy.
+
+GLiNER là optional model dependency, không bắt buộc cho mock/offline test. Cài
+runtime thật bằng:
+
+```bash
+uv sync --package footballpulse-intelligence-service --extra models --group dev --locked
+```
+
+Workspace pin `torch` vào PyTorch CPU index; lockfile không kéo CUDA/NVIDIA hay
+Triton trên máy local. Trọng số model được Hugging Face tải vào cache người dùng ở
+lần chạy thật đầu tiên; worker không tải lại model theo từng article.
 
 ## 5. Kaggle execution
 
