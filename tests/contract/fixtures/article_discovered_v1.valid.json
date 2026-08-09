@@ -1,0 +1,25 @@
+{
+  "event_id": "018f8b45-b634-7c81-a47d-9a7c2f3c2101",
+  "event_type": "article.discovered",
+  "event_version": 1,
+  "occurred_at": "2026-08-01T00:02:00Z",
+  "producer": "crawler-service",
+  "correlation_id": "018f8b45-b634-7c81-a47d-9a7c2f3c2102",
+  "causation_id": null,
+  "aggregate_type": "source_article",
+  "aggregate_id": "018f8b45-b634-7c81-a47d-9a7c2f3c2103",
+  "idempotency_key": "rss:bbc-sport:item-vinicius-20260801",
+  "payload": {
+    "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c2104",
+    "batch_id": "018f8b45-b634-7c81-a47d-9a7c2f3c2105",
+    "canonical_url": "https://www.bbc.com/sport/football/articles/example",
+    "rss_guid": "item-vinicius-20260801",
+    "rss_title": "Real Madrid open contract talks with Vinicius Junior",
+    "rss_published_at": "2026-07-31T23:55:00Z",
+    "fetched_at": "2026-08-01T00:01:30Z",
+    "fetch_artifact_id": "018f8b45-b634-7c81-a47d-9a7c2f3c2106",
+    "http_status": 200,
+    "content_type": "text/html",
+    "content_length": 48231
+  }
+}

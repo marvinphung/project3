@@ -7,6 +7,8 @@ smoke test trước implementation phụ thuộc; không được tự điền b
 
 - Global/per-domain concurrency, timeout, response-size và retry budget cuối cùng?
 - Raw HTML compression/retention bao lâu trên ổ local?
+- Crawler bàn giao raw HTML cho Article Service qua artifact store/API nào để
+  `fetch_artifact_id` không phụ thuộc shared local path và Kafka không chứa body?
 - Source-specific cleaner/parser nào cần thiết sau khi thử RSS thực tế?
 - Cách xác định syndicated source independence ngoài exact hash?
 

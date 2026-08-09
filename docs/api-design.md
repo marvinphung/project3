@@ -82,27 +82,53 @@ Nó không phải arbitrary crawl proxy và không cho query storage chéo owner
 
 ```json
 {
-  "event_id": "stable-unique-id",
-  "event_type": "article.enriched",
-  "schema_version": 1,
-  "occurred_at": "UTC timestamp",
-  "producer": "ai-content-service",
-  "correlation_id": "batch-trace-id",
-  "causation_id": "previous-event-id",
-  "aggregate_id": "article-version-id",
+  "event_id": "018f8b45-b634-7c81-a47d-9a7c2f3c2101",
+  "event_type": "article.discovered",
+  "event_version": 1,
+  "occurred_at": "2026-08-01T00:02:00Z",
+  "producer": "crawler-service",
+  "correlation_id": "018f8b45-b634-7c81-a47d-9a7c2f3c2102",
+  "causation_id": null,
+  "aggregate_type": "source_article",
+  "aggregate_id": "018f8b45-b634-7c81-a47d-9a7c2f3c2103",
+  "idempotency_key": "rss:bbc-sport:item-vinicius-20260801",
   "payload": {}
 }
 ```
 
-Topic vật lý theo `<domain>.<event>.v1`; breaking change tạo version mới. Event
-không chứa raw HTML hoặc secret.
+`event_type` không chứa version; topic vật lý theo `<event_type>.v<event_version>`.
+ID dùng UUID, timestamp phải có timezone và producer/aggregate dùng stable slug.
+Root event có `causation_id = null`; event kế tiếp trỏ về event trực tiếp tạo ra
+nó. `correlation_id` giữ nguyên xuyên suốt một crawl batch.
+
+Runtime model Pydantic là nguồn sự thật; JSON Schema Draft 2020-12 được commit ở
+`contracts/events/` và parity test ngăn schema trôi khỏi model. V1 là immutable:
+đổi field, constraint hoặc semantics đều tạo model/schema/topic version mới.
+Consumer validate tại boundary và từ chối unknown field. Event không chứa raw
+HTML, cleaned body, embedding, secret hoặc AI prompt lớn.
+
+### 6.1 `article.discovered.v1`
+
+Payload chỉ mang RSS/fetch metadata: `source_id`, `batch_id`, canonical URL,
+bounded RSS title/GUID, publish/fetch timestamp, HTTP metadata và
+`fetch_artifact_id`. `fetch_artifact_id` là opaque handoff reference; cơ chế lưu
+artifact được khóa trước WP crawl, không được biến field này thành local path
+hoặc nhét HTML vào Kafka.
+
+### 6.2 `article.cleaned.v1`
+
+Payload mang source/article/version IDs, canonical URL, bounded title, SHA-256,
+English language marker, cleaned timestamp, Mongo document reference và duplicate
+result. Cleaned content được đọc từ MongoDB qua owner boundary, không nằm trong
+event. `duplicate_of_article_version_id` bắt buộc với `URL`, `EXACT`, `NEAR` và
+phải `null` với `NONE`.
 
 ## 7. Event catalog tối thiểu
 
 | Topic | Producer → Consumer | Payload cốt lõi |
 | --- | --- | --- |
-| `article.discovered.v1` | Crawler → Article | source/batch IDs, URL, bounded fetch snapshot |
-| `article.cleaned.v1` | Article → Intelligence | article version ID, hash, cleaned snapshot, duplicate result |
+| `article.discovered.v1` | Crawler → Article | source/batch IDs, URL, RSS/fetch metadata, opaque artifact ID |
+| `article.cleaned.v1` | Article → Intelligence | article/version IDs, hash, Mongo reference, duplicate result |
 | `article.duplicate.v1` | Article → Ops projection | duplicate IDs, type, score/reason |
 | `article.enrichment.requested.v1` | Intelligence → AI Content | article ID/hash, canonical entities, embedding reference |
 | `article.enriched.v1` | AI Content → Intelligence | validated English summary/claims and model metadata |
