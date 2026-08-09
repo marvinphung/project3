@@ -141,9 +141,11 @@ HTML, cleaned body, embedding, secret hoặc AI prompt lớn.
 
 Payload chỉ mang RSS/fetch metadata: `source_id`, `batch_id`, canonical URL,
 bounded RSS title/GUID, publish/fetch timestamp, HTTP metadata và
-`fetch_artifact_id`. `fetch_artifact_id` là opaque handoff reference; cơ chế lưu
-artifact được khóa trước WP crawl, không được biến field này thành local path
-hoặc nhét HTML vào Kafka.
+`fetch_artifact_id`. `fetch_artifact_id` là opaque handoff reference tới local
+artifact spool dùng chung. Mỗi UUID directory được commit nguyên tử và chứa raw
+HTML, HTTP metadata cùng bounded cleaned projection; event không lộ local path
+và không nhét body vào Kafka. Adapter có thể đổi sang object storage mà không đổi
+event contract.
 
 ### 6.2 `article.cleaned.v1`
 

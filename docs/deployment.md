@@ -86,6 +86,9 @@ username/key trong Dockerfile, notebook metadata hoặc Git.
 - Deterministic clock chạy các cửa sổ 00/06/12/18.
 - Không cần Internet, Kaggle quota, Hugging Face download hoặc API credential.
 - Dữ liệu MongoDB/PostgreSQL dùng local volumes để restart không làm mất state.
+- Crawler và Article Service cùng mount artifact spool tại
+  `FOOTBALLPULSE_FETCH_ARTIFACT_ROOT`; `.local-data/` bị Git ignore. Spool chỉ là
+  handoff local, retention/compression vẫn cần benchmark trước khi tự động dọn.
 
 ## 7. Startup và shutdown
 

@@ -27,6 +27,6 @@ Canonical detailed plan:
 
 ## Current next action
 
-WP 2.3 was approved after Collaboration Gate 2.3. The next action is the WP 2.4
-Kickoff for immutable article version consumption; do not implement it before
-the user approves that kickoff.
+WP 2.4 was approved after Collaboration Gate 2.4. The next action is the WP 2.5
+Kickoff for URL/exact/near duplicate detection; do not implement it before the
+user approves that kickoff.

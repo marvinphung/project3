@@ -26,7 +26,11 @@ async def test_fetches_html_with_shared_network_safety_policy() -> None:
         del request
         return httpx.Response(
             200,
-            headers={"Content-Type": "text/html; charset=utf-8"},
+            headers={
+                "Content-Type": "text/html; charset=utf-8",
+                "ETag": '"article-v1"',
+                "Last-Modified": "Sun, 09 Aug 2026 00:00:00 GMT",
+            },
             content=payload,
         )
 
@@ -42,6 +46,8 @@ async def test_fetches_html_with_shared_network_safety_policy() -> None:
 
     assert fetched.content == payload
     assert fetched.content_type == "text/html"
+    assert fetched.etag == '"article-v1"'
+    assert fetched.last_modified == "Sun, 09 Aug 2026 00:00:00 GMT"
 
 
 @pytest.mark.anyio

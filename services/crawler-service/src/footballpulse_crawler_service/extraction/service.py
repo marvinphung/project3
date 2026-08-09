@@ -14,6 +14,8 @@ class ExtractedArticle:
     requested_url: str
     final_url: str
     content_type: str
+    etag: str | None
+    last_modified: str | None
     raw_html: bytes
     extraction: ExtractionResult
 
@@ -39,6 +41,8 @@ class HtmlExtractionService:
             requested_url=job.url,
             final_url=fetched.final_url,
             content_type=fetched.content_type,
+            etag=fetched.etag,
+            last_modified=fetched.last_modified,
             raw_html=fetched.content,
             extraction=extraction,
         )

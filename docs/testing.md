@@ -95,6 +95,8 @@ nguyên Unicode, punctuation, tỷ số cùng currency như `€180m`.
   lỗi một source không hủy kết quả source khác; cancellation không bị retry.
 - Duplicate Kafka delivery không tạo article/claim/timeline/publication lặp.
 - Worker restart sau durable write trước offset commit vẫn giữ invariant.
+- Same URL/hash chỉ tạo processed observation; hash mới tạo immutable version và
+  `previous_version_id`; outbox chỉ chuyển `PUBLISHED` sau delivery report.
 - Invalid event/output không retry vô hạn và đi review/DLQ với redacted context.
 - Hai publish đồng thời/cùng idempotency key chỉ tạo một publication.
 

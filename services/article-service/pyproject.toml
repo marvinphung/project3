@@ -2,7 +2,17 @@
 name = "footballpulse-article-service"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["pymongo>=4.16,<5"]
+dependencies = [
+    "confluent-kafka>=2.15,<3",
+    "footballpulse-event-contracts",
+    "footballpulse-fetch-artifacts",
+    "pydantic>=2.12,<3",
+    "pymongo>=4.16,<5",
+]
+
+[tool.uv.sources]
+footballpulse-event-contracts = { workspace = true }
+footballpulse-fetch-artifacts = { workspace = true }
 
 [project.scripts]
 footballpulse-article-service-health = "footballpulse_article_service.health:main"

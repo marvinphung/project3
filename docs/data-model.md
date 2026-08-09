@@ -36,19 +36,22 @@ Mỗi document là một immutable version:
 
 ```json
 {
-  "_id": "article-version-2",
-  "canonical_article_id": "bbc-article-123",
+  "_id": "24-hex-mongo-reference",
+  "canonical_article_id": "stable-uuidv5-from-canonical-url",
+  "article_version_id": "stable-version-uuidv5",
   "version": 2,
   "previous_version_id": "article-version-1",
   "source_id": "bbc-sport",
-  "original_url": "...",
   "canonical_url": "...",
   "raw_html": "...",
+  "raw_content_hash": "sha256",
   "cleaned_content": "English text",
   "content_hash": "sha256",
-  "published_at": "UTC",
   "collected_at": "UTC",
-  "status": "AI_PENDING"
+  "cleaned_at": "UTC",
+  "etag": "optional",
+  "last_modified": "optional",
+  "extraction_status": "SUCCESS|PARTIAL"
 }
 ```
 
@@ -95,6 +98,12 @@ Service ghi ba document trong cùng MongoDB replica-set transaction:
 ```text
 source_articles + processed_events + outbox → commit hoặc rollback cùng nhau
 ```
+
+Nếu event mới có cùng canonical URL và cleaned hash với version mới nhất, service
+chỉ ghi processed observation (`UNCHANGED`) và không tạo version/outbox. Nếu hash
+đổi, version tăng và giữ `previous_version_id`. Outbox publisher gửi batch tối đa
+100, chỉ mark `PUBLISHED` sau Kafka delivery report; crash giữa publish và mark có
+thể phát lại cùng event ID và downstream phải idempotent.
 
 Các collection còn lại có unique compound indexes cho article version,
 enrichment run và duplicate relationship. Index bootstrap có tên cố định và có

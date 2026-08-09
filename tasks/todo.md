@@ -24,7 +24,7 @@
 - [x] WP 2.1 Source management domain/internal API
 - [x] WP 2.2 Safe bounded RSS discovery
 - [x] WP 2.3 HTML extraction and normalization
-- [ ] WP 2.4 Immutable article version consumer
+- [x] WP 2.4 Immutable article version consumer
 - [ ] WP 2.5 URL/exact/near duplicate pipeline
 - [ ] Phase Gate 2 approved
 

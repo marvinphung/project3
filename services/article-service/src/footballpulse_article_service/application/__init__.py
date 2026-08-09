@@ -1,0 +1,1 @@
+"""Article ingestion use cases."""

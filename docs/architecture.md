@@ -132,6 +132,11 @@ business key, chỉ commit offset sau durable write. State change cần phát ev
 dùng outbox khi storage cho phép. Mỗi input retryable có tối đa một retry topic
 và một DLQ; không tuyên bố global ordering hoặc exactly-once toàn hệ thống.
 
+Crawler và Article Service bàn giao body qua local artifact spool, không qua
+Kafka. Artifact ID là UUID opaque; directory write nguyên tử, HTML tối đa 5 MB,
+projection tối đa 1 MB và read path xác minh SHA-256. Đây là adapter local-first;
+deployment nhiều node phải thay bằng object storage mà giữ nguyên port/contract.
+
 ## 9. Local-first boundary
 
 Compose được chia profile `core`, `airflow`, `demo`, `tools`. Kafka một broker,

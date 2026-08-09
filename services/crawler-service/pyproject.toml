@@ -7,12 +7,16 @@ dependencies = [
     "beautifulsoup4>=4.13,<5",
     "fastapi>=0.116,<1",
     "feedparser>=6.0,<7",
+    "footballpulse-fetch-artifacts",
     "httpx>=0.28,<1",
     "psycopg[binary]>=3.3,<4",
     "sqlalchemy>=2.0,<3",
     "trafilatura>=2.0,<3",
     "uvicorn>=0.35,<1",
 ]
+
+[tool.uv.sources]
+footballpulse-fetch-artifacts = { workspace = true }
 
 [project.scripts]
 footballpulse-crawler-service-health = "footballpulse_crawler_service.health:main"

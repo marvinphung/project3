@@ -49,6 +49,8 @@ class FetchedHttpResponse:
     status_code: int
     content: bytes
     content_type: str
+    etag: str | None
+    last_modified: str | None
 
 
 def create_http_client(
@@ -173,6 +175,8 @@ class BoundedHttpFetcher:
                     status_code=response.status_code,
                     content=b"".join(chunks),
                     content_type=content_type,
+                    etag=response.headers.get("ETag"),
+                    last_modified=response.headers.get("Last-Modified"),
                 )
 
 
