@@ -16,6 +16,22 @@ Kaggle integration, database, Kafka, Airflow hoặc Docker Compose đã hoạt �
 Frontend React/Vite hiện có vẫn là mock. Exact build/start/migration/demo command
 chỉ được công bố sau khi implementation và verification tồn tại.
 
+## Python workspace
+
+Yêu cầu Python 3.12 và [`uv`](https://docs.astral.sh/uv/). Thiết lập môi trường
+phát triển và chạy quality gates ở repository root:
+
+```bash
+uv sync --all-packages --locked
+uv run pytest tests/smoke -q
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy
+```
+
+Root project chỉ quản lý workspace và công cụ phát triển, không chứa business
+package. Package riêng của từng service sẽ được bổ sung ở phase tiếp theo.
+
 ## Invariant trung tâm
 
 ```text
