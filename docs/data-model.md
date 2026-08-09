@@ -51,7 +51,9 @@ Mỗi document là một immutable version:
   "cleaned_at": "UTC",
   "etag": "optional",
   "last_modified": "optional",
-  "extraction_status": "SUCCESS|PARTIAL"
+  "extraction_status": "SUCCESS|PARTIAL",
+  "duplicate_type": "NONE|EXACT|NEAR",
+  "duplicate_of_article_version_id": "optional-primary-version"
 }
 ```
 
@@ -82,8 +84,16 @@ content projection được materialize trong PostgreSQL.
 
 #### `duplicate_links`
 
-Giữ `article_id`, `primary_article_id`, loại `URL|EXACT_CONTENT|NEAR_DUPLICATE`,
-score, reason và timestamp. Duplicate vẫn là evidence và không bị xóa.
+Mỗi link `EXACT|NEAR` giữ cả `article_id`/`article_version_id` hiện tại và
+`primary_article_id`/`primary_article_version_id`, cùng score, các component
+`title_similarity`, `content_similarity`, `time_similarity`, threshold, reason
+và timestamp. Unique key trên cặp version + loại quan hệ ngăn ghi lặp nhưng vẫn
+cho phép audit đúng immutable version. Duplicate vẫn là evidence và không bị xóa.
+
+URL duplicate không tạo version mới nên không có `duplicate_links`; processed
+observation giữ `duplicate_type=URL` và reason. Exact primary được chọn
+deterministic theo evidence có `collected_at` sớm nhất; near primary là candidate
+có weighted score cao nhất trong cửa sổ 72 giờ/tối đa 50 candidate.
 
 #### `processed_events` và `outbox`
 
@@ -93,10 +103,11 @@ identity của lần xử lý đầu thay vì ghi thêm dữ liệu.
 
 `outbox.event_id` là duy nhất; document có `status`, `created_at`, `available_at`
 và `publish_attempts` để publisher ở Phase 2 có thể retry có giới hạn. Article
-Service ghi ba document trong cùng MongoDB replica-set transaction:
+Service ghi các document liên quan trong cùng MongoDB replica-set transaction:
 
 ```text
-source_articles + processed_events + outbox → commit hoặc rollback cùng nhau
+source_articles + optional duplicate_links + processed_events + outbox
+→ commit hoặc rollback cùng nhau
 ```
 
 Nếu event mới có cùng canonical URL và cleaned hash với version mới nhất, service

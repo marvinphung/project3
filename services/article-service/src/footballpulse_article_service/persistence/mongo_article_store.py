@@ -19,6 +19,7 @@ from footballpulse_article_service.application.ingest_article import (
     RecordUnchangedArticle,
 )
 from footballpulse_article_service.domain.article import ExistingArticleVersion
+from footballpulse_article_service.domain.duplicate import DuplicateCandidate, DuplicateType
 from footballpulse_article_service.messaging.outbox import OutboxRecord
 
 MongoDocument = dict[str, object]
@@ -115,6 +116,49 @@ class MongoArticleStore:
             content_hash=self._required_string(document, "content_hash"),
         )
 
+    def find_duplicate_candidates(
+        self,
+        *,
+        content_hash: str,
+        collected_at: datetime,
+        exclude_article_id: UUID,
+        limit: int,
+    ) -> list[DuplicateCandidate]:
+        if not 1 <= limit <= 50:
+            raise ValueError("duplicate candidate limit must be between 1 and 50")
+        excluded = str(exclude_article_id)
+        exact = self._database.source_articles.find_one(
+            {
+                "content_hash": content_hash,
+                "canonical_article_id": {"$ne": excluded},
+            },
+            sort=[("collected_at", 1)],
+        )
+        documents: list[Mapping[str, object]] = []
+        seen: set[str] = set()
+        if exact is not None:
+            documents.append(exact)
+            seen.add(self._required_string(exact, "article_version_id"))
+        recent = (
+            self._database.source_articles.find(
+                {
+                    "canonical_article_id": {"$ne": excluded},
+                    "collected_at": {
+                        "$gte": collected_at - timedelta(hours=72),
+                        "$lte": collected_at,
+                    },
+                }
+            )
+            .sort("collected_at", -1)
+            .limit(limit)
+        )
+        for document in recent:
+            version_id = self._required_string(document, "article_version_id")
+            if version_id not in seen and len(documents) < limit:
+                documents.append(document)
+                seen.add(version_id)
+        return [self._duplicate_candidate(document) for document in documents]
+
     def persist_created(self, command: CreateArticleVersion) -> ArticleProcessingResult:
         replay = self.find_processed(command.consumed_event_id)
         if replay is not None:
@@ -154,6 +198,12 @@ class MongoArticleStore:
             "rss_published_at": command.rss_published_at,
             "collected_at": command.fetched_at,
             "cleaned_at": command.cleaned_at,
+            "duplicate_type": command.duplicate.duplicate_type.value,
+            "duplicate_of_article_version_id": (
+                str(command.duplicate.primary_article_version_id)
+                if command.duplicate.primary_article_version_id
+                else None
+            ),
         }
         outbox_document: MongoDocument = {
             "_id": str(command.outbox_event.event_id),
@@ -168,6 +218,32 @@ class MongoArticleStore:
             "available_at": command.cleaned_at,
             "publish_attempts": 0,
         }
+        duplicate_document: MongoDocument | None = None
+        if command.duplicate.duplicate_type is not DuplicateType.NONE:
+            primary_article_id = command.duplicate.primary_article_id
+            primary_version_id = command.duplicate.primary_article_version_id
+            if primary_article_id is None or primary_version_id is None:
+                raise ValueError("duplicate relationship requires primary identities")
+            duplicate_document = {
+                "_id": (
+                    f"{command.article_version_id}:{primary_version_id}:"
+                    f"{command.duplicate.duplicate_type.value}"
+                ),
+                "article_id": str(command.article_id),
+                "article_version_id": str(command.article_version_id),
+                "primary_article_id": str(primary_article_id),
+                "primary_article_version_id": str(primary_version_id),
+                "duplicate_type": command.duplicate.duplicate_type.value,
+                "score": command.duplicate.score,
+                "components": {
+                    "title_similarity": command.duplicate.components.title_similarity,
+                    "content_similarity": command.duplicate.components.content_similarity,
+                    "time_similarity": command.duplicate.components.time_similarity,
+                },
+                "threshold": command.duplicate.threshold,
+                "reason": command.duplicate.reason,
+                "created_at": command.cleaned_at,
+            }
 
         def write_transaction(session: ClientSession) -> ArticleProcessingResult:
             replay_in_transaction = self._find_article_replay(
@@ -186,6 +262,8 @@ class MongoArticleStore:
                 session=session,
             )
             self._database.source_articles.insert_one(article_document, session=session)
+            if duplicate_document is not None:
+                self._database.duplicate_links.insert_one(duplicate_document, session=session)
             self._database.outbox.insert_one(outbox_document, session=session)
             return result
 
@@ -220,6 +298,8 @@ class MongoArticleStore:
                     "canonical_url": command.canonical_url,
                     "etag": command.etag,
                     "last_modified": command.last_modified,
+                    "duplicate_type": "URL",
+                    "duplicate_reason": command.duplicate_reason,
                 }
             )
             self._database.processed_events.insert_one(marker, session=session)
@@ -336,6 +416,22 @@ class MongoArticleStore:
             UUID(str(marker["article_id"])),
             UUID(str(marker["article_version_id"])),
             UUID(str(outbox_value)) if outbox_value else None,
+        )
+
+    @classmethod
+    def _duplicate_candidate(cls, document: Mapping[str, object]) -> DuplicateCandidate:
+        collected_at = document.get("collected_at")
+        if not isinstance(collected_at, datetime):
+            raise ValueError("candidate collected_at must be a datetime")
+        if collected_at.tzinfo is None:
+            collected_at = collected_at.replace(tzinfo=UTC)
+        return DuplicateCandidate(
+            article_id=UUID(cls._required_string(document, "canonical_article_id")),
+            article_version_id=UUID(cls._required_string(document, "article_version_id")),
+            title=cls._required_string(document, "title"),
+            cleaned_content=cls._required_string(document, "cleaned_content"),
+            content_hash=cls._required_string(document, "content_hash"),
+            collected_at=collected_at,
         )
 
     def _find_replay(self, consumed_event_id: str) -> ArticleWriteResult | None:

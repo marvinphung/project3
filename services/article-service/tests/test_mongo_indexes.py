@@ -24,6 +24,11 @@ def test_idempotency_indexes_are_unique_and_stably_named() -> None:
     )
     assert indexes_by_name["uq_source_articles_canonical_version"].unique is True
     assert indexes_by_name["uq_article_enrichments_run"].unique is True
+    assert indexes_by_name["uq_duplicate_links_relationship"].keys == (
+        ("article_version_id", 1),
+        ("primary_article_version_id", 1),
+        ("duplicate_type", 1),
+    )
     assert indexes_by_name["uq_duplicate_links_relationship"].unique is True
     assert indexes_by_name["uq_processed_events_event_id"].unique is True
     assert indexes_by_name["uq_outbox_event_id"].unique is True

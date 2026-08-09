@@ -152,8 +152,9 @@ event contract.
 Payload mang source/article/version IDs, canonical URL, bounded title, SHA-256,
 English language marker, cleaned timestamp, Mongo document reference và duplicate
 result. Cleaned content được đọc từ MongoDB qua owner boundary, không nằm trong
-event. `duplicate_of_article_version_id` bắt buộc với `URL`, `EXACT`, `NEAR` và
-phải `null` với `NONE`.
+event. `duplicate_of_article_version_id` bắt buộc với `EXACT`, `NEAR` và phải
+`null` với `NONE`. URL duplicate không phát event vì không tạo article version mới;
+processed observation trong MongoDB lưu kết quả `URL`.
 
 ## 7. Event catalog tối thiểu
 

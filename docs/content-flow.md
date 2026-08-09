@@ -70,11 +70,22 @@ hoặc hash không đổi, không chạy lại AI.
 
 ## 4. Duplicate trước AI
 
-- URL duplicate: canonicalize scheme/host, fragment và tracking parameter.
-- Exact duplicate: SHA-256 trên cleaned content; vẫn lưu evidence nhưng không
-  gửi Kaggle.
-- Near duplicate: title/content/entity/time similarity; vẫn xử lý AI vì có thể
-  bổ sung claim mới.
+- URL duplicate: canonicalize scheme/host, bỏ fragment và tracking parameter.
+  Nếu canonical URL và cleaned hash trùng version mới nhất thì chỉ ghi processed
+  observation với reason `same_canonical_url_and_content_hash`; không tạo version
+  hoặc outbox mới nên không chạy AI.
+- Exact duplicate: so SHA-256 của cleaned English content với các URL khác. Bài
+  vẫn tạo immutable evidence/version, liên kết về primary version sớm nhất và
+  phát `article.cleaned.v1` với `duplicate_type=EXACT`; consumer dừng trước AI.
+- Near duplicate: xét tối đa 50 bài từ URL khác trong 72 giờ. MVP dùng Jaccard
+  deterministic sau Unicode/token normalization với score
+  `0.25 × title + 0.65 × content + 0.10 × time`; ngưỡng `0.65`. Near vẫn phát
+  event và tiếp tục AI vì có thể bổ sung claim mới.
+
+Mỗi quyết định `EXACT`/`NEAR` lưu primary article/version, tổng score, ba component,
+threshold và reason để audit. Entity/embedding chưa tham gia duplicate ở Phase 2;
+chúng có thể bổ sung candidate/scoring ở Phase 3 mà không thay đổi các loại kết quả.
+Fixture injury và match là negative controls để tránh gộp sai chỉ vì cùng cầu thủ/CLB.
 
 Duplicate/syndicated copy không được tính thành nguồn độc lập để nâng
 confirmation.

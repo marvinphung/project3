@@ -26,7 +26,9 @@ FOOTBALLPULSE_RUN_MONGO_INTEGRATION=1 uv run pytest -q \
 ```
 
 Test chứng minh index bootstrap chạy lặp, event replay không ghi thêm và unique
-outbox conflict rollback cả article lẫn processed-event marker.
+outbox conflict rollback cả article lẫn processed-event marker. Duplicate matrix
+integration còn chứng minh URL observation, EXACT/NEAR link + outbox decision và
+injury/match không bị false positive.
 
 Source repository integration test cũng tạo/xóa database PostgreSQL tạm:
 
@@ -76,6 +78,10 @@ nguyên Unicode, punctuation, tỷ số cùng currency như `€180m`.
 ## 5. Duplicate, Story và timeline tests
 
 - URL/exact duplicate không chạy AI; near duplicate vẫn có thể thêm claim.
+- Exact dùng cleaned SHA-256 và chọn primary sớm nhất; near chỉ xét tối đa 50
+  candidate trong 72 giờ với trọng số title/content/time `25/65/10`, ngưỡng `0.65`.
+- Persisted link phải giữ score components, threshold, reason và identities của
+  cả current/primary immutable version.
 - Duplicate/syndicated source không nâng `MULTI_SOURCE`.
 - Hybrid matching luôn áp hard category filter trước vector candidates.
 - Similar injury/transfer embedding không được merge khi category xung đột.

@@ -25,7 +25,7 @@
 - [x] WP 2.2 Safe bounded RSS discovery
 - [x] WP 2.3 HTML extraction and normalization
 - [x] WP 2.4 Immutable article version consumer
-- [ ] WP 2.5 URL/exact/near duplicate pipeline
+- [x] WP 2.5 URL/exact/near duplicate pipeline
 - [ ] Phase Gate 2 approved
 
 ## Phase 3 — Intelligence and AI

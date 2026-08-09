@@ -56,8 +56,8 @@ _INDEX_DEFINITIONS: Final = {
         IndexDefinition(
             name="uq_duplicate_links_relationship",
             keys=(
-                ("article_id", ASCENDING),
-                ("primary_article_id", ASCENDING),
+                ("article_version_id", ASCENDING),
+                ("primary_article_version_id", ASCENDING),
                 ("duplicate_type", ASCENDING),
             ),
             unique=True,

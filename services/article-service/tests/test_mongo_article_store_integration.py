@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -200,6 +200,12 @@ def test_version_ingestion_distinguishes_replay_unchanged_and_changed(
     versions = list(mongo_database.source_articles.find().sort("version", 1))
     assert versions[0]["raw_html"] == inputs[0][2]
     assert versions[1]["previous_version_id"] == versions[0]["article_version_id"]
+    unchanged_marker = mongo_database.processed_events.find_one(
+        {"event_id": str(events[1].event_id)}
+    )
+    assert unchanged_marker is not None
+    assert unchanged_marker["duplicate_type"] == "URL"
+    assert unchanged_marker["duplicate_reason"] == "same_canonical_url_and_content_hash"
 
     class RecordingKafka:
         def __init__(self) -> None:
@@ -220,3 +226,125 @@ def test_version_ingestion_distinguishes_replay_unchanged_and_changed(
     assert publish_result == PublishBatchResult(attempted=2, published=2, failed=0)
     assert len(kafka.values) == 2
     assert mongo_database.outbox.count_documents({"status": "PUBLISHED"}) == 2
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_MONGO_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_MONGO_INTEGRATION=1 with MongoDB replica set running",
+)
+def test_duplicate_matrix_persists_auditable_links_and_outbox_decisions(
+    mongo_database: Database[dict[str, object]],
+    tmp_path: Path,
+) -> None:
+    bootstrap_indexes(mongo_database)
+    artifacts = FilesystemArtifactStore(tmp_path)
+    repository = MongoArticleStore(mongo_database)
+    base_time = datetime(2026, 8, 1, 0, 0, tzinfo=UTC)
+    source_id = UUID("018f8b45-b634-7c81-a47d-9a7c2f3c7101")
+    batch_id = UUID("018f8b45-b634-7c81-a47d-9a7c2f3c7102")
+    service = ArticleIngestionService(
+        repository=repository,
+        artifacts=artifacts,
+        clock=lambda: base_time + timedelta(hours=1),
+    )
+    offer_title = "Arsenal submit €180m Vinicius offer"
+    offer_text = (
+        "Arsenal send €180m offer to Real Madrid for Vinícius Júnior Arsenal have "
+        "submitted a formal offer worth €180 million to Real Madrid for Vinícius Júnior. "
+        "Real Madrid have not yet responded to the proposal."
+    )
+    cases = (
+        ("primary", offer_title, offer_text),
+        ("exact", "Syndicated transfer report", offer_text),
+        (
+            "near",
+            "Gunners lodge major Vinicius proposal",
+            "Gunners lodge major proposal for Real star Arsenal, also known as the Gunners, "
+            "lodged an offer valued at €180m for Real Madrid winger Vinícius Júnior. The "
+            "Spanish club is considering the bid.",
+        ),
+        (
+            "injury",
+            "Vinicius ruled out with hamstring injury",
+            "Vinícius Júnior suffers hamstring injury Real Madrid coach Xabi Alonso said "
+            "Vini Jr will miss the La Liga opener with a hamstring injury.",
+        ),
+        (
+            "match",
+            "Real Madrid beat Arsenal 2-1",
+            "Real Madrid beat Arsenal in friendly Real Madrid defeated Arsenal 2-1 after a "
+            "late winner in a pre-season match.",
+        ),
+    )
+
+    for offset, (slug, title, cleaned_text) in enumerate(cases):
+        fetched_at = base_time + timedelta(minutes=offset)
+        event_id = UUID(f"018f8b45-b634-7c81-a47d-9a7c2f3c72{offset:02d}")
+        artifact_id = UUID(f"018f8b45-b634-7c81-a47d-9a7c2f3c73{offset:02d}")
+        raw = f"<html>{slug}</html>".encode()
+        artifacts.put(
+            artifact_id,
+            raw,
+            metadata=ArtifactMetadata(content_type="text/html"),
+            projection=ArtifactProjection(
+                title=title,
+                cleaned_text=cleaned_text,
+                status="SUCCESS",
+                extractor="TRAFILATURA",
+                diagnostics=(),
+            ),
+        )
+        event = ArticleDiscoveredEvent(
+            event_id=event_id,
+            event_type="article.discovered",
+            event_version=1,
+            occurred_at=fetched_at,
+            producer="crawler-service",
+            correlation_id=batch_id,
+            causation_id=None,
+            aggregate_type="source_article",
+            aggregate_id=event_id,
+            idempotency_key=f"fixture:{event_id}",
+            payload=ArticleDiscoveredPayload(
+                source_id=source_id,
+                batch_id=batch_id,
+                canonical_url=f"https://news.example.com/{slug}?utm_source=rss",
+                rss_guid=str(event_id),
+                rss_title=title,
+                rss_published_at=fetched_at,
+                fetched_at=fetched_at,
+                fetch_artifact_id=artifact_id,
+                http_status=200,
+                content_type="text/html",
+                content_length=len(raw),
+            ),
+        )
+        service.handle(event)
+
+    articles = {
+        str(document["canonical_url"]).rsplit("/", maxsplit=1)[-1]: document
+        for document in mongo_database.source_articles.find()
+    }
+    assert articles["primary"]["duplicate_type"] == "NONE"
+    assert articles["exact"]["duplicate_type"] == "EXACT"
+    assert articles["near"]["duplicate_type"] == "NEAR"
+    assert articles["injury"]["duplicate_type"] == "NONE"
+    assert articles["match"]["duplicate_type"] == "NONE"
+
+    links = list(mongo_database.duplicate_links.find().sort("duplicate_type", 1))
+    assert [link["duplicate_type"] for link in links] == ["EXACT", "NEAR"]
+    for link in links:
+        assert link["primary_article_version_id"] == articles["primary"]["article_version_id"]
+        assert link["reason"]
+        assert link["threshold"] == 0.65
+        assert set(link["components"]) == {
+            "title_similarity",
+            "content_similarity",
+            "time_similarity",
+        }
+
+    outbox_types = {
+        document["event"]["payload"]["duplicate_type"] for document in mongo_database.outbox.find()
+    }
+    assert outbox_types == {"NONE", "EXACT", "NEAR"}

@@ -22,6 +22,11 @@ from footballpulse_article_service.domain.article import (
     canonicalize_article_url,
     decide_article_version,
 )
+from footballpulse_article_service.domain.duplicate import (
+    DuplicateCandidate,
+    DuplicateDecision,
+    DuplicatePolicy,
+)
 
 _OUTBOX_NAMESPACE = UUID("4f0f31e2-9c16-47f5-8035-f6b598a2c98e")
 
@@ -71,6 +76,7 @@ class CreateArticleVersion:
     rss_published_at: datetime | None
     fetched_at: datetime
     cleaned_at: datetime
+    duplicate: DuplicateDecision
     outbox_event: ArticleCleanedEvent
 
 
@@ -84,6 +90,7 @@ class RecordUnchangedArticle:
     fetch_artifact_id: UUID
     etag: str | None
     last_modified: str | None
+    duplicate_reason: str = "same_canonical_url_and_content_hash"
 
 
 class ArtifactReader(Protocol):
@@ -94,6 +101,15 @@ class ArticleRepository(Protocol):
     def find_processed(self, event_id: UUID) -> ArticleProcessingResult | None: ...
 
     def find_latest(self, canonical_url: str) -> ExistingArticleVersion | None: ...
+
+    def find_duplicate_candidates(
+        self,
+        *,
+        content_hash: str,
+        collected_at: datetime,
+        exclude_article_id: UUID,
+        limit: int,
+    ) -> list[DuplicateCandidate]: ...
 
     def persist_created(self, command: CreateArticleVersion) -> ArticleProcessingResult: ...
 
@@ -107,10 +123,12 @@ class ArticleIngestionService:
         repository: ArticleRepository,
         artifacts: ArtifactReader,
         clock: Callable[[], datetime],
+        duplicate_policy: DuplicatePolicy | None = None,
     ) -> None:
         self._repository = repository
         self._artifacts = artifacts
         self._clock = clock
+        self._duplicate_policy = duplicate_policy or DuplicatePolicy()
 
     def handle(self, event: ArticleDiscoveredEvent) -> ArticleProcessingResult:
         replay = self._repository.find_processed(event.event_id)
@@ -151,6 +169,18 @@ class ArticleIngestionService:
             )
 
         cleaned_at = self._clock()
+        candidates = self._repository.find_duplicate_candidates(
+            content_hash=decision.content_hash,
+            collected_at=event.payload.fetched_at,
+            exclude_article_id=decision.article_id,
+            limit=50,
+        )
+        duplicate = self._duplicate_policy.classify(
+            title=projection.title,
+            cleaned_content=projection.cleaned_text,
+            collected_at=event.payload.fetched_at,
+            candidates=candidates,
+        )
         mongo_document_id = hashlib.sha256(decision.article_version_id.bytes).hexdigest()[:24]
         outbox_event_id = uuid5(
             _OUTBOX_NAMESPACE, f"article.cleaned.v1:{decision.article_version_id}"
@@ -177,8 +207,8 @@ class ArticleIngestionService:
                 cleaned_at=cleaned_at,
                 mongo_collection="source_articles",
                 mongo_document_id=mongo_document_id,
-                duplicate_type="NONE",
-                duplicate_of_article_version_id=None,
+                duplicate_type=duplicate.duplicate_type.value,
+                duplicate_of_article_version_id=duplicate.primary_article_version_id,
             ),
         )
         return self._repository.persist_created(
@@ -209,6 +239,7 @@ class ArticleIngestionService:
                 rss_published_at=event.payload.rss_published_at,
                 fetched_at=event.payload.fetched_at,
                 cleaned_at=cleaned_at,
+                duplicate=duplicate,
                 outbox_event=outbox_event,
             )
         )
