@@ -27,6 +27,6 @@ Canonical detailed plan:
 
 ## Current next action
 
-WP 2.5 was approved after Collaboration Gate 2.5. The next action is Phase Gate 2:
-demonstrate the complete RSS-to-Mongo evidence slice and its failure/duplicate
-matrix; do not start Phase 3 before the user approves that gate.
+Phase Gate 2 was approved after the complete RSS-to-Mongo evidence slice and its
+failure/duplicate matrix passed. The next action is the WP 3.1 Kickoff for the
+canonical entity catalog; do not implement it before the user approves that kickoff.

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 import pytest
 from footballpulse_article_service.application.ingest_article import (
@@ -14,6 +15,10 @@ from footballpulse_article_service.application.ingest_article import (
 from footballpulse_article_service.messaging.outbox import OutboxPublisher, PublishBatchResult
 from footballpulse_article_service.persistence.mongo_article_store import MongoArticleStore
 from footballpulse_article_service.persistence.mongo_indexes import bootstrap_indexes
+from footballpulse_crawler_service.discovery.rss import parse_rss
+from footballpulse_crawler_service.extraction.artifact_handoff import ArticleArtifactHandoff
+from footballpulse_crawler_service.extraction.processor import ArticleContentProcessor
+from footballpulse_crawler_service.extraction.service import ExtractedArticle
 from footballpulse_event_contracts.article import ArticleDiscoveredEvent, ArticleDiscoveredPayload
 from footballpulse_fetch_artifacts.filesystem import (
     ArtifactMetadata,
@@ -23,6 +28,9 @@ from footballpulse_fetch_artifacts.filesystem import (
 from pymongo import MongoClient
 from pymongo.database import Database
 from pymongo.errors import DuplicateKeyError
+
+ROOT = Path(__file__).parents[3]
+PHASE_2_NAMESPACE = UUID("018f8b45-b634-7c81-a47d-9a7c2f3c7999")
 
 
 @pytest.fixture
@@ -348,3 +356,100 @@ def test_duplicate_matrix_persists_auditable_links_and_outbox_decisions(
         document["event"]["payload"]["duplicate_type"] for document in mongo_database.outbox.find()
     }
     assert outbox_types == {"NONE", "EXACT", "NEAR"}
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_MONGO_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_MONGO_INTEGRATION=1 with MongoDB replica set running",
+)
+def test_phase_2_fixture_rss_reaches_immutable_mongo_evidence_and_outbox(
+    mongo_database: Database[dict[str, object]],
+    tmp_path: Path,
+) -> None:
+    catalog = json.loads((ROOT / "tests/fixtures/mock-news/catalog.json").read_text())
+    articles_by_url = {
+        article["url"]: article for article in catalog["articles"] if article["fixture"] is not None
+    }
+    feed = parse_rss(
+        (ROOT / "tests/fixtures/mock-news/rss/trusted-transfer.xml").read_bytes(),
+        allowed_domains=("trusted-a.test", "trusted-b.test"),
+        max_entries=20,
+    )
+    assert len(feed.entries) == 7
+
+    bootstrap_indexes(mongo_database)
+    artifact_store = FilesystemArtifactStore(tmp_path)
+    handoff = ArticleArtifactHandoff(store=artifact_store)
+    processor = ArticleContentProcessor()
+    repository = MongoArticleStore(mongo_database)
+    batch_id = UUID("018f8b45-b634-7c81-a47d-9a7c2f3c7901")
+    service = ArticleIngestionService(
+        repository=repository,
+        artifacts=artifact_store,
+        clock=lambda: datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+    )
+
+    for entry in feed.entries:
+        fixture = articles_by_url[entry.url]
+        event_id = UUID(fixture["id"])
+        artifact_id = uuid5(PHASE_2_NAMESPACE, f"artifact:{event_id}")
+        raw_html = (ROOT / fixture["fixture"]).read_bytes()
+        extraction = processor.process(raw_html, url=entry.url)
+        metadata = handoff.persist(
+            artifact_id,
+            ExtractedArticle(
+                source_key=str(fixture["source_id"]),
+                requested_url=entry.url,
+                final_url=entry.url,
+                content_type="text/html",
+                etag=None,
+                last_modified=None,
+                raw_html=raw_html,
+                extraction=extraction,
+            ),
+        )
+        fetched_at = datetime.fromisoformat(fixture["discovered_at"])
+        service.handle(
+            ArticleDiscoveredEvent(
+                event_id=event_id,
+                event_type="article.discovered",
+                event_version=1,
+                occurred_at=fetched_at,
+                producer="crawler-service",
+                correlation_id=batch_id,
+                causation_id=None,
+                aggregate_type="source_article",
+                aggregate_id=event_id,
+                idempotency_key=f"phase-2:{event_id}",
+                payload=ArticleDiscoveredPayload(
+                    source_id=UUID(fixture["source_id"]),
+                    batch_id=batch_id,
+                    canonical_url=entry.url,
+                    rss_guid=entry.guid,
+                    rss_title=entry.title,
+                    rss_published_at=entry.published_at,
+                    fetched_at=fetched_at,
+                    fetch_artifact_id=artifact_id,
+                    http_status=200,
+                    content_type="text/html",
+                    content_length=metadata.content_length,
+                ),
+            )
+        )
+
+    assert mongo_database.processed_events.count_documents({}) == 7
+    assert mongo_database.source_articles.count_documents({}) == 6
+    assert mongo_database.outbox.count_documents({}) == 6
+    assert mongo_database.processed_events.count_documents({"duplicate_type": "URL"}) == 1
+
+    stored_types = {
+        document["duplicate_type"]
+        for document in mongo_database.source_articles.find({}, {"duplicate_type": 1})
+    }
+    assert stored_types == {"NONE", "EXACT", "NEAR"}
+    link_types = [
+        document["duplicate_type"]
+        for document in mongo_database.duplicate_links.find().sort("duplicate_type", 1)
+    ]
+    assert link_types == ["EXACT", "NEAR", "NEAR"]

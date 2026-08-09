@@ -28,7 +28,9 @@ FOOTBALLPULSE_RUN_MONGO_INTEGRATION=1 uv run pytest -q \
 Test chứng minh index bootstrap chạy lặp, event replay không ghi thêm và unique
 outbox conflict rollback cả article lẫn processed-event marker. Duplicate matrix
 integration còn chứng minh URL observation, EXACT/NEAR link + outbox decision và
-injury/match không bị false positive.
+injury/match không bị false positive. Phase Gate 2 nối fixture RSS thật qua cleaner,
+artifact handoff và ingestion để kiểm tra số processed observation, immutable
+version, duplicate link và outbox trong MongoDB thay vì chỉ test từng đoạn riêng lẻ.
 
 Source repository integration test cũng tạo/xóa database PostgreSQL tạm:
 
