@@ -16,10 +16,13 @@ dev = [
 [tool.uv]
 package = false
 
+[tool.uv.workspace]
+members = ["packages/*", "services/*"]
+
 [tool.pytest.ini_options]
-addopts = "--strict-config --strict-markers"
+addopts = "--import-mode=importlib --strict-config --strict-markers"
 asyncio_mode = "strict"
-testpaths = ["tests"]
+testpaths = ["packages", "services", "tests"]
 
 [tool.ruff]
 line-length = 100
@@ -31,4 +34,5 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["tests"]
+files = ["packages", "services", "tests"]
+exclude = ["packages/.*/tests/", "services/.*/tests/"]

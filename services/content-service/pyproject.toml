@@ -1,0 +1,12 @@
+[project]
+name = "footballpulse-content-service"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[project.scripts]
+footballpulse-content-service-health = "footballpulse_content_service.health:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -23,5 +23,9 @@ def test_workspace_declares_quality_tools() -> None:
     assert {"pytest", "pytest-asyncio", "ruff", "mypy"} <= set(
         pyproject["dependency-groups"]["dev"]
     )
-    assert pyproject["tool"]["pytest"]["ini_options"]["testpaths"] == ["tests"]
+    assert pyproject["tool"]["pytest"]["ini_options"]["testpaths"] == [
+        "packages",
+        "services",
+        "tests",
+    ]
     assert pyproject["tool"]["mypy"]["python_version"] == "3.12"
