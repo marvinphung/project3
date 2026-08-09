@@ -4,8 +4,16 @@
     "ArticleDiscoveredPayload": {
       "additionalProperties": false,
       "properties": {
-        "source_id": {"format": "uuid", "title": "Source Id", "type": "string"},
-        "batch_id": {"format": "uuid", "title": "Batch Id", "type": "string"},
+        "source_id": {
+          "format": "uuid",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "batch_id": {
+          "format": "uuid",
+          "title": "Batch Id",
+          "type": "string"
+        },
         "canonical_url": {
           "format": "uri",
           "maxLength": 2083,
@@ -14,7 +22,15 @@
           "type": "string"
         },
         "rss_guid": {
-          "anyOf": [{"maxLength": 512, "type": "string"}, {"type": "null"}],
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "title": "Rss Guid"
         },
         "rss_title": {
@@ -24,18 +40,37 @@
           "type": "string"
         },
         "rss_published_at": {
-          "anyOf": [{"format": "date-time", "type": "string"}, {"type": "null"}],
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "title": "Rss Published At"
         },
-        "fetched_at": {"format": "date-time", "title": "Fetched At", "type": "string"},
+        "fetched_at": {
+          "format": "date-time",
+          "title": "Fetched At",
+          "type": "string"
+        },
         "fetch_artifact_id": {
           "format": "uuid",
           "title": "Fetch Artifact Id",
           "type": "string"
         },
-        "http_status": {"const": 200, "title": "Http Status", "type": "integer"},
+        "http_status": {
+          "const": 200,
+          "title": "Http Status",
+          "type": "integer"
+        },
         "content_type": {
-          "enum": ["text/html", "application/xhtml+xml"],
+          "enum": [
+            "text/html",
+            "application/xhtml+xml"
+          ],
           "title": "Content Type",
           "type": "string"
         },
@@ -65,25 +100,67 @@
   },
   "additionalProperties": false,
   "properties": {
-    "event_id": {"format": "uuid", "title": "Event Id", "type": "string"},
-    "event_type": {"const": "article.discovered", "title": "Event Type", "type": "string"},
-    "event_version": {"const": 1, "title": "Event Version", "type": "integer"},
-    "occurred_at": {"format": "date-time", "title": "Occurred At", "type": "string"},
-    "producer": {"const": "crawler-service", "title": "Producer", "type": "string"},
-    "correlation_id": {"format": "uuid", "title": "Correlation Id", "type": "string"},
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "article.discovered",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "event_version": {
+      "const": 1,
+      "title": "Event Version",
+      "type": "integer"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "producer": {
+      "const": "crawler-service",
+      "title": "Producer",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
     "causation_id": {
-      "anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}],
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
       "title": "Causation Id"
     },
-    "aggregate_type": {"const": "source_article", "title": "Aggregate Type", "type": "string"},
-    "aggregate_id": {"format": "uuid", "title": "Aggregate Id", "type": "string"},
+    "aggregate_type": {
+      "const": "source_article",
+      "title": "Aggregate Type",
+      "type": "string"
+    },
+    "aggregate_id": {
+      "format": "uuid",
+      "title": "Aggregate Id",
+      "type": "string"
+    },
     "idempotency_key": {
       "maxLength": 256,
       "minLength": 1,
       "title": "Idempotency Key",
       "type": "string"
     },
-    "payload": {"$ref": "#/$defs/ArticleDiscoveredPayload"}
+    "payload": {
+      "$ref": "#/$defs/ArticleDiscoveredPayload"
+    }
   },
   "required": [
     "event_id",

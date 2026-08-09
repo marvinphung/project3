@@ -86,6 +86,7 @@ sequenceDiagram
     KG-->>AI: Partial/complete results.jsonl
     AI->>AI: Schema và grounding validation
     AI-->>IN: article.enriched.v1
+    AI-->>IN: article.enrichment.failed.v1 khi output invalid
     IN->>IN: pgvector candidates + rule matching + claim diff
     IN-->>CO: story.updated.v1 khi có material change
     CO->>CO: Timeline EN/VI hoặc editorial draft
@@ -123,9 +124,14 @@ article.discovered.v1
 article.cleaned.v1
 article.enrichment.requested.v1
 article.enriched.v1
+article.enrichment.failed.v1
 story.updated.v1
 timeline.created.v1
 ```
+
+Hai enrichment result event chỉ mang IDs, hash, counts, versions và redacted error
+metadata. Summary, claims, evidence quote, raw model output và cleaned content không
+đi qua Kafka; consumer đọc durable enrichment bằng ID.
 
 Kafka được giả định giao ít nhất một lần. Consumer lưu `event_id`, dùng stable
 business key, chỉ commit offset sau durable write. State change cần phát event

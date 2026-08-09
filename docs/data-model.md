@@ -75,15 +75,32 @@ Lưu kết quả theo input/model/prompt version, không overwrite lần chạy 
   "model": "Qwen3-8B-4bit",
   "prompt_version": "article-enrichment-v1",
   "summary_en": "...",
+  "event_type": "TRANSFER",
   "entities": [],
-  "claims": [],
+  "claims": [{
+    "subject_entity_id": "...",
+    "predicate": "SUBMITTED_BID",
+    "object_entity_id": "...",
+    "qualifiers": {"amount": 180000000, "currency": "EUR"},
+    "certainty": "REPORTED",
+    "evidence_quote": "...",
+    "evidence_start": 0,
+    "evidence_end": 120
+  }],
   "validation_status": "VALIDATED",
+  "contract_version": "article-enrichment.v1",
+  "prompt_version": "article-enrichment-v1",
+  "validator_version": "grounding-v1",
   "processed_at": "UTC"
 }
 ```
 
 MongoDB không cần giữ `summary_vi` làm source of truth. Vietnamese timeline và
 content projection được materialize trong PostgreSQL.
+
+Mỗi rejected claim giữ index và bounded error codes; partial enrichment không làm
+mất valid claims. Summary chỉ materialize khi qua factual-anchor validation. Các
+version cũ không bị overwrite để có thể audit/reprocess khi schema/prompt đổi.
 
 #### `duplicate_links`
 

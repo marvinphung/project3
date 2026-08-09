@@ -15,7 +15,12 @@ smoke test trước implementation phụ thuộc; không được tự điền b
 - Batch article/token limit nào phù hợp Kaggle quota/runtime thực tế?
 - Qwen3-8B 4-bit format/runtime nào vượt benchmark chất lượng và thời gian?
 - Khi nào dùng Qwen3-4B local fallback thay vì đợi batch sau?
-- Prompt/schema version đầu tiên và repair budget cho invalid JSON?
+- `article-enrichment.v1` và một structural repair attempt đã khóa; prompt wording
+  nào đạt acceptance tốt nhất trên Kaggle fixture?
+- `DISCIPLINARY` và `OTHER` đang fail closed vì predicate v1 chưa có action tương
+  ứng; cần fixture trước khi thêm predicate nào?
+- Factual-anchor validator không chứng minh semantic entailment cho mọi câu prose;
+  acceptance corpus/editorial review nào cần trước khi hiển thị AI summary trực tiếp?
 - GLiNER `0.50` detection/`0.75` review đã đạt fixture baseline; có giữ được chất
   lượng khi mở rộng annotated football news corpus không?
 

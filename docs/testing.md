@@ -106,14 +106,23 @@ nguyên Unicode, punctuation, tỷ số cùng currency như `€180m`.
 
 ## 4. AI/Kaggle tests
 
+- `article-enrichment.v1` strict schema từ chối unknown field, enum tự tạo và
+  numeric coercion nguy hiểm.
 - Bài dài được chunk, claims merge deterministic và evidence quote còn truy được.
 - Manifest/article ID/input hash sai bị reject.
 - Partial Kaggle output import phần hợp lệ; phần thiếu về `AI_PENDING`.
 - Một claim invalid không làm mất claim hợp lệ khác.
 - Amount/date/score không có trong evidence bị reject.
 - Vietnamese output thêm fact so với English bị flag.
+- Vietnamese projection phải giữ claim IDs, entity, amount/currency/date/score,
+  negation và certainty anchors.
+- Invalid JSON chỉ có một structural repair attempt; JSONL record lỗi không làm
+  rollback record hợp lệ khác.
 - Kaggle unavailable giữ dữ liệu và retry/fallback đúng policy.
 - Mock provider và Kaggle importer dùng cùng output contract.
+
+Event contract suite còn khóa payload bounded cho `article.enriched.v1` và
+`article.enrichment.failed.v1`; full summary/evidence/raw output bị cấm trong Kafka.
 
 ## 5. Duplicate, Story và timeline tests
 

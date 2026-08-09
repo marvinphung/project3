@@ -1,0 +1,21 @@
+{
+  "event_id": "018f8b45-b634-7c81-a47d-9a7c2f3cc301",
+  "event_type": "article.enrichment.failed",
+  "event_version": 1,
+  "occurred_at": "2026-08-01T12:06:00Z",
+  "producer": "ai-content-service",
+  "correlation_id": "018f8b45-b634-7c81-a47d-9a7c2f3cc202",
+  "causation_id": "018f8b45-b634-7c81-a47d-9a7c2f3cc203",
+  "aggregate_type": "article_version",
+  "aggregate_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3101",
+  "idempotency_key": "article-version:018f8b45-b634-7c81-a47d-9a7c2f3c3101:enrichment-failed:v1:1",
+  "payload": {
+    "article_version_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3101",
+    "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "error_code": "AI_OUTPUT_INVALID",
+    "retryable": false,
+    "attempt": 1,
+    "model_version": "qwen3-8b-fixture",
+    "prompt_version": "article-enrichment-v1"
+  }
+}

@@ -3,6 +3,10 @@ from footballpulse_event_contracts.article import (
     ArticleCleanedPayload,
     ArticleDiscoveredEvent,
     ArticleDiscoveredPayload,
+    ArticleEnrichedEvent,
+    ArticleEnrichedPayload,
+    ArticleEnrichmentFailedEvent,
+    ArticleEnrichmentFailedPayload,
 )
 from footballpulse_event_contracts.envelope import EventEnvelope, event_json_schema
 
@@ -11,6 +15,10 @@ __all__ = [
     "ArticleCleanedPayload",
     "ArticleDiscoveredEvent",
     "ArticleDiscoveredPayload",
+    "ArticleEnrichedEvent",
+    "ArticleEnrichedPayload",
+    "ArticleEnrichmentFailedEvent",
+    "ArticleEnrichmentFailedPayload",
     "EventEnvelope",
     "event_json_schema",
 ]

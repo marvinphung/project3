@@ -129,19 +129,30 @@ AI Content Service gom các article `AI_PENDING` thành private JSONL dataset:
 
 ```json
 {
-  "article_id": "article-version-2",
+  "contract_version": "article-enrichment.v1",
+  "article_version_id": "article-version-2",
   "input_hash": "sha256",
   "title": "English title",
   "cleaned_content": "English evidence text",
-  "known_entities": []
+  "published_at": "UTC",
+  "source_id": "source-uuid",
+  "source_reliability_tier": 2,
+  "canonical_entities": [],
+  "unresolved_mentions": []
 }
 ```
 
-Không upload raw HTML, secret hoặc database endpoint. Qwen3-8B 4-bit xử lý bài
-dài theo `chunk → extract claims → merge duplicates → final summary`. Article
-enrichment output có English structured claims, `summary_en`, model/prompt
-version và evidence quote. Partial output hợp lệ được import; article còn thiếu
-quay lại `AI_PENDING`.
+Không upload raw HTML, secret, embedding, Vietnamese hoặc database endpoint.
+Qwen3-8B 4-bit xử lý bài dài theo chunk khoảng 1.200 từ/overlap 150 từ, giữ global
+evidence offsets rồi `extract claims → validate → merge duplicates → final summary`.
+Output strict Pydantic có `summary_en`, event type, typed claims/qualifiers,
+certainty, exact evidence quote/offset và model/prompt version. Predicate chỉ lấy
+từ vocabulary `article-enrichment.v1`; model không tự mở rộng enum.
+
+JSON/schema lỗi có tối đa một structural repair attempt, không được thêm fact.
+Mỗi JSONL record độc lập: record hợp lệ vẫn import khi record khác lỗi. Claim được
+validate riêng nên partial success giữ claim tốt; không còn claim hợp lệ hoặc
+summary thêm factual anchor thì chuyển `NEEDS_CONTENT_REVIEW`.
 
 Qwen3-4B GGUF local là fallback khi Kaggle không sẵn sàng. Mock provider dùng
 cùng schema để test/demo offline.
@@ -159,8 +170,18 @@ Local validator kiểm tra từng claim:
 7. English summary chỉ dùng claim hợp lệ.
 8. Khi tạo timeline/content, Vietnamese projection không thêm fact so với English.
 
+Claim duplicate được merge theo subject/predicate/object/normalized qualifiers và
+giữ toàn bộ evidence; denial/correction khác predicate không bị merge mất.
+Vietnamese projection phải khai báo `used_claim_ids`; validator kiểm tra claim ID,
+entity name đã biết, amount/currency/date/score, negation và certainty anchors.
+
 Cho phép partial success: giữ claim hợp lệ, reject claim lỗi kèm reason. Không
 còn claim hợp lệ thì article chuyển `NEEDS_CONTENT_REVIEW`.
+
+Sau persistence, `article.enriched.v1` chỉ mang IDs, input hash, status, claim
+counts và generation versions. Full summary/claim/evidence vẫn ở MongoDB. Output
+hoàn toàn invalid dùng `article.enrichment.failed.v1` với error metadata redacted;
+Kafka không chứa raw model output hoặc cleaned content.
 
 ## 8. Story và timeline 6 giờ
 

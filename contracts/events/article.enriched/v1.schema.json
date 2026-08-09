@@ -1,100 +1,75 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
-    "ArticleCleanedPayload": {
+    "ArticleEnrichedPayload": {
       "additionalProperties": false,
       "properties": {
-        "source_id": {
-          "format": "uuid",
-          "title": "Source Id",
-          "type": "string"
-        },
-        "article_id": {
-          "format": "uuid",
-          "title": "Article Id",
-          "type": "string"
-        },
         "article_version_id": {
           "format": "uuid",
           "title": "Article Version Id",
           "type": "string"
         },
-        "canonical_url": {
-          "format": "uri",
-          "maxLength": 2083,
-          "minLength": 1,
-          "title": "Canonical Url",
-          "type": "string"
-        },
-        "title": {
-          "maxLength": 512,
-          "minLength": 1,
-          "title": "Title",
-          "type": "string"
-        },
-        "content_hash": {
+        "input_hash": {
           "pattern": "^[a-f0-9]{64}$",
-          "title": "Content Hash",
+          "title": "Input Hash",
           "type": "string"
         },
-        "language": {
-          "const": "en",
-          "title": "Language",
+        "enrichment_id": {
+          "format": "uuid",
+          "title": "Enrichment Id",
           "type": "string"
         },
-        "cleaned_at": {
-          "format": "date-time",
-          "title": "Cleaned At",
-          "type": "string"
-        },
-        "mongo_collection": {
-          "const": "source_articles",
-          "title": "Mongo Collection",
-          "type": "string"
-        },
-        "mongo_document_id": {
-          "pattern": "^[a-f0-9]{24}$",
-          "title": "Mongo Document Id",
-          "type": "string"
-        },
-        "duplicate_type": {
+        "validation_status": {
           "enum": [
-            "NONE",
-            "URL",
-            "EXACT",
-            "NEAR"
+            "VALIDATED",
+            "PARTIAL"
           ],
-          "title": "Duplicate Type",
+          "title": "Validation Status",
           "type": "string"
         },
-        "duplicate_of_article_version_id": {
-          "anyOf": [
-            {
-              "format": "uuid",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Duplicate Of Article Version Id"
+        "valid_claim_count": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Valid Claim Count",
+          "type": "integer"
+        },
+        "rejected_claim_count": {
+          "maximum": 500,
+          "minimum": 0,
+          "title": "Rejected Claim Count",
+          "type": "integer"
+        },
+        "model_version": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Model Version",
+          "type": "string"
+        },
+        "prompt_version": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Prompt Version",
+          "type": "string"
+        },
+        "validator_version": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Validator Version",
+          "type": "string"
         }
       },
       "required": [
-        "source_id",
-        "article_id",
         "article_version_id",
-        "canonical_url",
-        "title",
-        "content_hash",
-        "language",
-        "cleaned_at",
-        "mongo_collection",
-        "mongo_document_id",
-        "duplicate_type",
-        "duplicate_of_article_version_id"
+        "input_hash",
+        "enrichment_id",
+        "validation_status",
+        "valid_claim_count",
+        "rejected_claim_count",
+        "model_version",
+        "prompt_version",
+        "validator_version"
       ],
-      "title": "ArticleCleanedPayload",
+      "title": "ArticleEnrichedPayload",
       "type": "object"
     }
   },
@@ -106,7 +81,7 @@
       "type": "string"
     },
     "event_type": {
-      "const": "article.cleaned",
+      "const": "article.enriched",
       "title": "Event Type",
       "type": "string"
     },
@@ -121,7 +96,7 @@
       "type": "string"
     },
     "producer": {
-      "const": "article-service",
+      "const": "ai-content-service",
       "title": "Producer",
       "type": "string"
     },
@@ -159,7 +134,7 @@
       "type": "string"
     },
     "payload": {
-      "$ref": "#/$defs/ArticleCleanedPayload"
+      "$ref": "#/$defs/ArticleEnrichedPayload"
     }
   },
   "required": [
@@ -175,6 +150,6 @@
     "idempotency_key",
     "payload"
   ],
-  "title": "ArticleCleanedEvent",
+  "title": "ArticleEnrichedEvent",
   "type": "object"
 }
