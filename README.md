@@ -11,10 +11,10 @@ timeline có mức xác thực và bài tổng hợp qua editorial review.
 
 ## Trạng thái
 
-Tài liệu hiện mô tả **thiết kế mục tiêu đã chốt**, không khẳng định backend,
-Kaggle integration, database, Kafka, Airflow hoặc Docker Compose đã hoạt động.
-Frontend React/Vite hiện có vẫn là mock. Exact build/start/migration/demo command
-chỉ được công bố sau khi implementation và verification tồn tại.
+Phase 0 đã hoàn tất và được duyệt: Python workspace, sáu service skeleton,
+runtime configuration, hai event contracts đầu tiên và deterministic offline
+fixtures. Chưa có business service, Kaggle integration, database, Kafka, Airflow
+hoặc Docker Compose hoạt động. Frontend React/Vite hiện có vẫn là mock.
 
 ## Python workspace
 
@@ -23,14 +23,19 @@ phát triển và chạy quality gates ở repository root:
 
 ```bash
 uv sync --all-packages --locked
-uv run pytest tests/smoke -q
+uv run pytest -q
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy
 ```
 
 Root project chỉ quản lý workspace và công cụ phát triển, không chứa business
-package. Package riêng của từng service sẽ được bổ sung ở phase tiếp theo.
+package. Sáu service hiện chỉ có importable package và liveness entrypoint; chưa
+có API hoặc domain logic.
+
+Deterministic test data nằm tại `tests/fixtures/`, gồm RSS/HTML, transport
+failures, Kaggle-like JSONL và oracle timeline `00/06/12/18`. Test mặc định chạy
+offline, không cần Internet hoặc AI model.
 
 ## Invariant trung tâm
 

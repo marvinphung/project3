@@ -6,11 +6,11 @@
 
 ## Phase 0 — Foundation
 
-- [ ] WP 0.1 Root uv workspace and quality gates
-- [ ] WP 0.2 Service package skeleton and runtime conventions
-- [ ] WP 0.3 Event envelope and first contracts
-- [ ] WP 0.4 Deterministic fixture catalog
-- [ ] Phase Gate 0 approved
+- [x] WP 0.1 Root uv workspace and quality gates
+- [x] WP 0.2 Service package skeleton and runtime conventions
+- [x] WP 0.3 Event envelope and first contracts
+- [x] WP 0.4 Deterministic fixture catalog
+- [x] Phase Gate 0 approved
 
 ## Phase 1 — Local data plane
 

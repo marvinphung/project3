@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Trusted General Football</title>
+<item><guid>official-denial</guid><title>Real issue denial</title><link>https://trusted-a.test/football/official-denial</link></item>
+<item><guid>injury-vinicius</guid><title>Vinicius injury</title><link>https://trusted-a.test/football/vinicius-injury</link></item>
+<item><guid>match-real-arsenal</guid><title>Real Madrid beat Arsenal</title><link>https://trusted-b.test/football/real-madrid-arsenal</link></item>
+<item><guid>rate-limited</guid><title>Rate limited article</title><link>https://trusted-b.test/football/rate-limited</link></item>
+<item><guid>server-error</guid><title>Unavailable article</title><link>https://trusted-a.test/football/server-error</link></item>
+<item><guid>slow</guid><title>Slow article</title><link>https://trusted-b.test/football/slow</link></item>
+</channel></rss>

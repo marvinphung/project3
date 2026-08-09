@@ -1,0 +1,217 @@
+{
+  "catalog_version": 1,
+  "timezone": "Asia/Ho_Chi_Minh",
+  "sources": [
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3001",
+      "name": "Trusted Transfer News",
+      "rss_fixture": "tests/fixtures/mock-news/rss/trusted-transfer.xml"
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3002",
+      "name": "Trusted General Football",
+      "rss_fixture": "tests/fixtures/mock-news/rss/trusted-general.xml"
+    }
+  ],
+  "articles": [
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3101",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3001",
+      "scenario": "transfer_00_renewal",
+      "url": "https://trusted-a.test/football/vinicius-renewal",
+      "discovered_at": "2026-07-31T17:01:00Z",
+      "fixture": "tests/fixtures/mock-news/articles/vinicius-00.html",
+      "sha256": "14b5342b82092e6066a2e059d296c87cb17a4fbbe3fdf3700de181e3b6a420c7",
+      "transport": {"status": 200, "delay_ms": 0},
+      "duplicate_type": "NONE",
+      "entities": ["Vinícius Júnior", "Real Madrid"]
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3102",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3002",
+      "scenario": "transfer_06_contact",
+      "url": "https://trusted-b.test/football/arsenal-contact-vinicius",
+      "discovered_at": "2026-07-31T23:02:00Z",
+      "fixture": "tests/fixtures/mock-news/articles/vinicius-06.html",
+      "sha256": "029c418469ccfe018871f69b193aaea7624aaf634c4253c9e23c44bf476f5fc0",
+      "transport": {"status": 200, "delay_ms": 0},
+      "duplicate_type": "NONE",
+      "entities": ["Vinicius Junior", "Arsenal", "Real Madrid"]
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3103",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3001",
+      "scenario": "transfer_12_offer",
+      "url": "https://trusted-a.test/football/vinicius-offer",
+      "discovered_at": "2026-08-01T05:03:00Z",
+      "fixture": "tests/fixtures/mock-news/articles/vinicius-12.html",
+      "sha256": "6a943e3589db4db1cc2c18b0d4f04eb9823f81361c63606cf0bc17693076a282",
+      "transport": {"status": 200, "delay_ms": 0},
+      "duplicate_type": "NONE",
+      "entities": ["Vinícius Júnior", "Arsenal", "Real Madrid"]
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3104",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3002",
+      "scenario": "transfer_18_no_change",
+      "url": "https://trusted-b.test/football/vinicius-offer-update",
+      "discovered_at": "2026-08-01T11:04:00Z",
+      "fixture": "tests/fixtures/mock-news/articles/vinicius-18-no-change.html",
+      "sha256": "85ad08d3ad9af24481fee1f1a98ffc6e9b4bd412d3de779ce717f5b5ee459041",
+      "transport": {"status": 200, "delay_ms": 0},
+      "duplicate_type": "NEAR",
+      "entities": ["Vinicius Junior", "Arsenal", "Real"]
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3105",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3001",
+      "scenario": "url_duplicate",
+      "url": "https://trusted-a.test/football/vinicius-renewal?utm_source=rss",
+      "discovered_at": "2026-07-31T17:02:00Z",
+      "fixture": "tests/fixtures/mock-news/articles/vinicius-00.html",
+      "sha256": "14b5342b82092e6066a2e059d296c87cb17a4fbbe3fdf3700de181e3b6a420c7",
+      "transport": {"status": 200, "delay_ms": 0},
+      "duplicate_type": "URL",
+      "entities": ["Vinícius Júnior", "Real Madrid"]
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3106",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3002",
+      "scenario": "exact_duplicate",
+      "url": "https://trusted-b.test/football/syndicated-vinicius-offer",
+      "discovered_at": "2026-08-01T05:04:00Z",
+      "fixture": "tests/fixtures/mock-news/articles/vinicius-12.html",
+      "sha256": "6a943e3589db4db1cc2c18b0d4f04eb9823f81361c63606cf0bc17693076a282",
+      "transport": {"status": 200, "delay_ms": 0},
+      "duplicate_type": "EXACT",
+      "entities": ["Vinícius Júnior", "Arsenal", "Real Madrid"]
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3107",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3002",
+      "scenario": "near_duplicate",
+      "url": "https://trusted-b.test/football/gunners-vinicius-proposal",
+      "discovered_at": "2026-08-01T05:05:00Z",
+      "fixture": "tests/fixtures/mock-news/articles/vinicius-near-duplicate.html",
+      "sha256": "a3109c9e1301c1b5ead646b7bb1b9d5f4476e4078dc85a3229a8b2d826db1aeb",
+      "transport": {"status": 200, "delay_ms": 0},
+      "duplicate_type": "NEAR",
+      "entities": ["Vini Jr", "Gunners", "Real"]
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3108",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3001",
+      "scenario": "official_denial",
+      "url": "https://trusted-a.test/football/official-denial",
+      "discovered_at": "2026-08-01T11:05:00Z",
+      "fixture": "tests/fixtures/mock-news/articles/official-denial.html",
+      "sha256": "39d29c6c3b7ecb97e5547470d37870b4de3368f5d71c071d20ae87b43c73fa9c",
+      "transport": {"status": 200, "delay_ms": 0},
+      "duplicate_type": "NONE",
+      "entities": ["Vinícius Júnior", "Real Madrid"]
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3109",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3001",
+      "scenario": "injury",
+      "url": "https://trusted-a.test/football/vinicius-injury",
+      "discovered_at": "2026-08-01T05:06:00Z",
+      "fixture": "tests/fixtures/mock-news/articles/injury.html",
+      "sha256": "3bd82121d1aa31fde1cd71951986e36f864e4c4ff34010403cdcca10c12931e2",
+      "transport": {"status": 200, "delay_ms": 0},
+      "duplicate_type": "NONE",
+      "entities": ["Vinícius Júnior", "Real Madrid", "Xabi Alonso", "La Liga"]
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3110",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3002",
+      "scenario": "match",
+      "url": "https://trusted-b.test/football/real-madrid-arsenal",
+      "discovered_at": "2026-08-01T05:07:00Z",
+      "fixture": "tests/fixtures/mock-news/articles/match.html",
+      "sha256": "0e1c8e4822d06ec909493b90784d291eb21101edbbe946db4af9fcaefb78b2ca",
+      "transport": {"status": 200, "delay_ms": 0},
+      "duplicate_type": "NONE",
+      "entities": ["Real Madrid", "Arsenal"]
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3111",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3002",
+      "scenario": "http_429",
+      "url": "https://trusted-b.test/football/rate-limited",
+      "discovered_at": "2026-08-01T05:08:00Z",
+      "fixture": null,
+      "sha256": null,
+      "transport": {"status": 429, "delay_ms": 0, "retry_after_seconds": 120},
+      "duplicate_type": null,
+      "entities": []
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3112",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3001",
+      "scenario": "http_500",
+      "url": "https://trusted-a.test/football/server-error",
+      "discovered_at": "2026-08-01T05:09:00Z",
+      "fixture": null,
+      "sha256": null,
+      "transport": {"status": 500, "delay_ms": 0},
+      "duplicate_type": null,
+      "entities": []
+    },
+    {
+      "id": "018f8b45-b634-7c81-a47d-9a7c2f3c3113",
+      "source_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3002",
+      "scenario": "timeout",
+      "url": "https://trusted-b.test/football/slow",
+      "discovered_at": "2026-08-01T05:10:00Z",
+      "fixture": null,
+      "sha256": null,
+      "transport": {"status": "TIMEOUT", "delay_ms": 30000},
+      "duplicate_type": null,
+      "entities": []
+    }
+  ],
+  "timeline_windows": [
+    {
+      "story_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3999",
+      "window_start": "2026-08-01T00:00:00+07:00",
+      "article_ids": ["018f8b45-b634-7c81-a47d-9a7c2f3c3101"],
+      "creates_timeline_entry": true,
+      "summary_en": "Real Madrid opened renewal talks with Vinicius Junior.",
+      "summary_vi": "Real Madrid bắt đầu đàm phán gia hạn với Vinícius Júnior."
+    },
+    {
+      "story_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3999",
+      "window_start": "2026-08-01T06:00:00+07:00",
+      "article_ids": ["018f8b45-b634-7c81-a47d-9a7c2f3c3102"],
+      "creates_timeline_entry": true,
+      "summary_en": "Arsenal contacted representatives of Vinicius Junior.",
+      "summary_vi": "Arsenal đã liên hệ với đại diện của Vinícius Júnior."
+    },
+    {
+      "story_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3999",
+      "window_start": "2026-08-01T12:00:00+07:00",
+      "article_ids": [
+        "018f8b45-b634-7c81-a47d-9a7c2f3c3103",
+        "018f8b45-b634-7c81-a47d-9a7c2f3c3106",
+        "018f8b45-b634-7c81-a47d-9a7c2f3c3107"
+      ],
+      "creates_timeline_entry": true,
+      "summary_en": "Arsenal submitted a €180 million offer to Real Madrid.",
+      "summary_vi": "Arsenal đã gửi đề nghị trị giá 180 triệu euro tới Real Madrid."
+    },
+    {
+      "story_id": "018f8b45-b634-7c81-a47d-9a7c2f3c3999",
+      "window_start": "2026-08-01T18:00:00+07:00",
+      "article_ids": ["018f8b45-b634-7c81-a47d-9a7c2f3c3104"],
+      "creates_timeline_entry": false,
+      "summary_en": null,
+      "summary_vi": null
+    }
+  ],
+  "ai_fixtures": [
+    {"kind": "valid", "path": "tests/fixtures/ai/valid-results.jsonl"},
+    {"kind": "invalid_json", "path": "tests/fixtures/ai/invalid-results.jsonl"},
+    {"kind": "partial", "path": "tests/fixtures/ai/partial-results.jsonl"}
+  ]
+}

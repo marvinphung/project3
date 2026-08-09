@@ -31,6 +31,11 @@ Các fixture độc lập gồm injury của Vinícius và match Real Madrid–A
 không được merge vào Transfer Story. Aliases `Vini Jr`, `Vinicius Junior` và
 `Vinícius Júnior` phải resolve cùng entity.
 
+Catalog tại `tests/fixtures/mock-news/catalog.json` giữ stable IDs, timestamps,
+content hashes, local RSS/HTML paths, transport failures và expected timeline
+outcome. `tests/fixtures/ai/` giữ valid, invalid và partial JSONL. Mọi fixture
+test chạy offline; thay nội dung HTML bắt buộc cập nhật hash có chủ đích.
+
 ## 4. AI/Kaggle tests
 
 - Bài dài được chunk, claims merge deterministic và evidence quote còn truy được.
@@ -74,6 +79,6 @@ timeline/failure.
 
 Load report ghi máy, container limits, source/article counts, worker/partition,
 payload/context size, duration, p50/p95/p99, errors và final invariants. Không
-invent benchmark. Chạy test hẹp trước rồi broader verification. Exact `uv`,
-frontend, Docker, migration và E2E commands chỉ được công bố sau khi thực sự
-được cấu hình và chạy thành công.
+invent benchmark. Chạy test hẹp trước rồi broader verification. Python quality
+gates dùng các lệnh đã verify trong README; exact frontend, Docker, migration và
+E2E commands chỉ được công bố sau khi thực sự được cấu hình và chạy thành công.

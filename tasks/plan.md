@@ -27,5 +27,6 @@ Canonical detailed plan:
 
 ## Current next action
 
-Do not implement until the user approves this plan. After approval, begin only
-with WP 0.1 and stop at Collaboration Gate 0.1.
+Phase 0 was approved after Collaboration Gate 0.4. The next action is the WP 1.1
+Kickoff for minimal local Compose dependencies; do not implement it before the
+user approves that kickoff.
