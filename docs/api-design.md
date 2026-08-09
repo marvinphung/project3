@@ -53,6 +53,36 @@ Không trả entry cho cửa sổ không có material change.
 
 ## 4. Admin capabilities
 
+### Source management API đã hiện thực
+
+| Method | Path | Boundary | Mục đích |
+| --- | --- | --- | --- |
+| `POST` | `/admin/v1/sources` | Admin | Tạo RSS/mock source |
+| `GET` | `/admin/v1/sources` | Admin | List có limit/offset |
+| `PATCH` | `/admin/v1/sources/{id}` | Admin | Thay cấu hình với `expected_version` |
+| `POST` | `/admin/v1/sources/{id}/toggle` | Admin | Enable/disable với `expected_version` |
+| `GET` | `/internal/v1/sources/due` | Internal | Lấy source đến hạn tại thời điểm UTC |
+| `POST` | `/internal/v1/crawl-batches` | Internal | Mở batch idempotent |
+| `POST` | `/internal/v1/crawl-batches/{id}/complete` | Internal | Đóng batch với terminal outcome |
+
+Admin và internal bearer token là credential local tách biệt. Chúng chỉ là
+service boundary tạm thời; user login/RBAC đầy đủ thuộc Phase 5.
+
+Error response thống nhất:
+
+```json
+{
+  "error": {
+    "code": "SOURCE_CONFLICT",
+    "message": "source version conflict: expected 1, current 2",
+    "details": []
+  }
+}
+```
+
+OpenAPI được FastAPI sinh tại `/openapi.json`; tests xác nhận security scheme và
+các admin/internal paths bắt buộc.
+
 | Capability | Quyền |
 | --- | --- |
 | CRUD/toggle RSS source, crawl policy, reliability metadata | Admin |

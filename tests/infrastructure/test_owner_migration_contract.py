@@ -66,3 +66,13 @@ def test_owner_migrations_render_schema_qualified_sql_without_cross_owner_refere
     assert result.returncode == 0, result.stderr
     assert f"CREATE SCHEMA IF NOT EXISTS {owned_schema}" in result.stdout
     assert f"{foreign_schema}." not in result.stdout
+
+
+def test_source_migrations_add_optimistic_version_and_batch_idempotency() -> None:
+    migration = (
+        ROOT / "services/crawler-service/migrations/versions/source_0002_add_source_concurrency.py"
+    ).read_text()
+
+    assert '"version"' in migration
+    assert '"idempotency_key"' in migration
+    assert "uq_crawl_batches_idempotency_key" in migration

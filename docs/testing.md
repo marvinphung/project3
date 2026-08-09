@@ -28,6 +28,17 @@ FOOTBALLPULSE_RUN_MONGO_INTEGRATION=1 uv run pytest -q \
 Test chứng minh index bootstrap chạy lặp, event replay không ghi thêm và unique
 outbox conflict rollback cả article lẫn processed-event marker.
 
+Source repository integration test cũng tạo/xóa database PostgreSQL tạm:
+
+```bash
+FOOTBALLPULSE_RUN_SOURCE_INTEGRATION=1 uv run pytest -q \
+  services/crawler-service/tests/test_postgres_repositories_integration.py
+```
+
+FastAPI TestClient của Starlette 1.6 dùng `httpx2`. Trong Codex sandbox, test
+này cần chạy ngoài sandbox vì blocking portal cần thread/event-loop; đây không
+phải yêu cầu khi developer chạy trực tiếp trên máy local.
+
 ## 3. Acceptance scenario theo cửa sổ
 
 | Window | Input | Kết quả bắt buộc |

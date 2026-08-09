@@ -112,6 +112,17 @@ Alembic dùng các biến `FOOTBALLPULSE_POSTGRES_*`. Crawler ghi version vào
 `source_schema.alembic_version_source`, còn API Gateway ghi vào
 `identity_schema.alembic_version_identity`.
 
+Crawler Source API yêu cầu `FOOTBALLPULSE_CRAWLER_ADMIN_TOKEN` và
+`FOOTBALLPULSE_CRAWLER_INTERNAL_TOKEN`; service từ chối khởi động nếu thiếu một
+trong hai. Giá trị trong `.env.example` chỉ dùng local. Sau migration, chạy:
+
+```bash
+uv run footballpulse-crawler-service
+```
+
+Mặc định service bind `127.0.0.1:8011`; có thể đổi bằng
+`FOOTBALLPULSE_CRAWLER_PORT`.
+
 Có thể khởi động thủ công:
 
 ```bash

@@ -27,6 +27,6 @@ Canonical detailed plan:
 
 ## Current next action
 
-Phase 1 was approved after Phase Gate 1. The next action is the WP 2.1 Kickoff
-for source management domain and internal API; do not implement it before the
-user approves that kickoff.
+WP 2.1 was approved after Collaboration Gate 2.1. The next action is the WP 2.2
+Kickoff for safe bounded RSS discovery; do not implement it before the user
+approves that kickoff.

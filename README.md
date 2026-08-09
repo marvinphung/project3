@@ -50,6 +50,18 @@ uv run alembic -c services/api-gateway/alembic.ini upgrade head
 Crawler chỉ được migrate `source_schema`; API Gateway chỉ được migrate
 `identity_schema`. Mỗi schema có Alembic version table riêng.
 
+Chạy Crawler Source API sau khi load `.env` và migrate PostgreSQL:
+
+```bash
+set -a
+source .env
+set +a
+uv run footballpulse-crawler-service
+```
+
+Service mặc định nghe tại `127.0.0.1:8011`; OpenAPI ở `/openapi.json`. Admin và
+internal routes dùng hai bearer token riêng trong `.env`.
+
 Root project chỉ quản lý workspace và công cụ phát triển, không chứa business
 package. Sáu service hiện chỉ có importable package và liveness entrypoint; chưa
 có API hoặc domain logic.

@@ -21,7 +21,7 @@
 
 ## Phase 2 — RSS to evidence
 
-- [ ] WP 2.1 Source management domain/internal API
+- [x] WP 2.1 Source management domain/internal API
 - [ ] WP 2.2 Safe bounded RSS discovery
 - [ ] WP 2.3 HTML extraction and normalization
 - [ ] WP 2.4 Immutable article version consumer
