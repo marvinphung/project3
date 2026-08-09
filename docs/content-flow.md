@@ -31,6 +31,19 @@ connect/read timeout, redirect và response-size limit. `429` tôn trọng
 `Retry-After`; selected `5xx` và timeout được retry có backoff. Public user không
 được cung cấp crawl target.
 
+Trước mỗi request và mỗi redirect, crawler chỉ chấp nhận HTTP/HTTPS trên port
+80/443, không cho URL credentials, bắt buộc hostname thuộc allowlist và từ chối
+nếu **bất kỳ** địa chỉ DNS nào là loopback/private/link-local/multicast/reserved.
+RSS tối đa 2 MiB, tối đa 3 redirect và 200 entries; response được đọc streaming,
+không nạp vô hạn vào memory. Discovery chỉ giữ GUID, title, URL và publish time;
+HTML content thuộc WP 2.3.
+
+MVP còn residual risk DNS rebinding giữa bước resolve để kiểm tra và bước HTTP
+client tự resolve để kết nối (TOCTOU). Vì source do Admin cấu hình và hệ thống
+chạy local, rủi ro này được chấp nhận có ghi nhận; trước khi cho user nhập URL
+hoặc chạy trong network nhạy cảm cần pin IP đã kiểm tra hoặc đặt egress proxy có
+network policy.
+
 ## 3. Clean và version
 
 Trafilatura trích nội dung chính; BeautifulSoup là fallback cho source có cấu

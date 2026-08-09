@@ -83,7 +83,12 @@ test chạy offline; thay nội dung HTML bắt buộc cập nhật hash có ch�
 ## 6. Failure/recovery tests
 
 - 429 tôn trọng `Retry-After`; selected 5xx/timeout retry đúng budget.
-- Unsafe redirect/oversized response bị chặn.
+- URL credentials, host ngoài allowlist, DNS mixed public/private, unsafe redirect,
+  MIME sai và response vượt giới hạn bị chặn.
+- RSS malformed có entry hợp lệ được giữ kèm warning; feed không có entry dùng
+  được bị fail rõ ràng.
+- Global/per-domain concurrency không vượt limit, queue/task count hữu hạn và
+  lỗi một source không hủy kết quả source khác; cancellation không bị retry.
 - Duplicate Kafka delivery không tạo article/claim/timeline/publication lặp.
 - Worker restart sau durable write trước offset commit vẫn giữ invariant.
 - Invalid event/output không retry vô hạn và đi review/DLQ với redacted context.
