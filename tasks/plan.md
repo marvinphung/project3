@@ -27,6 +27,6 @@ Canonical detailed plan:
 
 ## Current next action
 
-WP 1.3 was approved after Collaboration Gate 1.3. The next action is Phase Gate
-1 for the complete local data plane; do not start Phase 2 before the user
-approves that gate.
+Phase 1 was approved after Phase Gate 1. The next action is the WP 2.1 Kickoff
+for source management domain and internal API; do not implement it before the
+user approves that kickoff.
