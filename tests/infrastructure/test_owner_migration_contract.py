@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).parents[2]
+
+OWNER_MIGRATIONS = {
+    "crawler-service": ("source_schema", "alembic_version_source"),
+    "api-gateway": ("identity_schema", "alembic_version_identity"),
+}
+
+
+@pytest.mark.parametrize(
+    ("service", "schema_name", "version_table"),
+    [(service, *contract) for service, contract in OWNER_MIGRATIONS.items()],
+)
+def test_each_database_owner_has_an_independent_alembic_environment(
+    service: str,
+    schema_name: str,
+    version_table: str,
+) -> None:
+    migration_root = ROOT / "services" / service / "migrations"
+    config = (ROOT / "services" / service / "alembic.ini").read_text()
+    environment = (migration_root / "env.py").read_text()
+
+    assert (migration_root / "versions").is_dir()
+    assert "script_location = %(here)s/migrations" in config
+    assert f'SCHEMA_NAME = "{schema_name}"' in environment
+    assert f'VERSION_TABLE = "{version_table}"' in environment
+    assert "version_table=VERSION_TABLE" in environment
+    assert "version_table_schema=SCHEMA_NAME" in environment
+
+
+@pytest.mark.parametrize(
+    ("service", "owned_schema", "foreign_schema"),
+    [
+        ("crawler-service", "source_schema", "identity_schema"),
+        ("api-gateway", "identity_schema", "source_schema"),
+    ],
+)
+def test_owner_migrations_render_schema_qualified_sql_without_cross_owner_references(
+    service: str,
+    owned_schema: str,
+    foreign_schema: str,
+) -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "alembic",
+            "-c",
+            f"services/{service}/alembic.ini",
+            "upgrade",
+            "head",
+            "--sql",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"CREATE SCHEMA IF NOT EXISTS {owned_schema}" in result.stdout
+    assert f"{foreign_schema}." not in result.stdout

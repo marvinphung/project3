@@ -15,7 +15,7 @@
 ## Phase 1 — Local data plane
 
 - [x] WP 1.1 Minimal Compose dependencies
-- [ ] WP 1.2 Source/identity migrations
+- [x] WP 1.2 Source/identity migrations
 - [ ] WP 1.3 Mongo indexes, processed events and outbox
 - [ ] Phase Gate 1 approved
 

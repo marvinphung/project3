@@ -100,6 +100,18 @@ Script thực hiện health wait, bootstrap quyền volume Kafka, khởi tạo M
 replica set, tạo Kafka smoke topic bằng `--if-not-exists`, commit MongoDB
 transaction, kiểm tra extension `vector` và Redis `PONG`.
 
+Sau khi PostgreSQL healthy, từng service owner tự chạy migration của mình:
+
+```bash
+uv run alembic -c services/crawler-service/alembic.ini upgrade head
+uv run alembic -c services/api-gateway/alembic.ini upgrade head
+```
+
+Có thể đặt `FOOTBALLPULSE_DATABASE_URL` để override connection URL; nếu không,
+Alembic dùng các biến `FOOTBALLPULSE_POSTGRES_*`. Crawler ghi version vào
+`source_schema.alembic_version_source`, còn API Gateway ghi vào
+`identity_schema.alembic_version_identity`.
+
 Có thể khởi động thủ công:
 
 ```bash

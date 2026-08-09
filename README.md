@@ -40,6 +40,16 @@ docker compose --env-file .env --profile core down
 Script có thể chạy lặp lại, không xóa named volumes. Các port chỉ bind vào
 `127.0.0.1`; credential trong `.env.example` chỉ dành cho phát triển local.
 
+Chạy migration theo đúng data owner sau khi PostgreSQL healthy:
+
+```bash
+uv run alembic -c services/crawler-service/alembic.ini upgrade head
+uv run alembic -c services/api-gateway/alembic.ini upgrade head
+```
+
+Crawler chỉ được migrate `source_schema`; API Gateway chỉ được migrate
+`identity_schema`. Mỗi schema có Alembic version table riêng.
+
 Root project chỉ quản lý workspace và công cụ phát triển, không chứa business
 package. Sáu service hiện chỉ có importable package và liveness entrypoint; chưa
 có API hoặc domain logic.

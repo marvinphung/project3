@@ -90,6 +90,39 @@ score, reason và timestamp. Duplicate vẫn là evidence và không bị xóa.
 crawl interval/concurrency và operational timestamps. `crawl_batches` và
 `crawl_attempts` giữ schedule window, counts, outcome và redacted failure.
 
+Owner migration baseline của Crawler:
+
+```mermaid
+erDiagram
+    SOURCES ||--o{ CRAWL_BATCHES : schedules
+    CRAWL_BATCHES ||--o{ CRAWL_ATTEMPTS : records
+
+    SOURCES {
+        uuid id PK
+        text rss_url UK
+        text[] allowed_domains
+        smallint reliability_tier
+        boolean enabled
+    }
+    CRAWL_BATCHES {
+        uuid id PK
+        uuid source_id FK
+        timestamptz window_started_at
+        text status
+    }
+    CRAWL_ATTEMPTS {
+        uuid id PK
+        uuid batch_id FK
+        text article_url
+        smallint attempt_number
+        text outcome
+    }
+```
+
+Các bảng trên nằm trong `source_schema`. `identity_schema` hiện chỉ là namespace
+và migration history; bảng user/role được hoãn tới Phase 5 để không khóa thiết kế
+auth quá sớm. Không có FK hoặc migration xuyên owner.
+
 #### Entity catalog
 
 `entities` có loại `PLAYER|COACH|CLUB|COMPETITION`, canonical name và stable

@@ -2,7 +2,11 @@
 name = "footballpulse-crawler-service"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "alembic>=1.18,<2",
+    "psycopg[binary]>=3.3,<4",
+    "sqlalchemy>=2.0,<3",
+]
 
 [project.scripts]
 footballpulse-crawler-service-health = "footballpulse_crawler_service.health:main"
