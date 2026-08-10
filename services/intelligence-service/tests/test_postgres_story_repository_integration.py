@@ -12,7 +12,11 @@ from uuid import UUID, uuid4
 import psycopg
 import pytest
 import sqlalchemy as sa
-from footballpulse_intelligence_service.application.story_matching import StoryCandidateContext
+from footballpulse_intelligence_service.application.story_matching import (
+    StoryCandidateContext,
+    StoryMatchingOrchestrator,
+    StoryMatchRequest,
+)
 from footballpulse_intelligence_service.domain.delivery import OutboxEvent, ProcessedEvent
 from footballpulse_intelligence_service.domain.embedding import (
     EMBEDDING_DIMENSIONS,
@@ -731,4 +735,121 @@ def test_context_repository_loads_current_story_entities_and_predicates(
             predicates=(ClaimPredicate.CONTACTED,),
         ),
     )
+    engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
+)
+def test_story_matching_orchestration_runs_end_to_end_with_postgres(
+    migrated_database: str,
+) -> None:
+    engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
+    story_id = UUID(int=800)
+    with engine.begin() as connection:
+        connection.execute(
+            stories.insert(),
+            {
+                "id": story_id,
+                "event_type": "TRANSFER",
+                "status": "DEVELOPING",
+                "confidence_score": Decimal("0.5000"),
+                "first_seen_at": NOW,
+                "last_seen_at": NOW,
+                "version": 1,
+                "created_at": NOW,
+                "updated_at": NOW,
+            },
+        )
+        connection.execute(
+            story_entities.insert(),
+            [
+                {
+                    "id": UUID(int=801),
+                    "story_id": story_id,
+                    "entity_id": PLAYER_ID,
+                    "entity_type": "PLAYER",
+                    "created_at": NOW,
+                },
+                {
+                    "id": UUID(int=802),
+                    "story_id": story_id,
+                    "entity_id": ARSENAL_ID,
+                    "entity_type": "CLUB",
+                    "created_at": NOW,
+                },
+            ],
+        )
+        connection.execute(
+            claims_table.insert(),
+            {
+                "id": UUID(int=803),
+                "story_id": story_id,
+                "claim_fingerprint": "d" * 64,
+                "subject_entity_id": ARSENAL_ID,
+                "predicate": "CONTACTED",
+                "object_entity_id": PLAYER_ID,
+                "object_value": None,
+                "statement_en": "Arsenal contacted Vinicius",
+                "certainty": Decimal("0.5000"),
+                "occurred_at": NOW,
+                "occurred_at_bucket": NOW,
+                "created_at": NOW,
+            },
+        )
+    vector = EmbeddingVector.create([1.0] + [0.0] * (EMBEDDING_DIMENSIONS - 1))
+    candidate_repository = PostgresStoryCandidateRepository(engine)
+    candidate_repository.add_embedding_once(
+        StoryEmbeddingRecord.create(
+            story_id=story_id,
+            story_version=1,
+            input_hash="e" * 64,
+            input_builder_version="story-embedding-input-v1",
+            model_name="BAAI/bge-small-en-v1.5",
+            model_version="pinned-revision",
+            vector=vector,
+            token_count=20,
+            now=NOW,
+        )
+    )
+    orchestrator = StoryMatchingOrchestrator(
+        candidate_repository=candidate_repository,
+        context_repository=PostgresStoryCandidateContextRepository(engine),
+        audit_repository=PostgresStoryMatchAuditRepository(engine),
+        policy=StoryCandidateDecisionPolicy(
+            StoryCandidatePolicyConfig(55.0, 75.0, 5.0, "story-matcher-v1")
+        ),
+    )
+
+    result = orchestrator.match(
+        StoryMatchRequest(
+            article_version_id=UUID(int=804),
+            input_hash="f" * 64,
+            event_type=StoryEventType.TRANSFER,
+            entity_ids=(PLAYER_ID, ARSENAL_ID),
+            primary_entity_ids=(PLAYER_ID,),
+            predicates=(ClaimPredicate.SUBMITTED_BID,),
+            observed_at=NOW,
+            query_vector=tuple(vector.values),
+            input_builder_version="story-embedding-input-v1",
+            embedding_model_name="BAAI/bge-small-en-v1.5",
+            embedding_model_version="pinned-revision",
+        ),
+        now=NOW,
+    )
+
+    assert result.decision.action.value == "ATTACH"
+    assert result.decision.selected_story_id == story_id
+    assert result.audit.selected_story_id == story_id
+    with engine.connect() as connection:
+        count = connection.execute(
+            sa.text(
+                "SELECT count(*) FROM intelligence_schema.story_match_decisions "
+                "WHERE id = :id"
+            ),
+            {"id": result.audit.id},
+        ).scalar_one()
+    assert count == 1
     engine.dispose()
