@@ -146,6 +146,7 @@ def aggregate() -> tuple[
         story_id=story.id,
         article_version_id=ARTICLE_ID,
         source_id=SOURCE_ID,
+        source_cluster_id=UUID(int=109),
         source_reliability_tier=1,
         published_at=NOW,
         observed_at=NOW,
@@ -295,7 +296,15 @@ def test_create_aggregate_and_replay_are_atomic_and_idempotent(
                 "(SELECT count(*) FROM intelligence_schema.outbox_events)"
             )
         ).one()
+        source_cluster = connection.execute(
+            sa.text(
+                "SELECT source_cluster_id FROM intelligence_schema.story_sources "
+                "WHERE id = :source_id"
+            ),
+            {"source_id": source.id},
+        ).scalar_one()
     assert counts == (1, 1, 2, 1, 1, 1, 1)
+    assert source_cluster == UUID(int=109)
     engine.dispose()
 
 

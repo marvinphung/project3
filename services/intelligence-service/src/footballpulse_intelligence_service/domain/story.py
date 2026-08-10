@@ -137,6 +137,7 @@ class StorySource:
     story_id: UUID
     article_version_id: UUID
     source_id: UUID
+    source_cluster_id: UUID | None
     source_reliability_tier: int
     published_at: datetime
     observed_at: datetime
@@ -152,6 +153,7 @@ class StorySource:
         source_reliability_tier: int,
         published_at: datetime,
         observed_at: datetime,
+        source_cluster_id: UUID | None = None,
     ) -> StorySource:
         if not 1 <= source_reliability_tier <= 5:
             raise ValueError("source reliability tier must be between 1 and 5")
@@ -160,6 +162,7 @@ class StorySource:
             story_id,
             article_version_id,
             source_id,
+            source_cluster_id,
             source_reliability_tier,
             _aware(published_at, "published_at"),
             _aware(observed_at, "observed_at"),

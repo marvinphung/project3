@@ -166,6 +166,7 @@ story_sources = sa.Table(
     sa.Column("story_id", postgresql.UUID(as_uuid=True), nullable=False),
     sa.Column("article_version_id", postgresql.UUID(as_uuid=True), nullable=False),
     sa.Column("source_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("source_cluster_id", postgresql.UUID(as_uuid=True), nullable=True),
     sa.Column("source_reliability_tier", sa.SmallInteger(), nullable=False),
     sa.Column("published_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("observed_at", sa.DateTime(timezone=True), nullable=False),

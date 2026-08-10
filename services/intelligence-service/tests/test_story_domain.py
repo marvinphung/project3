@@ -96,6 +96,7 @@ def test_source_and_entity_links_enforce_database_contract() -> None:
     )
 
     assert source.source_reliability_tier == 1
+    assert source.source_cluster_id is None
     assert entity.entity_type is EntityType.PLAYER
     with pytest.raises(ValueError, match="reliability"):
         StorySource.create(
@@ -107,6 +108,18 @@ def test_source_and_entity_links_enforce_database_contract() -> None:
             published_at=NOW,
             observed_at=NOW,
         )
+
+    clustered = StorySource.create(
+        link_id=UUID(int=14),
+        story_id=STORY_ID,
+        article_version_id=ARTICLE_ID,
+        source_id=SOURCE_ID,
+        source_cluster_id=UUID(int=15),
+        source_reliability_tier=1,
+        published_at=NOW,
+        observed_at=NOW,
+    )
+    assert clustered.source_cluster_id == UUID(int=15)
 
 
 def test_claim_fingerprint_is_deterministic_for_equivalent_object_values() -> None:

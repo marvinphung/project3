@@ -71,6 +71,7 @@ def _source_values(source: StorySource) -> dict[str, object]:
         "story_id": source.story_id,
         "article_version_id": source.article_version_id,
         "source_id": source.source_id,
+        "source_cluster_id": source.source_cluster_id,
         "source_reliability_tier": source.source_reliability_tier,
         "published_at": source.published_at,
         "observed_at": source.observed_at,
