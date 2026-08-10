@@ -27,7 +27,7 @@ Canonical detailed plan:
 
 ## Current next action
 
-WP 4.1 implementation is complete and awaits Collaboration Gate 4.1. The next
-action is user review of the Story/Claim schema, fingerprint/evidence invariants,
-optimistic concurrency and atomic processed-event/outbox behavior. Do not start
-WP 4.2 candidate retrieval before that approval.
+WP 4.1 and Collaboration Gate 4.1 are complete. The WP 4.2 hybrid candidate
+retrieval design is approved. The next action is incremental implementation of
+versioned Story embeddings, hard-filter/vector retrieval, explainable rule score
+and configurable decisions; thresholds remain unlocked until benchmark review.
