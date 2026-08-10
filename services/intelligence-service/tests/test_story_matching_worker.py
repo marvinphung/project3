@@ -13,6 +13,7 @@ from footballpulse_intelligence_service.application.story_matching_worker import
     StoryMatchWorkRequest,
     StoryWorkStatus,
 )
+from footballpulse_intelligence_service.domain.delivery import ProcessedEvent
 from footballpulse_intelligence_service.domain.errors import StoryConflictError
 from footballpulse_intelligence_service.domain.story_candidate_decision import (
     MatchAction,
@@ -53,6 +54,19 @@ class FakeMatcher:
         if isinstance(self.outcome, BaseException):
             raise self.outcome
         return self.outcome  # type: ignore[no-any-return]
+
+
+class FakeProcessedStore:
+    def __init__(self, *, processed: bool = False) -> None:
+        self.processed = processed
+        self.marked: list[ProcessedEvent] = []
+
+    def is_processed(self, consumer_name: str, event_id: UUID) -> bool:
+        return self.processed
+
+    def mark_processed(self, event: ProcessedEvent) -> None:
+        self.marked.append(event)
+        self.processed = True
 
 
 def match_result(action: MatchAction) -> StoryMatchResult:
@@ -125,6 +139,28 @@ async def test_worker_marks_known_matching_failures_retryable() -> None:
     assert work.result is None
     assert work.error_type == "StoryCandidateRetryableError"
     assert work.failed_at == NOW
+
+
+@pytest.mark.asyncio
+async def test_worker_skips_duplicate_and_marks_successful_event_processed() -> None:
+    store = FakeProcessedStore()
+    worker = StoryMatchingWorker(
+        FakeMatcher(match_result(MatchAction.ATTACH)),
+        processed_store=store,
+        consumer_name="story-matching-v1",
+        clock=lambda: NOW,
+    )
+
+    work = await worker.run(work_request())
+
+    assert work.status is StoryWorkStatus.COMPLETED_ATTACHED
+    assert len(store.marked) == 1
+    assert store.marked[0].consumer_name == "story-matching-v1"
+
+    duplicate = await worker.run(work_request())
+    assert duplicate.status is StoryWorkStatus.SKIPPED_DUPLICATE
+    assert duplicate.result is None
+    assert len(store.marked) == 1
 
 
 @pytest.mark.asyncio

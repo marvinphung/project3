@@ -13,6 +13,7 @@ from footballpulse_intelligence_service.application.story_matching import (
     StoryMatchRequest,
     StoryMatchResult,
 )
+from footballpulse_intelligence_service.domain.delivery import ProcessedEvent
 from footballpulse_intelligence_service.domain.errors import StoryConflictError
 from footballpulse_intelligence_service.domain.story_candidate_decision import (
     MatchAction,
@@ -24,10 +25,17 @@ class StoryMatcher(Protocol):
     def match(self, request: StoryMatchRequest, *, now: datetime) -> StoryMatchResult: ...
 
 
+class ProcessedEventStore(Protocol):
+    def is_processed(self, consumer_name: str, event_id: UUID) -> bool: ...
+
+    def mark_processed(self, event: ProcessedEvent) -> None: ...
+
+
 class StoryWorkStatus(StrEnum):
     COMPLETED_ATTACHED = "COMPLETED_ATTACHED"
     COMPLETED_CREATED = "COMPLETED_CREATED"
     COMPLETED_REVIEW = "COMPLETED_REVIEW"
+    SKIPPED_DUPLICATE = "SKIPPED_DUPLICATE"
     RETRYABLE_FAILURE = "RETRYABLE_FAILURE"
     FAILED = "FAILED"
 
@@ -53,17 +61,32 @@ class StoryMatchingWorker:
         self,
         matcher: StoryMatcher,
         *,
+        processed_store: ProcessedEventStore | None = None,
+        consumer_name: str = "story-matching-v1",
         max_concurrency: int = 1,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         if not 1 <= max_concurrency <= 2:
             raise ValueError("Story matching concurrency must be between 1 and 2")
         self._matcher = matcher
+        self._processed_store = processed_store
+        self._consumer_name = consumer_name
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._clock = clock
 
     async def run(self, request: StoryMatchWorkRequest) -> StoryWorkResult:
         async with self._semaphore:
+            if (
+                self._processed_store is not None
+                and self._processed_store.is_processed(self._consumer_name, request.event_id)
+            ):
+                return StoryWorkResult(
+                    request.event_id,
+                    StoryWorkStatus.SKIPPED_DUPLICATE,
+                    None,
+                    None,
+                    None,
+                )
             try:
                 result = await asyncio.to_thread(
                     self._matcher.match,
@@ -90,6 +113,25 @@ class StoryMatchingWorker:
                     type(error).__name__,
                     self._clock(),
                 )
+            if self._processed_store is not None:
+                try:
+                    self._processed_store.mark_processed(
+                        ProcessedEvent.create(
+                            record_id=request.event_id,
+                            consumer_name=self._consumer_name,
+                            event_id=request.event_id,
+                            event_type="story.match.v1",
+                            processed_at=self._clock(),
+                        )
+                    )
+                except Exception as error:
+                    return StoryWorkResult(
+                        request.event_id,
+                        StoryWorkStatus.RETRYABLE_FAILURE,
+                        None,
+                        type(error).__name__,
+                        self._clock(),
+                    )
         status = {
             MatchAction.ATTACH: StoryWorkStatus.COMPLETED_ATTACHED,
             MatchAction.CREATE: StoryWorkStatus.COMPLETED_CREATED,
