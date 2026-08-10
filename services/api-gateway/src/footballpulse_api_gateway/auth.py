@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from typing import Protocol
 
 import jwt
 from argon2 import PasswordHasher
@@ -56,6 +57,10 @@ class InMemoryUserRepository:
 
     def get(self, username: str) -> User | None:
         return self._users.get(username)
+
+
+class UserRepository(Protocol):
+    def get(self, username: str) -> User | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +130,7 @@ class TokenService:
 
 
 class AuthService:
-    def __init__(self, users: InMemoryUserRepository, tokens: TokenService) -> None:
+    def __init__(self, users: UserRepository, tokens: TokenService) -> None:
         self._users = users
         self.tokens = tokens
 
