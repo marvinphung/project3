@@ -7,10 +7,12 @@ dependencies = [
     "fastapi>=0.116,<1",
     "psycopg[binary]>=3.3,<4",
     "sqlalchemy>=2.0,<3",
+    "uvicorn>=0.35,<1",
 ]
 
 [project.scripts]
 footballpulse-api-gateway-health = "footballpulse_api_gateway.health:main"
+footballpulse-api-gateway = "footballpulse_api_gateway.runtime:main"
 
 [build-system]
 requires = ["hatchling"]
