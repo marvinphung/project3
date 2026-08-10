@@ -7,6 +7,7 @@ import httpx
 import pytest
 from footballpulse_api_gateway.api.editorial_admin import (
     EditorialRevisionView,
+    PublicationView,
     create_editorial_admin_app,
 )
 
@@ -38,6 +39,19 @@ class MemoryEditorialService:
     def reject(self, article_id, *, expected_revision_number, now):
         return self._result("reject", article_id, expected_revision_number)
 
+    def publish(self, article_id, *, slug, idempotency_key, now):
+        return PublicationView(
+            id=UUID(int=3),
+            generated_article_id=article_id,
+            revision_id=UUID(int=2),
+            story_id=UUID(int=4),
+            story_version=4,
+            slug=slug,
+            title_vi="Arsenal hỏi mua",
+            body_vi="Arsenal đã gửi đề nghị.",
+            published_at=now,
+        )
+
 
 @pytest.mark.asyncio
 async def test_editorial_admin_routes_require_token_and_transition_revision() -> None:
@@ -60,3 +74,20 @@ async def test_editorial_admin_routes_require_token_and_transition_revision() ->
     assert approved.status_code == 200
     assert approved.json()["state"] == "APPROVED"
     assert service.calls == [("approve", ARTICLE_ID, 1)]
+
+
+@pytest.mark.asyncio
+async def test_editorial_admin_publish_uses_idempotency_key() -> None:
+    service = MemoryEditorialService()
+    transport = httpx.ASGITransport(
+        app=create_editorial_admin_app(service, admin_token="admin-token")
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            f"/admin/v1/articles/{ARTICLE_ID}/publish",
+            headers={"Authorization": "Bearer admin-token"},
+            json={"slug": "arsenal-bid", "idempotency_key": "publish-1"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["slug"] == "arsenal-bid"

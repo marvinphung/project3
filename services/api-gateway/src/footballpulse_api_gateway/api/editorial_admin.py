@@ -22,6 +22,19 @@ class EditorialRevisionView:
     updated_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class PublicationView:
+    id: UUID
+    generated_article_id: UUID
+    revision_id: UUID
+    story_id: UUID
+    story_version: int
+    slug: str
+    title_vi: str
+    body_vi: str
+    published_at: datetime
+
+
 class EditorialAdminService(Protocol):
     def submit_for_review(
         self, article_id: UUID, *, expected_revision_number: int, now: datetime
@@ -35,9 +48,18 @@ class EditorialAdminService(Protocol):
         self, article_id: UUID, *, expected_revision_number: int, now: datetime
     ) -> EditorialRevisionView: ...
 
+    def publish(
+        self, article_id: UUID, *, slug: str, idempotency_key: str, now: datetime
+    ) -> PublicationView: ...
+
 
 class RevisionTransitionRequest(BaseModel):
     expected_revision_number: int
+
+
+class PublishRequest(BaseModel):
+    slug: str
+    idempotency_key: str
 
 
 class EditorialRevisionResponse(BaseModel):
@@ -47,6 +69,18 @@ class EditorialRevisionResponse(BaseModel):
     story_version: int
     state: str
     updated_at: datetime
+
+
+class PublicationResponse(BaseModel):
+    id: UUID
+    generated_article_id: UUID
+    revision_id: UUID
+    story_id: UUID
+    story_version: int
+    slug: str
+    title_vi: str
+    body_vi: str
+    published_at: datetime
 
 
 BEARER_SCHEME = HTTPBearer(auto_error=False)
@@ -72,6 +106,9 @@ def create_editorial_admin_app(
 
     def response(view: EditorialRevisionView) -> EditorialRevisionResponse:
         return EditorialRevisionResponse.model_validate(view, from_attributes=True)
+
+    def publication_response(view: PublicationView) -> PublicationResponse:
+        return PublicationResponse.model_validate(view, from_attributes=True)
 
     @app.post(
         "/admin/v1/articles/{article_id}/submit",
@@ -123,6 +160,23 @@ def create_editorial_admin_app(
             service.reject(
                 article_id,
                 expected_revision_number=request.expected_revision_number,
+                now=datetime.now(UTC),
+            )
+        )
+
+    @app.post(
+        "/admin/v1/articles/{article_id}/publish",
+        response_model=PublicationResponse,
+        dependencies=[Depends(authorize)],
+    )
+    async def publish(article_id: UUID, request: PublishRequest) -> PublicationResponse:
+        from datetime import UTC, datetime
+
+        return publication_response(
+            service.publish(
+                article_id,
+                slug=request.slug,
+                idempotency_key=request.idempotency_key,
                 now=datetime.now(UTC),
             )
         )
