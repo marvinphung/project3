@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from datetime import UTC, datetime
 
 import uvicorn
 from fastapi import FastAPI
@@ -15,13 +16,16 @@ from footballpulse_content_service.editorial.publication import PublicationServi
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
+from footballpulse_api_gateway.api.auth import create_auth_app
 from footballpulse_api_gateway.api.editorial_admin import create_editorial_admin_app
 from footballpulse_api_gateway.api.public import create_public_app
 from footballpulse_api_gateway.application.editorial_admin_adapter import (
     ContentEditorialAdminAdapter,
 )
+from footballpulse_api_gateway.auth import AuthService, Role, TokenService
 from footballpulse_api_gateway.health import liveness
 from footballpulse_api_gateway.middleware import install_gateway_middleware
+from footballpulse_api_gateway.persistence.identity_repository import PostgresUserRepository
 from footballpulse_api_gateway.persistence.public_read_repository import (
     PostgresPublicReadRepository,
 )
@@ -46,6 +50,16 @@ def build_app(environment: Mapping[str, str] | None = None) -> FastAPI:
     engine = create_engine(database_url(values), pool_pre_ping=True)
     revision_repository = PostgresEditorialRevisionRepository(engine)
     publication_service = PublicationService(PostgresPublicationRepository(engine))
+    user_repository = PostgresUserRepository(engine)
+    token_service = TokenService(
+        values.get(
+            "FOOTBALLPULSE_API_JWT_SECRET",
+            "local-jwt-secret-change-me-0123456789",
+        )
+    )
+    auth_service = AuthService(user_repository, token_service)
+    _bootstrap_user(values, user_repository, "ADMIN", Role.ADMIN)
+    _bootstrap_user(values, user_repository, "EDITOR", Role.EDITOR)
     editorial_service = ContentEditorialAdminAdapter(
         revision_repository=revision_repository,
         publication_service=publication_service,
@@ -55,9 +69,13 @@ def build_app(environment: Mapping[str, str] | None = None) -> FastAPI:
         editorial_service,
         admin_token=values.get("FOOTBALLPULSE_API_ADMIN_TOKEN", "local-admin-token"),
         editor_token=values.get("FOOTBALLPULSE_API_EDITOR_TOKEN"),
+        token_service=token_service,
     )
+    auth_app = create_auth_app(auth_service)
     app.router.routes.extend(admin_app.router.routes)
+    app.router.routes.extend(auth_app.router.routes)
     app.exception_handlers.update(admin_app.exception_handlers)
+    app.exception_handlers.update(auth_app.exception_handlers)
     app.openapi_schema = None
 
     @app.get("/health", include_in_schema=False)
@@ -70,6 +88,15 @@ def build_app(environment: Mapping[str, str] | None = None) -> FastAPI:
         window_seconds=int(values.get("FOOTBALLPULSE_API_RATE_WINDOW_SECONDS", "60")),
     )
     return app
+
+
+def _bootstrap_user(
+    values: Mapping[str, str], repository: PostgresUserRepository, prefix: str, role: Role
+) -> None:
+    username = values.get(f"FOOTBALLPULSE_API_{prefix}_USERNAME")
+    password = values.get(f"FOOTBALLPULSE_API_{prefix}_PASSWORD")
+    if username and password:
+        repository.ensure_user(username, password, role, created_at=datetime.now(UTC))
 
 
 def main() -> None:

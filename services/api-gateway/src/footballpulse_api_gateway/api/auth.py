@@ -6,10 +6,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from footballpulse_api_gateway.auth import AuthService
+from footballpulse_api_gateway.auth import TokenService
 
 
 class AuthServicePort(Protocol):
+    tokens: TokenService
+
     def authenticate(self, username: str, password: str) -> str: ...
 
 
@@ -44,12 +46,9 @@ def create_auth_app(service: AuthServicePort) -> FastAPI:
 
         # AuthService exposes the token service so the response stays aligned
         # with the claims actually issued, instead of duplicating TTL config.
-        if isinstance(service, AuthService):
-            claims = service.tokens.decode(token)
-            expires_in = max(0, int((claims.expires_at - claims.issued_at).total_seconds()))
-            role = claims.role.value
-        else:
-            raise RuntimeError("auth service must expose token claims")
+        claims = service.tokens.decode(token)
+        expires_in = max(0, int((claims.expires_at - claims.issued_at).total_seconds()))
+        role = claims.role.value
         return TokenResponse(
             access_token=token,
             expires_in=expires_in,
