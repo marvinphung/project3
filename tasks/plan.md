@@ -42,4 +42,5 @@ fields. Entity tags are now included in public article responses and mapped to
 frontend chips. Admin login now obtains and stores a real JWT. Draft review actions now
 have bearer-authenticated API clients; published-article listing now reads the
 public API, and source listing now consumes the crawler admin API when
-`VITE_CRAWLER_API_BASE_URL` is configured.
+`VITE_CRAWLER_API_BASE_URL` is configured. Source enable/disable now uses the
+crawler versioned toggle endpoint; crawl-batch triggering remains pending.

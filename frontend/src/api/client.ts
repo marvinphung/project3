@@ -118,6 +118,14 @@ export function listSources() {
   })
 }
 
+export function toggleSource(sourceId: string, enabled: boolean, expectedVersion: number) {
+  return request<Source>(`${CRAWLER_API_BASE_URL}/admin/v1/sources/${sourceId}/toggle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ enabled, expected_version: expectedVersion }),
+  })
+}
+
 export type EditorialRevision = {
   generated_article_id: string
   revision_id: string

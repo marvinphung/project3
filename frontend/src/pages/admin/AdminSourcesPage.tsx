@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useEffect } from 'react'
-import { ApiError, listSources, type Source } from '../../api/client'
+import { ApiError, listSources, toggleSource, type Source } from '../../api/client'
 
 const sourcesData = [
   { id: 1, name: 'BBC Sport', type: 'RSS', status: 'active', lastCrawl: '5 phút trước', articles: 12, errors: 0 },
@@ -30,6 +30,7 @@ const StatusChip = ({ status }: { status: string }) => {
 export default function AdminSourcesPage() {
   const [showModal, setShowModal] = useState(false)
   const [remote, setRemote] = useState<{ items: Source[]; loading: boolean; error: string | null }>({ items: [], loading: true, error: null })
+  const [toggling, setToggling] = useState<string | null>(null)
   useEffect(() => {
     listSources()
       .then((response) => setRemote({ items: response.items, loading: false, error: null }))
@@ -44,6 +45,23 @@ export default function AdminSourcesPage() {
     articles: 0,
     errors: 0,
   })) : sourcesData
+  const handleToggle = async (source: (typeof displaySources)[number]) => {
+    if (!/^[0-9a-f-]{36}$/i.test(String(source.id))) {
+      setRemote((current) => ({ ...current, error: 'Nguồn fixture chưa có UUID từ backend.' }))
+      return
+    }
+    const current = remote.items.find((item) => item.id === source.id)
+    if (!current) return
+    setToggling(current.id)
+    try {
+      const updated = await toggleSource(current.id, !current.enabled, current.version)
+      setRemote((state) => ({ ...state, items: state.items.map((item) => item.id === updated.id ? updated : item), error: null }))
+    } catch (error) {
+      setRemote((state) => ({ ...state, error: error instanceof ApiError ? error.message : 'Không thể cập nhật nguồn tin' }))
+    } finally {
+      setToggling(null)
+    }
+  }
 
   return (
     <div className="p-6">
@@ -87,7 +105,7 @@ export default function AdminSourcesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      <button className="px-2 py-1 text-xs text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded transition-colors">
+                      <button onClick={() => void handleToggle(s)} disabled={toggling === s.id} className="px-2 py-1 text-xs text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded transition-colors disabled:opacity-50">
                         {s.status === 'disabled' ? 'Bật' : 'Tắt'}
                       </button>
                       <button className="px-2 py-1 text-xs text-[#6B7280] hover:text-[#78A83D] hover:bg-[#F3F4F6] rounded transition-colors">Crawl</button>
