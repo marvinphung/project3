@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Lock
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 from uuid import UUID, uuid4
 
 from footballpulse_content_service.editorial.revision import EditorialRevision, RevisionState
 
 if TYPE_CHECKING:
-    from footballpulse_content_service.editorial.publication_outbox import PublicationOutbox
+    from footballpulse_content_service.editorial.publication_outbox import (
+        PublicationOutbox,
+        PublicationPublishedEvent,
+    )
 
 
 class PublicationConflictError(RuntimeError):
@@ -87,30 +91,45 @@ class PublicationService:
                 raise PublicationConflictError("idempotency key belongs to another revision")
             self._emit(existing)
             return existing
-        publication = self._repository.create(
-            Publication(
-                id=uuid4(),
-                generated_article_id=revision.generated_article_id,
-                revision_id=revision.id,
-                story_id=revision.story_id,
-                story_version=revision.story_version,
-                slug=normalized_slug,
-                title_en=revision.title_en,
-                body_en=revision.body_en,
-                title_vi=revision.title_vi,
-                body_vi=revision.body_vi,
-                idempotency_key=normalized_key,
-                published_at=published_at,
-            )
+        publication = Publication(
+            id=uuid4(),
+            generated_article_id=revision.generated_article_id,
+            revision_id=revision.id,
+            story_id=revision.story_id,
+            story_version=revision.story_version,
+            slug=normalized_slug,
+            title_en=revision.title_en,
+            body_en=revision.body_en,
+            title_vi=revision.title_vi,
+            body_vi=revision.body_vi,
+            idempotency_key=normalized_key,
+            published_at=published_at,
         )
+        event = self._event(publication)
+        transactional_create = getattr(self._repository, "create_with_outbox", None)
+        if callable(transactional_create):
+            from footballpulse_content_service.editorial.publication_outbox import (
+                PublicationPublishedEvent,
+            )
+
+            create_with_outbox = cast(
+                Callable[[Publication, PublicationPublishedEvent], Publication],
+                transactional_create,
+            )
+            return create_with_outbox(publication, event)
+        publication = self._repository.create(publication)
         self._emit(publication)
         return publication
 
     def _emit(self, publication: Publication) -> None:
         if self._outbox is None:
             return
+        self._outbox.add_once(self._event(publication))
+
+    @staticmethod
+    def _event(publication: Publication) -> PublicationPublishedEvent:
         from footballpulse_content_service.editorial.publication_outbox import (
             PublicationPublishedEvent,
         )
 
-        self._outbox.add_once(PublicationPublishedEvent.from_publication(publication))
+        return PublicationPublishedEvent.from_publication(publication)

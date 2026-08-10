@@ -48,3 +48,27 @@ def test_publication_emits_one_bilingual_event_on_retry() -> None:
     assert len(events) == 1
     assert events[0] == PublicationPublishedEvent.from_publication(publication)
     assert events[0].payload["title_vi"] == "Arsenal hỏi mua"
+
+
+def test_service_uses_transactional_repository_when_available() -> None:
+    class TransactionalRepository(InMemoryPublicationRepository):
+        def __init__(self) -> None:
+            super().__init__()
+            self.transactional_calls = 0
+
+        def create_with_outbox(self, publication, event):
+            self.transactional_calls += 1
+            self.add_once_event = event
+            return self.create(publication)
+
+    repository = TransactionalRepository()
+    service = PublicationService(repository)
+    publication = service.publish(
+        revision=approved_revision(),
+        slug="arsenal-bid",
+        idempotency_key="publish-transactional",
+        published_at=NOW,
+    )
+
+    assert repository.transactional_calls == 1
+    assert repository.add_once_event.event_id == publication.id
