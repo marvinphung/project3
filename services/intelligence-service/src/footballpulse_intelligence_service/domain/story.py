@@ -9,6 +9,7 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
+from footballpulse_intelligence_service.domain.claim_confirmation import ClaimConfirmation
 from footballpulse_intelligence_service.domain.entity import EntityType
 
 
@@ -200,6 +201,7 @@ class Claim:
     occurred_at: datetime | None
     occurred_at_bucket: datetime | None
     created_at: datetime
+    confirmation: ClaimConfirmation = ClaimConfirmation.RUMOUR
 
     @classmethod
     def create(
@@ -216,6 +218,7 @@ class Claim:
         occurred_at: datetime | None,
         occurred_at_bucket: datetime | None,
         now: datetime,
+        confirmation: ClaimConfirmation = ClaimConfirmation.RUMOUR,
     ) -> Claim:
         if object_entity_id is None and object_value is None:
             raise ValueError("claim requires an object entity or object value")
@@ -251,6 +254,7 @@ class Claim:
             occurred,
             bucket,
             _aware(now, "created_at"),
+            ClaimConfirmation(confirmation),
         )
 
 

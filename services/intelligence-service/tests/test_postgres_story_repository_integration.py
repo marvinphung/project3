@@ -724,9 +724,10 @@ def test_context_repository_loads_current_story_entities_and_predicates(
                 "object_value": None,
                 "statement_en": "Arsenal contacted Vinicius",
                 "certainty": Decimal("0.5000"),
-                "occurred_at": NOW,
-                "occurred_at_bucket": NOW,
-                "created_at": NOW,
+                    "occurred_at": NOW,
+                    "occurred_at_bucket": NOW,
+                    "created_at": NOW,
+                    "confirmation": "RUMOUR",
             },
         )
 
@@ -800,9 +801,10 @@ def test_story_matching_orchestration_runs_end_to_end_with_postgres(
                 "object_value": None,
                 "statement_en": "Arsenal contacted Vinicius",
                 "certainty": Decimal("0.5000"),
-                "occurred_at": NOW,
-                "occurred_at_bucket": NOW,
-                "created_at": NOW,
+                    "occurred_at": NOW,
+                    "occurred_at_bucket": NOW,
+                    "created_at": NOW,
+                    "confirmation": "RUMOUR",
             },
         )
     vector = EmbeddingVector.create([1.0] + [0.0] * (EMBEDDING_DIMENSIONS - 1))

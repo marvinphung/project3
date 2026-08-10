@@ -196,6 +196,7 @@ claims = sa.Table(
     sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=True),
     sa.Column("occurred_at_bucket", sa.DateTime(timezone=True), nullable=True),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("confirmation", sa.String(length=16), nullable=False),
 )
 
 claim_evidence = sa.Table(

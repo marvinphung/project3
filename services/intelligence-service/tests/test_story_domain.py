@@ -5,6 +5,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
+from footballpulse_intelligence_service.domain.claim_confirmation import ClaimConfirmation
 from footballpulse_intelligence_service.domain.entity import EntityType
 from footballpulse_intelligence_service.domain.story import (
     Claim,
@@ -138,6 +139,28 @@ def test_claim_fingerprint_is_deterministic_for_equivalent_object_values() -> No
 
     assert first.fingerprint == second.fingerprint
     assert len(first.fingerprint) == 64
+
+
+def test_claim_confirmation_defaults_to_rumour_and_can_be_set() -> None:
+    arguments = {
+        "claim_id": CLAIM_ID,
+        "story_id": STORY_ID,
+        "subject_entity_id": PLAYER_ID,
+        "predicate": ClaimPredicate.SUBMITTED_BID,
+        "object_entity_id": CLUB_ID,
+        "object_value": {"amount": 180_000_000},
+        "statement_en": "Arsenal submitted a bid.",
+        "certainty": Decimal("0.7"),
+        "occurred_at": NOW,
+        "occurred_at_bucket": NOW,
+        "now": NOW,
+    }
+
+    assert Claim.create(**arguments).confirmation is ClaimConfirmation.RUMOUR
+    assert (
+        Claim.create(**arguments, confirmation=ClaimConfirmation.MULTI_SOURCE).confirmation
+        is ClaimConfirmation.MULTI_SOURCE
+    )
 
 
 def test_claim_requires_grounded_object_statement_and_valid_certainty() -> None:

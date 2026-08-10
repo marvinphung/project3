@@ -101,6 +101,7 @@ def _claim_values(claim: Claim) -> dict[str, object]:
         "occurred_at": claim.occurred_at,
         "occurred_at_bucket": claim.occurred_at_bucket,
         "created_at": claim.created_at,
+        "confirmation": claim.confirmation.value,
     }
 
 
