@@ -17,6 +17,9 @@ from footballpulse_intelligence_service.domain.story_candidate_scoring import (
     score_story_candidate,
 )
 from footballpulse_intelligence_service.domain.story_match_audit import StoryMatchAuditRecord
+from footballpulse_intelligence_service.domain.story_matching_context import (
+    StoryCandidateContext,
+)
 from footballpulse_intelligence_service.persistence.candidate_repository import (
     CandidateQuery,
     CandidateRetrievalResult,
@@ -37,15 +40,6 @@ class StoryMatchRequest:
     input_builder_version: str
     embedding_model_name: str
     embedding_model_version: str
-
-
-@dataclass(frozen=True, slots=True)
-class StoryCandidateContext:
-    story_id: UUID
-    story_version: int
-    primary_entity_ids: tuple[UUID, ...]
-    entity_ids: tuple[UUID, ...]
-    predicates: tuple[ClaimPredicate, ...]
 
 
 class StoryCandidateContextRepository(Protocol):

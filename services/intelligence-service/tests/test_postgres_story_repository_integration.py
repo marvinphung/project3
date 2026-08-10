@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 import psycopg
 import pytest
 import sqlalchemy as sa
+from footballpulse_intelligence_service.application.story_matching import StoryCandidateContext
 from footballpulse_intelligence_service.domain.delivery import OutboxEvent, ProcessedEvent
 from footballpulse_intelligence_service.domain.embedding import (
     EMBEDDING_DIMENSIONS,
@@ -44,8 +45,14 @@ from footballpulse_intelligence_service.persistence.candidate_repository import 
     CandidateQuery,
     PostgresStoryCandidateRepository,
 )
+from footballpulse_intelligence_service.persistence.context_repository import (
+    PostgresStoryCandidateContextRepository,
+)
 from footballpulse_intelligence_service.persistence.match_audit_repository import (
     PostgresStoryMatchAuditRepository,
+)
+from footballpulse_intelligence_service.persistence.postgres_tables import (
+    claims as claims_table,
 )
 from footballpulse_intelligence_service.persistence.postgres_tables import (
     stories,
@@ -647,4 +654,81 @@ def test_match_audit_repository_persists_ranked_decision_idempotently(
             {"id": broken_id},
         ).scalar_one()
     assert rolled_back == 0
+    engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
+)
+def test_context_repository_loads_current_story_entities_and_predicates(
+    migrated_database: str,
+) -> None:
+    engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
+    repository = PostgresStoryCandidateContextRepository(engine)
+    story_id = UUID(int=700)
+    with engine.begin() as connection:
+        connection.execute(
+            stories.insert(),
+            {
+                "id": story_id,
+                "event_type": "TRANSFER",
+                "status": "DEVELOPING",
+                "confidence_score": Decimal("0.5000"),
+                "first_seen_at": NOW,
+                "last_seen_at": NOW,
+                "version": 4,
+                "created_at": NOW,
+                "updated_at": NOW,
+            },
+        )
+        connection.execute(
+            story_entities.insert(),
+            [
+                {
+                    "id": UUID(int=701),
+                    "story_id": story_id,
+                    "entity_id": PLAYER_ID,
+                    "entity_type": "PLAYER",
+                    "created_at": NOW,
+                },
+                {
+                    "id": UUID(int=702),
+                    "story_id": story_id,
+                    "entity_id": ARSENAL_ID,
+                    "entity_type": "CLUB",
+                    "created_at": NOW,
+                },
+            ],
+        )
+        connection.execute(
+            claims_table.insert(),
+            {
+                "id": UUID(int=703),
+                "story_id": story_id,
+                "claim_fingerprint": "b" * 64,
+                "subject_entity_id": ARSENAL_ID,
+                "predicate": "CONTACTED",
+                "object_entity_id": PLAYER_ID,
+                "object_value": None,
+                "statement_en": "Arsenal contacted Vinicius",
+                "certainty": Decimal("0.5000"),
+                "occurred_at": NOW,
+                "occurred_at_bucket": NOW,
+                "created_at": NOW,
+            },
+        )
+
+    contexts = repository.load_current((story_id,))
+
+    assert contexts == (
+        StoryCandidateContext(
+            story_id=story_id,
+            story_version=4,
+            primary_entity_ids=(PLAYER_ID,),
+            entity_ids=(PLAYER_ID, ARSENAL_ID),
+            predicates=(ClaimPredicate.CONTACTED,),
+        ),
+    )
     engine.dispose()
