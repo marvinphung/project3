@@ -27,7 +27,7 @@ Canonical detailed plan:
 
 ## Current next action
 
-Phase Gate 4 is approved. Story/claim persistence, hybrid matching, confirmation,
-material-change detection and bilingual timeline projection are implemented.
-The next action is WP 5.1: define grounded long-form generation contracts before
-connecting an AI provider.
+Phase Gate 4 is approved. Phase 5.1 grounded generation, 5.2 editorial revisions,
+5.3 idempotent publication, and the first 5.5 public/admin API façade are implemented.
+The next action is to define the credential model before implementing JWT/Argon2
+authentication; static admin/editor bearer tokens currently protect local development.
