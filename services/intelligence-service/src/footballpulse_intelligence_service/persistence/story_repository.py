@@ -219,6 +219,40 @@ class PostgresStoryRepository:
             ).scalar_one_or_none()
         return updated is not None
 
+    def append_evidence_and_update_confirmation(
+        self,
+        *,
+        story_id: UUID,
+        evidence: ClaimEvidence,
+        confirmation: ClaimConfirmation,
+    ) -> bool:
+        """Append evidence and refresh its Claim confirmation atomically."""
+        if evidence.claim_id is None or evidence.story_source_id is None:
+            raise ValueError("evidence must reference a Claim and StorySource")
+        with self._engine.begin() as connection:
+            claim_story = connection.execute(
+                sa.select(claims_table.c.story_id).where(claims_table.c.id == evidence.claim_id)
+            ).scalar_one_or_none()
+            source_story = connection.execute(
+                sa.select(story_sources.c.story_id).where(
+                    story_sources.c.id == evidence.story_source_id
+                )
+            ).scalar_one_or_none()
+            if claim_story != story_id or source_story != story_id:
+                raise ValueError("evidence references members outside the Story")
+            connection.execute(
+                insert(claim_evidence)
+                .values(**_evidence_values(evidence))
+                .on_conflict_do_nothing()
+            )
+            updated = connection.execute(
+                claims_table.update()
+                .where(claims_table.c.id == evidence.claim_id, claims_table.c.story_id == story_id)
+                .values(confirmation=ClaimConfirmation(confirmation).value)
+                .returning(claims_table.c.id)
+            ).scalar_one_or_none()
+        return updated is not None
+
     def update_from_event(
         self,
         *,

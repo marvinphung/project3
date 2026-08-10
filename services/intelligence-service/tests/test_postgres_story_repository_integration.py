@@ -357,6 +357,54 @@ def test_claim_confirmation_update_is_scoped_to_story_and_preserves_fingerprint(
     os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
     reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
 )
+def test_evidence_append_and_confirmation_update_are_atomic(
+    migrated_database: str,
+) -> None:
+    engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
+    repository = PostgresStoryRepository(engine)
+    story, source, entity_links, claim, evidence, processed, outbox = aggregate()
+    repository.create_from_event(
+        story=story,
+        sources=(source,),
+        entities=entity_links,
+        claims=(claim,),
+        evidence=(evidence,),
+        processed_event=processed,
+        outbox_events=(outbox,),
+    )
+    additional = ClaimEvidence.create(
+        evidence_id=UUID(int=110),
+        claim_id=claim.id,
+        story_source_id=source.id,
+        quote="another report",
+        start=31,
+        end=45,
+        now=NOW,
+    )
+
+    assert repository.append_evidence_and_update_confirmation(
+        story_id=story.id,
+        evidence=additional,
+        confirmation=ClaimConfirmation.MULTI_SOURCE,
+    ) is True
+    with engine.connect() as connection:
+        row = connection.execute(
+            sa.text(
+                "SELECT confirmation, count(*) FROM intelligence_schema.claims c "
+                "JOIN intelligence_schema.claim_evidence e ON e.claim_id = c.id "
+                "WHERE c.id = :claim_id GROUP BY confirmation"
+            ),
+            {"claim_id": claim.id},
+        ).one()
+    assert row == ("MULTI_SOURCE", 2)
+    engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
+)
 def test_optimistic_update_commits_atomically_and_stale_update_rolls_back_marker(
     migrated_database: str,
 ) -> None:
