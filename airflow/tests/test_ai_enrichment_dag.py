@@ -45,3 +45,18 @@ def test_poll_enrichment_batch_uses_internal_bearer() -> None:
 
     assert result["status"] == "RUNNING"
     assert urlopen.call_args.args[0].headers["Authorization"] == "Bearer ai-internal"
+
+
+def test_wait_for_terminal_batch_is_bounded() -> None:
+    with (
+        patch.object(dag, "poll_enrichment_batch", side_effect=[{"status": "RUNNING"}]),
+        patch.object(dag.time, "sleep"),
+    ):
+        try:
+            dag.wait_for_terminal_batch(
+                ai_url="http://ai-content:8000", batch_id="ai-batch-1", max_attempts=1
+            )
+        except TimeoutError:
+            pass
+        else:
+            raise AssertionError("expected bounded polling timeout")

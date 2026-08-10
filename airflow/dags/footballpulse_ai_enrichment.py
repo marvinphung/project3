@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import datetime
 from urllib.request import Request, urlopen
 
@@ -39,6 +40,19 @@ def poll_enrichment_batch(*, ai_url: str, batch_id: str) -> dict[str, object]:
         return json.loads(response.read())
 
 
+def wait_for_terminal_batch(
+    *, ai_url: str, batch_id: str, max_attempts: int = 12, delay_seconds: float = 30
+) -> dict[str, object]:
+    terminal = {"COMPLETED", "PARTIAL", "FAILED_RETRYABLE", "FAILED_TERMINAL"}
+    for attempt in range(max_attempts):
+        result = poll_enrichment_batch(ai_url=ai_url, batch_id=batch_id)
+        if result.get("status") in terminal:
+            return result
+        if attempt + 1 < max_attempts:
+            time.sleep(delay_seconds)
+    raise TimeoutError(f"AI enrichment batch {batch_id} did not reach terminal state")
+
+
 try:
     import pendulum
     from airflow.decorators import dag, task
@@ -67,7 +81,7 @@ try:
 
         @task
         def poll_enrichment(batch_id: str) -> dict[str, object]:
-            return poll_enrichment_batch(
+            return wait_for_terminal_batch(
                 ai_url=os.environ.get("FOOTBALLPULSE_AI_ENRICHMENT_URL", "http://ai-content:8000"),
                 batch_id=batch_id,
             )
