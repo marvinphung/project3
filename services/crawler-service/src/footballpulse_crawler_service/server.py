@@ -8,6 +8,6 @@ import uvicorn
 def main() -> None:
     uvicorn.run(
         "footballpulse_crawler_service.runtime:app",
-        host="127.0.0.1",
+        host=os.getenv("FOOTBALLPULSE_CRAWLER_HOST", "127.0.0.1"),
         port=int(os.getenv("FOOTBALLPULSE_CRAWLER_PORT", "8011")),
     )

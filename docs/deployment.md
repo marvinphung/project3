@@ -194,6 +194,18 @@ FOOTBALLPULSE_MONGODB_URL='mongodb://127.0.0.1:27017/?replicaSet=rs0&directConne
 ./.venv/bin/python scripts/run-real-crawl.py --max-articles 10
 ```
 
+Chạy toàn bộ stack bằng Docker và theo dõi crawl log:
+
+```bash
+docker compose --env-file .env --profile core --profile app up -d --build
+docker compose --env-file .env --profile core --profile app logs -f crawler-worker
+```
+
+`crawler-worker` là batch container nên chuyển sang `Exited (0)` sau khi chạy hết
+catalog; log vẫn được giữ trong Docker. Frontend ở `127.0.0.1:8443`, API Gateway
+ở `127.0.0.1:8000`, Crawler API ở `127.0.0.1:8011` và AI Content ở
+`127.0.0.1:8002`.
+
 Các source HTML/sitemap chỉ dùng trang listing để lấy URL bài; crawler vẫn tải
 HTML từng bài và áp dụng allowlist domain, redirect limit, response limit và
 SSRF safety policy. Một số nguồn có thể chặn datacenter/IP hoặc yêu cầu

@@ -36,6 +36,7 @@ from footballpulse_crawler_service.domain.errors import (
     SourceConflictError,
     SourceNotFoundError,
 )
+from footballpulse_crawler_service.health import liveness
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorEnvelope},
@@ -79,6 +80,10 @@ def create_app(
     app = FastAPI(title="FootballPulse Crawler Service", version="0.1.0")
     admin_auth = bearer_dependency(admin_token)
     internal_auth = bearer_dependency(internal_token)
+
+    @app.get("/health", include_in_schema=False)
+    def health() -> dict[str, str]:
+        return liveness()
 
     @app.exception_handler(AuthenticationError)
     async def authentication_handler(_: Request, __: AuthenticationError) -> JSONResponse:

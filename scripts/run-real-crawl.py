@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
+import logging
 import os
 import sys
 import uuid
@@ -76,9 +78,15 @@ CATALOG: tuple[CatalogSource, ...] = (
     CatalogSource("Associated Press Soccer", "https://apnews.com/hub/soccer", SourceType.HTML, ("apnews.com",)),
     CatalogSource("Premier League", "https://www.premierleague.com/en/news", SourceType.HTML, ("premierleague.com",)),
     CatalogSource("UEFA News", "https://www.uefa.com/news-media/", SourceType.HTML, ("uefa.com",)),
-    CatalogSource("FIFA News", "https://www.fifa.com/en/news", SourceType.HTML, ("fifa.com",)),
-    CatalogSource("FIFA World Cup News", "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/news", SourceType.HTML, ("fifa.com",)),
+    CatalogSource("FIFA News", "https://www.fifa.com/sitemap", SourceType.SITEMAP, ("fifa.com",)),
+    CatalogSource("FIFA World Cup News", "https://www.fifa.com/sitemap?scope=worldcup2026", SourceType.SITEMAP, ("fifa.com",)),
 )
+
+LOGGER = logging.getLogger("footballpulse.crawler")
+
+
+def log_event(event: str, **fields: object) -> None:
+    LOGGER.info(json.dumps({"event": event, **fields}, ensure_ascii=False, default=str))
 
 
 def database_engine() -> object:
@@ -125,7 +133,22 @@ def ensure_source(service: SourceService, item: CatalogSource):
     )
 
 
-def article_links_from_html(payload: bytes, base_url: str, domain: str, limit: int) -> list[str]:
+def _is_article_url(source: CatalogSource, url: str) -> bool:
+    path = urlsplit(url).path.lower().rstrip("/")
+    if source.name == "Premier League":
+        return path.startswith("/en/news/") and path != "/en/news"
+    if source.name == "Sky Sports Football":
+        return path.startswith("/football/news/") or path.startswith("/football/live-blog/")
+    if source.name == "Associated Press Soccer":
+        return path.startswith("/article/")
+    if source.name == "FIFA News":
+        return "/news/" in path and "/tournaments/mens/worldcup/canadamexicousa2026/" not in path
+    if source.name == "FIFA World Cup News":
+        return "/tournaments/mens/worldcup/canadamexicousa2026/" in path and "/news/" in path
+    return True
+
+
+def article_links_from_html(payload: bytes, base_url: str, domain: str, limit: int, source: CatalogSource) -> list[str]:
     soup = BeautifulSoup(payload, "lxml-xml" if payload.lstrip().startswith(b"<?xml") else "lxml")
     links: list[str] = []
     for element in soup.find_all("loc") + soup.find_all("a", href=True):
@@ -141,14 +164,34 @@ def article_links_from_html(payload: bytes, base_url: str, domain: str, limit: i
         if not (host == domain or host.endswith(f".{domain}")):
             continue
         normalized = value.split("#", 1)[0]
-        if normalized not in links:
+        if _is_article_url(source, normalized) and normalized not in links:
             links.append(normalized)
         if len(links) >= limit:
             break
     return links
 
 
-async def crawl_source(item: CatalogSource, source, batch, store, ingestion, handoff, client, safety, max_articles):
+async def _sitemap_links(item: CatalogSource, source, client, safety, limit: int) -> list[str]:
+    fetcher = RssFetcher(client=client, safety_policy=safety, max_response_bytes=5 * 1024 * 1024)
+    listing = await fetcher.fetch(source.rss_url, allowed_domains=tuple(source.allowed_domains))
+    host = urlsplit(source.rss_url).hostname.lower().rstrip(".")
+    direct = article_links_from_html(listing.content, listing.final_url, host, limit, item)
+    if direct:
+        return direct
+    soup = BeautifulSoup(listing.content, "lxml-xml")
+    child_urls = [node.get_text(strip=True) for node in soup.find_all("loc")]
+    results: list[str] = []
+    for child_url in child_urls[:20]:
+        child = await fetcher.fetch(child_url, allowed_domains=tuple(source.allowed_domains))
+        for url in article_links_from_html(child.content, child.final_url, "fifa.com", limit, item):
+            if url not in results:
+                results.append(url)
+            if len(results) >= limit:
+                return results
+    return results
+
+
+async def crawl_source(item: CatalogSource, source, batch, ingestion, handoff, client, safety, max_articles):
     allowed = tuple(source.allowed_domains)
     links: list[tuple[str, str, str | None, datetime | None]] = []
     if item.source_type is SourceType.RSS:
@@ -156,19 +199,19 @@ async def crawl_source(item: CatalogSource, source, batch, store, ingestion, han
         record = await rss.discover(DiscoveryJob(str(source.id), source.rss_url, allowed))
         links = [(entry.url, entry.title, entry.guid, entry.published_at) for entry in record.feed.entries[:max_articles]]
     elif item.source_type is SourceType.SITEMAP:
-        fetcher = RssFetcher(client=client, safety_policy=safety)
-        listing = await fetcher.fetch(source.rss_url, allowed_domains=allowed)
-        host = urlsplit(source.rss_url).hostname.lower().rstrip(".")
-        for url in article_links_from_html(listing.content, listing.final_url, host, max_articles):
+        for url in await _sitemap_links(item, source, client, safety, max_articles):
             links.append((url, url.rsplit("/", 1)[-1].replace("-", " ")[:500] or url, None, None))
     else:
         fetcher = HtmlFetcher(client=client, safety_policy=safety)
         listing = await fetcher.fetch(source.rss_url, allowed_domains=allowed)
         host = urlsplit(source.rss_url).hostname.lower().rstrip(".")
-        for url in article_links_from_html(listing.content, listing.final_url, host, max_articles):
+        for url in article_links_from_html(listing.content, listing.final_url, host, max_articles, item):
             links.append((url, url.rsplit("/", 1)[-1].replace("-", " ")[:500] or url, None, None))
 
+    if not links:
+        raise RuntimeError("source listing contained no usable article URLs")
     fetched = failed = 0
+    log_event("source_discovered", source=item.name, batch_id=batch.id, count=len(links))
     extractor = HtmlExtractionService(fetcher=HtmlFetcher(client=client, safety_policy=safety))
     for url, rss_title, guid, published_at in links:
         artifact_id = uuid.uuid4()
@@ -176,6 +219,14 @@ async def crawl_source(item: CatalogSource, source, batch, store, ingestion, han
             article = await extractor.fetch_and_extract(DiscoveryJob(str(batch.id), url, allowed))
             if article.extraction.status.value == "FAILED":
                 failed += 1
+                log_event(
+                    "article_failed",
+                    source=item.name,
+                    batch_id=batch.id,
+                    url=url,
+                    error_type="ExtractionFailed",
+                    error=",".join(article.extraction.diagnostics),
+                )
                 continue
             if article.extraction.title is None:
                 article = replace(article, extraction=replace(article.extraction, title=rss_title))
@@ -195,9 +246,10 @@ async def crawl_source(item: CatalogSource, source, batch, store, ingestion, han
             )
             ingestion.handle(event)
             fetched += 1
+            log_event("article_processed", source=item.name, batch_id=batch.id, url=url, status="SUCCESS")
         except Exception as exc:
             failed += 1
-            print(f"  ! {url}: {type(exc).__name__}: {exc}", file=sys.stderr)
+            log_event("article_failed", source=item.name, batch_id=batch.id, url=url, error_type=type(exc).__name__, error=str(exc))
     return len(links), fetched, failed
 
 
@@ -228,23 +280,28 @@ async def main_async(args: argparse.Namespace) -> int:
                 idempotency_key=f"real:{item.name}:{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}:{uuid.uuid4().hex[:8]}",
                 window_started_at=datetime.now(UTC),
             )
-            print(f"[{item.name}] {item.url}\n  source_id={source.id} batch_id={batch.id}")
+            log_event("source_started", source=item.name, url=item.url, source_id=source.id, batch_id=batch.id)
             discovered = fetched = failed = 0
             try:
-                discovered, fetched, failed = await crawl_source(item, source, batch, article_store, ingestion, handoff, client, safety, args.max_articles)
+                discovered, fetched, failed = await crawl_source(item, source, batch, ingestion, handoff, client, safety, args.max_articles)
                 status = CrawlBatchStatus.COMPLETED if failed == 0 else CrawlBatchStatus.PARTIAL
+            except asyncio.CancelledError:
+                batch_service.complete(batch.id, status=CrawlBatchStatus.PARTIAL, discovered_count=discovered, fetched_count=fetched, failed_count=failed)
+                log_event("source_aborted", source=item.name, batch_id=batch.id)
+                raise
             except Exception as exc:
                 discovered = 1
                 failed = 1
-                print(f"  ! discovery failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+                log_event("source_failed", source=item.name, batch_id=batch.id, error_type=type(exc).__name__, error=str(exc))
                 status = CrawlBatchStatus.FAILED
             batch_service.complete(batch.id, status=status, discovered_count=discovered, fetched_count=fetched, failed_count=failed)
-            print(f"  result: discovered={discovered} fetched={fetched} failed={failed}")
+            log_event("source_completed", source=item.name, batch_id=batch.id, status=status.value, discovered=discovered, fetched=fetched, failed=failed)
     mongo_client.close()
     return 0
 
 
 def main() -> int:
+    logging.basicConfig(level=os.getenv("FOOTBALLPULSE_LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", action="append", help="catalog source name; repeatable; default: all")
     parser.add_argument("--max-articles", type=int, default=10)
