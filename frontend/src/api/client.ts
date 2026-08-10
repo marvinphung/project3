@@ -37,6 +37,7 @@ export class ApiError extends Error {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+const CRAWLER_API_BASE_URL = import.meta.env.VITE_CRAWLER_API_BASE_URL ?? ''
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -95,6 +96,26 @@ export function clearAuthToken() {
 export function authHeaders(): Record<string, string> {
   const token = getAuthToken()
   return token ? { Authorization: `${token.token_type} ${token.access_token}` } : {}
+}
+
+export type Source = {
+  id: string
+  name: string
+  rss_url: string
+  allowed_domains: string[]
+  source_type: 'RSS' | 'HTML' | 'MOCK'
+  reliability_tier: number
+  enabled: boolean
+  crawl_interval_minutes: number
+  max_concurrency: number
+  last_discovered_at: string | null
+  version: number
+}
+
+export function listSources() {
+  return request<{ items: Source[] }>(`${CRAWLER_API_BASE_URL}/admin/v1/sources`, {
+    headers: authHeaders(),
+  })
 }
 
 export type EditorialRevision = {

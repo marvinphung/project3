@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useEffect } from 'react'
+import { ApiError, listSources, type Source } from '../../api/client'
 
 const sourcesData = [
   { id: 1, name: 'BBC Sport', type: 'RSS', status: 'active', lastCrawl: '5 phút trước', articles: 12, errors: 0 },
@@ -27,6 +29,21 @@ const StatusChip = ({ status }: { status: string }) => {
 
 export default function AdminSourcesPage() {
   const [showModal, setShowModal] = useState(false)
+  const [remote, setRemote] = useState<{ items: Source[]; loading: boolean; error: string | null }>({ items: [], loading: true, error: null })
+  useEffect(() => {
+    listSources()
+      .then((response) => setRemote({ items: response.items, loading: false, error: null }))
+      .catch((error: unknown) => setRemote({ items: [], loading: false, error: error instanceof ApiError ? error.message : 'Không thể tải nguồn tin' }))
+  }, [])
+  const displaySources = remote.items.length > 0 ? remote.items.map((source) => ({
+    id: source.id,
+    name: source.name,
+    type: source.source_type,
+    status: source.enabled ? 'active' : 'disabled',
+    lastCrawl: source.last_discovered_at ? new Date(source.last_discovered_at).toLocaleString('vi-VN') : 'Chưa crawl',
+    articles: 0,
+    errors: 0,
+  })) : sourcesData
 
   return (
     <div className="p-6">
@@ -41,6 +58,8 @@ export default function AdminSourcesPage() {
         </button>
       </div>
 
+      {remote.loading && <p className="mb-4 text-sm text-[#6B7280]">Đang tải nguồn tin...</p>}
+      {remote.error && <p className="mb-4 text-sm text-red-600">{remote.error}</p>}
       <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -56,7 +75,7 @@ export default function AdminSourcesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E5E7EB]">
-              {sourcesData.map(s => (
+              {displaySources.map(s => (
                 <tr key={s.id} className="hover:bg-[#F9FAFB] transition-colors">
                   <td className="px-4 py-3 font-medium text-[#111827]">{s.name}</td>
                   <td className="px-4 py-3"><span className="text-xs font-mono bg-[#F3F4F6] px-2 py-0.5 rounded text-[#6B7280]">{s.type}</span></td>

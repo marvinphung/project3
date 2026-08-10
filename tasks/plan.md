@@ -41,4 +41,5 @@ public API adapter; entity chips and richer source metadata remain future API
 fields. Entity tags are now included in public article responses and mapped to
 frontend chips. Admin login now obtains and stores a real JWT. Draft review actions now
 have bearer-authenticated API clients; published-article listing now reads the
-public API, while source/batch operations await their backend contracts.
+public API, and source listing now consumes the crawler admin API when
+`VITE_CRAWLER_API_BASE_URL` is configured.
