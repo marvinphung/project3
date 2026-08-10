@@ -154,3 +154,20 @@ def test_intelligence_migration_adds_story_claim_and_delivery_invariants() -> No
         assert constraint in migration
     assert 'down_revision: str | None = "intelligence_0003"' in migration
     assert "source_schema." not in migration
+
+
+def test_intelligence_migration_adds_versioned_story_embeddings_without_ann_index() -> None:
+    migration = (
+        ROOT
+        / "services/intelligence-service/migrations/versions/"
+        / "intelligence_0005_add_story_embeddings.py"
+    ).read_text()
+
+    assert 'down_revision: str | None = "intelligence_0004"' in migration
+    assert '"story_embeddings"' in migration
+    assert '"story_version"' in migration
+    assert "VECTOR(384)" in migration
+    assert "uq_story_embeddings_input_model" in migration
+    assert "fk_story_embeddings_story" in migration
+    assert "hnsw" not in migration.casefold()
+    assert "ivfflat" not in migration.casefold()
