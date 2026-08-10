@@ -53,6 +53,7 @@ def build_app(environment: Mapping[str, str] | None = None) -> FastAPI:
     admin_app = create_editorial_admin_app(
         editorial_service,
         admin_token=values.get("FOOTBALLPULSE_API_ADMIN_TOKEN", "local-admin-token"),
+        editor_token=values.get("FOOTBALLPULSE_API_EDITOR_TOKEN"),
     )
     app.router.routes.extend(admin_app.router.routes)
     app.exception_handlers.update(admin_app.exception_handlers)

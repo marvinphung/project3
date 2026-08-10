@@ -88,22 +88,48 @@ class PublicationResponse(BaseModel):
 BEARER_SCHEME = HTTPBearer(auto_error=False)
 
 
+class ForbiddenError(Exception):
+    pass
+
+
 def create_editorial_admin_app(
-    service: EditorialAdminService, *, admin_token: str
+    service: EditorialAdminService, *, admin_token: str, editor_token: str | None = None
 ) -> FastAPI:
     app = FastAPI(title="FootballPulse Editorial Admin API", version="0.1.0")
 
-    async def authorize(
+    async def authorize_editor(
         credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(BEARER_SCHEME)],
     ) -> None:
-        if credentials is None or not compare_digest(credentials.credentials, admin_token):
+        if credentials is None:
             raise PermissionError
+        if compare_digest(credentials.credentials, admin_token):
+            return
+        if editor_token is None or not compare_digest(credentials.credentials, editor_token):
+            raise PermissionError
+
+    async def authorize_admin(
+        credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(BEARER_SCHEME)],
+    ) -> None:
+        if credentials is None:
+            raise PermissionError
+        if compare_digest(credentials.credentials, admin_token):
+            return
+        if editor_token is not None and compare_digest(credentials.credentials, editor_token):
+            raise ForbiddenError
+        raise PermissionError
 
     @app.exception_handler(PermissionError)
     async def permission_error_handler(_: Request, __: PermissionError) -> JSONResponse:
         return JSONResponse(
             status_code=401,
             content={"error": {"code": "UNAUTHORIZED", "message": "invalid bearer token"}},
+        )
+
+    @app.exception_handler(ForbiddenError)
+    async def forbidden_error_handler(_: Request, __: ForbiddenError) -> JSONResponse:
+        return JSONResponse(
+            status_code=403,
+            content={"error": {"code": "FORBIDDEN", "message": "insufficient role"}},
         )
 
     @app.exception_handler(RevisionConflictError)
@@ -138,7 +164,7 @@ def create_editorial_admin_app(
     @app.post(
         "/admin/v1/articles/{article_id}/submit",
         response_model=EditorialRevisionResponse,
-        dependencies=[Depends(authorize)],
+        dependencies=[Depends(authorize_editor)],
     )
     async def submit(
         article_id: UUID, request: RevisionTransitionRequest
@@ -156,7 +182,7 @@ def create_editorial_admin_app(
     @app.post(
         "/admin/v1/articles/{article_id}/approve",
         response_model=EditorialRevisionResponse,
-        dependencies=[Depends(authorize)],
+        dependencies=[Depends(authorize_editor)],
     )
     async def approve(
         article_id: UUID, request: RevisionTransitionRequest
@@ -174,7 +200,7 @@ def create_editorial_admin_app(
     @app.post(
         "/admin/v1/articles/{article_id}/reject",
         response_model=EditorialRevisionResponse,
-        dependencies=[Depends(authorize)],
+        dependencies=[Depends(authorize_editor)],
     )
     async def reject(
         article_id: UUID, request: RevisionTransitionRequest
@@ -192,7 +218,7 @@ def create_editorial_admin_app(
     @app.post(
         "/admin/v1/articles/{article_id}/publish",
         response_model=PublicationResponse,
-        dependencies=[Depends(authorize)],
+        dependencies=[Depends(authorize_admin)],
     )
     async def publish(article_id: UUID, request: PublishRequest) -> PublicationResponse:
         from datetime import UTC, datetime

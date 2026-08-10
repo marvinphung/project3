@@ -112,3 +112,28 @@ async def test_editorial_admin_maps_revision_conflict_to_409() -> None:
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "EDITORIAL_CONFLICT"
+
+
+@pytest.mark.asyncio
+async def test_editor_token_can_review_but_cannot_publish() -> None:
+    service = MemoryEditorialService()
+    transport = httpx.ASGITransport(
+        app=create_editorial_admin_app(
+            service, admin_token="admin-token", editor_token="editor-token"
+        )
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        approved = await client.post(
+            f"/admin/v1/articles/{ARTICLE_ID}/approve",
+            headers={"Authorization": "Bearer editor-token"},
+            json={"expected_revision_number": 1},
+        )
+        publication = await client.post(
+            f"/admin/v1/articles/{ARTICLE_ID}/publish",
+            headers={"Authorization": "Bearer editor-token"},
+            json={"slug": "arsenal-bid", "idempotency_key": "publish-1"},
+        )
+
+    assert approved.status_code == 200
+    assert publication.status_code == 403
+    assert publication.json()["error"]["code"] == "FORBIDDEN"
