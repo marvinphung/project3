@@ -27,7 +27,7 @@ Canonical detailed plan:
 
 ## Current next action
 
-WP 3.6 and Collaboration Gate 3.6 are complete. The next action is the Phase 3
-review: report the article → entities/embedding → Kaggle/local/mock → validated
-English enrichment path, actual smoke evidence and remaining model questions before
-starting Phase 4.
+Phase Gate 3 and the WP 4.1 design are approved. The next action is incremental
+WP 4.1 implementation: PostgreSQL migrations first, then Story/Claim domain and
+repositories. Matching, confidence calculation and timeline generation remain out
+of scope.
