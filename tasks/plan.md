@@ -32,5 +32,7 @@ Phase Gate 4 is approved. Phase 5.1 grounded generation, 5.2 editorial revisions
 The credential model, JWT/Argon2 token endpoint, PostgreSQL user repository,
 local bootstrap, and JWT role enforcement are implemented. Static admin/editor
 tokens remain supported for backward-compatible local development. Phase 6.1
-now has a typed public API client and loading/error state hook; browser build
-verification is pending because the local pnpm toolchain is unavailable.
+now has a typed public API client and loading/error state hook. Phase 6.2 has a
+reusable Vietnamese Story timeline component and hook; entity-to-Story link
+discovery remains an explicit backend contract gap, so the player page accepts
+an optional `?story=<uuid>` until that mapping endpoint exists.

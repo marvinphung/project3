@@ -1,9 +1,12 @@
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { players, articles } from '../data/mock'
 import { NewsRow, SectionHeading } from '../components/ui'
+import StoryTimeline from '../components/StoryTimeline'
 
 export default function PlayerDetailPage() {
   const { id } = useParams()
+  const [searchParams] = useSearchParams()
+  const storyId = searchParams.get('story')
   const player = players.find(p => p.id === id) ?? players[0]
   const related = articles.filter(a => a.entities.some(e => e.id === player.id))
   const allArticles = related.length > 0 ? related : articles.slice(0, 5)
@@ -25,6 +28,10 @@ export default function PlayerDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-10">
         <section>
+          <div className="mb-8 rounded-xl border border-[#E5E7EB] bg-white p-5">
+            <SectionHeading>Timeline diễn biến</SectionHeading>
+            <StoryTimeline storyId={storyId} />
+          </div>
           <SectionHeading>Tin mới nhất về {player.name}</SectionHeading>
           {allArticles.map(a => <NewsRow key={a.id} article={a} />)}
         </section>
