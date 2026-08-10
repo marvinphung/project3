@@ -66,6 +66,7 @@ resource number phải kèm fixture/benchmark. Contract/API/event thay đổi c�
 compatibility; không silently cập nhật payload đã có consumer.
 ## Airflow / AI enrichment
 
-- AI content service đã có HTTP contract cho `enrichment batch`, gồm start/poll
-  (`PREPARING` → `RUNNING`); cần triển khai worker lifecycle import/complete
+- AI content service đã có HTTP contract cho `enrichment batch`, gồm
+  start/poll/complete (`PREPARING` → `RUNNING` → terminal state); cần nối
+  worker lifecycle import và result counts thực tế
   và quyết định REST hay queue event cho các bước tiếp theo.

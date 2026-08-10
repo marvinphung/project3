@@ -20,6 +20,10 @@ class EnrichmentBatchResponse(BaseModel):
     created_at: datetime
 
 
+class EnrichmentBatchCompleteRequest(BaseModel):
+    status: str = Field(pattern=r"^(COMPLETED|PARTIAL|FAILED_RETRYABLE|FAILED_TERMINAL)$")
+
+
 class EnrichmentBatchRegistry:
     def __init__(self) -> None:
         self._batches: dict[UUID, EnrichmentBatchResponse] = {}
@@ -43,6 +47,15 @@ class EnrichmentBatchRegistry:
             return None
         if current.status == "PREPARING":
             current = current.model_copy(update={"status": "RUNNING"})
+            self._batches[batch_id] = current
+        return current
+
+    def complete(self, batch_id: UUID, status: str) -> EnrichmentBatchResponse | None:
+        current = self._batches.get(batch_id)
+        if current is None:
+            return None
+        if current.status in {"RUNNING", "PREPARING"}:
+            current = current.model_copy(update={"status": status})
             self._batches[batch_id] = current
         return current
 
@@ -93,6 +106,24 @@ def create_app(*, internal_token: str, registry: EnrichmentBatchRegistry | None 
         ):
             raise HTTPException(status_code=401, detail="invalid bearer token")
         batch = batches.start(batch_id)
+        if batch is None:
+            raise HTTPException(status_code=404, detail="enrichment batch not found")
+        return batch
+
+    @app.post(
+        "/internal/v1/enrichment-batches/{batch_id}/complete",
+        response_model=EnrichmentBatchResponse,
+    )
+    async def complete_enrichment_batch(
+        batch_id: UUID,
+        request: EnrichmentBatchCompleteRequest,
+        authorization: str | None = Header(default=None),
+    ) -> EnrichmentBatchResponse:
+        if authorization is None or not authorization.startswith("Bearer ") or not compare_digest(
+            authorization[7:], internal_token
+        ):
+            raise HTTPException(status_code=401, detail="invalid bearer token")
+        batch = batches.complete(batch_id, request.status)
         if batch is None:
             raise HTTPException(status_code=404, detail="enrichment batch not found")
         return batch
