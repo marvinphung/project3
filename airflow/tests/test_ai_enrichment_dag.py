@@ -31,3 +31,17 @@ def test_trigger_enrichment_batch_sends_collection_ids() -> None:
     request = urlopen.call_args.args[0]
     assert request.headers["Authorization"] == "Bearer ai-internal"
     assert json.loads(request.data)["collection_batch_ids"] == ["crawl-1"]
+
+
+def test_poll_enrichment_batch_uses_internal_bearer() -> None:
+    response = MagicMock()
+    response.read.return_value = json.dumps({"id": "ai-batch-1", "status": "RUNNING"}).encode()
+    response.__enter__.return_value = response
+    with (
+        patch.dict("os.environ", {"FOOTBALLPULSE_AI_INTERNAL_TOKEN": "ai-internal"}),
+        patch.object(dag, "urlopen", return_value=response) as urlopen,
+    ):
+        result = dag.poll_enrichment_batch(ai_url="http://ai-content:8000", batch_id="ai-batch-1")
+
+    assert result["status"] == "RUNNING"
+    assert urlopen.call_args.args[0].headers["Authorization"] == "Bearer ai-internal"

@@ -29,6 +29,16 @@ def trigger_enrichment_batch(
         return json.loads(response.read())["id"]
 
 
+def poll_enrichment_batch(*, ai_url: str, batch_id: str) -> dict[str, object]:
+    token = os.environ.get("FOOTBALLPULSE_AI_INTERNAL_TOKEN", "")
+    request = Request(
+        f"{ai_url.rstrip('/')}/internal/v1/enrichment-batches/{batch_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    with urlopen(request, timeout=30) as response:  # noqa: S310 - configured local URL
+        return json.loads(response.read())
+
+
 try:
     import pendulum
     from airflow.decorators import dag, task
@@ -55,7 +65,14 @@ try:
                 window_started_at=context["data_interval_start"].in_timezone("Asia/Ho_Chi_Minh"),
             )
 
-        submit_enrichment(load_collection_batches())
+        @task
+        def poll_enrichment(batch_id: str) -> dict[str, object]:
+            return poll_enrichment_batch(
+                ai_url=os.environ.get("FOOTBALLPULSE_AI_ENRICHMENT_URL", "http://ai-content:8000"),
+                batch_id=batch_id,
+            )
+
+        poll_enrichment(submit_enrichment(load_collection_batches()))
 
     footballpulse_ai_enrichment_dag = footballpulse_ai_enrichment()
 except ImportError:
