@@ -64,3 +64,9 @@ smoke test trước implementation phụ thuộc; không được tự điền b
 Quyết định ảnh hưởng nhiều service hoặc khó đảo ngược phải có ADR. Threshold và
 resource number phải kèm fixture/benchmark. Contract/API/event thay đổi cần test
 compatibility; không silently cập nhật payload đã có consumer.
+## Airflow / AI enrichment
+
+- AI content service hiện mới có application/provider contracts, chưa có HTTP
+  runtime endpoint cho `enrichment batch`. DAG 7.2 cần chốt boundary (REST hay
+  queue event), authentication token và lifecycle start/poll/import trước khi
+  triển khai.
