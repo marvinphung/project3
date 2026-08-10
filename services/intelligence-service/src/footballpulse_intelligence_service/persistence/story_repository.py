@@ -296,6 +296,15 @@ class PostgresStoryRepository:
         )
         claim_ids = {claim.id for claim in claim_records}
         source_ids = {source.id for source in sources}
+        entity_ids = {entity.entity_id for entity in entities}
+        required_entity_ids = {claim.subject_entity_id for claim in claim_records}
+        required_entity_ids.update(
+            claim.object_entity_id
+            for claim in claim_records
+            if claim.object_entity_id is not None
+        )
+        if not required_entity_ids <= entity_ids:
+            raise ValueError("every claim entity must be linked to the Story aggregate")
         if any(
             item.claim_id not in claim_ids or item.story_source_id not in source_ids
             for item in evidence

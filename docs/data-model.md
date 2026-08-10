@@ -233,9 +233,9 @@ vào Story và chỉ nhận `PLAYER|COACH|CLUB|COMPETITION`.
 
 ```json
 {
-  "subject_entity_id": "player-vinicius-junior",
+  "subject_entity_id": "club-arsenal",
   "predicate": "SUBMITTED_BID",
-  "object_entity_id": "club-arsenal",
+  "object_entity_id": "player-vinicius-junior",
   "object_value": {"amount": 180000000, "currency": "EUR"},
   "statement_en": "Arsenal submitted a €180m bid.",
   "certainty": 0.7,

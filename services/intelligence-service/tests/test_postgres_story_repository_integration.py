@@ -86,7 +86,7 @@ def migrated_database() -> Iterator[str]:
 def aggregate() -> tuple[
     Story,
     StorySource,
-    StoryEntity,
+    tuple[StoryEntity, ...],
     Claim,
     ClaimEvidence,
     ProcessedEvent,
@@ -107,19 +107,26 @@ def aggregate() -> tuple[
         published_at=NOW,
         observed_at=NOW,
     )
-    entity = StoryEntity.create(
+    player_entity = StoryEntity.create(
         link_id=UUID(int=102),
         story_id=story.id,
         entity_id=PLAYER_ID,
         entity_type=EntityType.PLAYER,
         now=NOW,
     )
+    club_entity = StoryEntity.create(
+        link_id=UUID(int=108),
+        story_id=story.id,
+        entity_id=ARSENAL_ID,
+        entity_type=EntityType.CLUB,
+        now=NOW,
+    )
     claim = Claim.create(
         claim_id=UUID(int=103),
         story_id=story.id,
-        subject_entity_id=PLAYER_ID,
+        subject_entity_id=ARSENAL_ID,
         predicate=ClaimPredicate.SUBMITTED_BID,
-        object_entity_id=ARSENAL_ID,
+        object_entity_id=PLAYER_ID,
         object_value={"amount": 180_000_000, "currency": "EUR"},
         statement_en="Arsenal submitted a €180m bid.",
         certainty=Decimal("0.7000"),
@@ -152,18 +159,18 @@ def aggregate() -> tuple[
         payload={"story_id": str(story.id), "version": 1},
         now=NOW,
     )
-    return story, source, entity, claim, evidence, processed, outbox
+    return story, source, (player_entity, club_entity), claim, evidence, processed, outbox
 
 
 def test_create_rejects_untraceable_aggregate_before_opening_a_transaction() -> None:
     repository = PostgresStoryRepository(create_engine("sqlite://"))
-    story, source, entity, claim, evidence, processed, outbox = aggregate()
+    story, source, entity_links, claim, evidence, processed, outbox = aggregate()
 
     with pytest.raises(ValueError, match="source"):
         repository.create_from_event(
             story=story,
             sources=(),
-            entities=(entity,),
+            entities=entity_links,
             claims=(claim,),
             evidence=(evidence,),
             processed_event=processed,
@@ -173,7 +180,7 @@ def test_create_rejects_untraceable_aggregate_before_opening_a_transaction() -> 
         repository.create_from_event(
             story=story,
             sources=(source,),
-            entities=(entity,),
+            entities=entity_links,
             claims=(claim,),
             evidence=(),
             processed_event=processed,
@@ -183,11 +190,21 @@ def test_create_rejects_untraceable_aggregate_before_opening_a_transaction() -> 
         repository.create_from_event(
             story=story,
             sources=(source,),
-            entities=(entity,),
+            entities=entity_links,
             claims=(claim,),
             evidence=(evidence,),
             processed_event=processed,
             outbox_events=(),
+        )
+    with pytest.raises(ValueError, match="claim entity"):
+        repository.create_from_event(
+            story=story,
+            sources=(source,),
+            entities=(entity_links[0],),
+            claims=(claim,),
+            evidence=(evidence,),
+            processed_event=processed,
+            outbox_events=(outbox,),
         )
 
 
@@ -201,12 +218,12 @@ def test_create_aggregate_and_replay_are_atomic_and_idempotent(
 ) -> None:
     engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
     repository = PostgresStoryRepository(engine)
-    story, source, entity, claim, evidence, processed, outbox = aggregate()
+    story, source, entity_links, claim, evidence, processed, outbox = aggregate()
 
     assert repository.create_from_event(
         story=story,
         sources=(source,),
-        entities=(entity,),
+        entities=entity_links,
         claims=(claim,),
         evidence=(evidence,),
         processed_event=processed,
@@ -215,7 +232,7 @@ def test_create_aggregate_and_replay_are_atomic_and_idempotent(
     assert repository.create_from_event(
         story=story,
         sources=(source,),
-        entities=(entity,),
+        entities=entity_links,
         claims=(claim,),
         evidence=(evidence,),
         processed_event=processed,
@@ -235,7 +252,7 @@ def test_create_aggregate_and_replay_are_atomic_and_idempotent(
                 "(SELECT count(*) FROM intelligence_schema.outbox_events)"
             )
         ).one()
-    assert counts == (1, 1, 1, 1, 1, 1, 1)
+    assert counts == (1, 1, 2, 1, 1, 1, 1)
     engine.dispose()
 
 
@@ -249,11 +266,11 @@ def test_optimistic_update_commits_atomically_and_stale_update_rolls_back_marker
 ) -> None:
     engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
     repository = PostgresStoryRepository(engine)
-    story, source, entity, claim, evidence, processed, outbox = aggregate()
+    story, source, entity_links, claim, evidence, processed, outbox = aggregate()
     repository.create_from_event(
         story=story,
         sources=(source,),
-        entities=(entity,),
+        entities=entity_links,
         claims=(claim,),
         evidence=(evidence,),
         processed_event=processed,
@@ -350,11 +367,11 @@ def test_unique_aggregate_link_conflict_rolls_back_event_and_story_version(
 ) -> None:
     engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
     repository = PostgresStoryRepository(engine)
-    story, source, entity, claim, evidence, processed, outbox = aggregate()
+    story, source, entity_links, claim, evidence, processed, outbox = aggregate()
     repository.create_from_event(
         story=story,
         sources=(source,),
-        entities=(entity,),
+        entities=entity_links,
         claims=(claim,),
         evidence=(evidence,),
         processed_event=processed,
@@ -378,7 +395,7 @@ def test_unique_aggregate_link_conflict_rolls_back_event_and_story_version(
         now=NOW + timedelta(hours=6),
     )
     duplicate_source = replace(source, id=uuid4())
-    duplicate_entity = replace(entity, id=uuid4())
+    duplicate_entity = replace(entity_links[0], id=uuid4())
     duplicate_claim = replace(claim, id=uuid4())
     duplicate_evidence = replace(evidence, id=uuid4())
     deltas = {
