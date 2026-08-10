@@ -1,16 +1,23 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { articles, timeline, sources, clubs, players, coaches } from '../data/mock'
-import { EntityChips, StatusBadge, MediumNewsCard } from '../components/ui'
+import { articles, sources } from '../data/mock'
+import { usePublicArticle } from '../api/hooks'
+import StoryTimeline from '../components/StoryTimeline'
+import { EmptyState, EntityChips, LoadingSkeleton, MediumNewsCard } from '../components/ui'
 
 export default function ArticleDetailPage() {
   const { id } = useParams()
+  const remote = usePublicArticle(id)
+  const [timelineOpen, setTimelineOpen] = useState(true)
+  if (remote.loading) {
+    return <div className="max-w-[760px] mx-auto px-4 sm:px-6 py-8"><LoadingSkeleton /></div>
+  }
+  if (remote.error || !remote.data) {
+    return <div className="max-w-[760px] mx-auto px-4 sm:px-6 py-8"><EmptyState message="Không thể tải bài viết" sub={remote.error?.message} /></div>
+  }
+  const apiArticle = remote.data
   const article = articles.find(a => a.id === id) ?? articles[0]
   const related = articles.filter(a => a.id !== article.id).slice(0, 3)
-  const [timelineOpen, setTimelineOpen] = useState(true)
-
-  const relatedClub = clubs.find(c => article.entities.find(e => e.id === c.id))
-  const relatedPlayer = players.find(p => article.entities.find(e => e.id === p.id))
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8">
@@ -27,20 +34,19 @@ export default function ArticleDetailPage() {
         {/* Category + status */}
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xs font-semibold text-[#78A83D] uppercase tracking-wider">Chuyển nhượng</span>
-          {article.status && <StatusBadge status={article.status} />}
         </div>
 
         {/* Headline */}
         <h1 className="text-3xl sm:text-4xl font-bold text-[#111827] leading-tight mb-4">
-          {article.headline}
+          {apiArticle.title_vi}
         </h1>
 
         {/* Summary */}
-        <p className="text-lg text-[#374151] leading-relaxed mb-4">{article.summary}</p>
+        <p className="text-lg text-[#374151] leading-relaxed mb-4">{apiArticle.body_vi.slice(0, 280)}{apiArticle.body_vi.length > 280 ? '…' : ''}</p>
 
         {/* Meta */}
         <div className="flex items-center gap-3 flex-wrap mb-2">
-          <p className="text-sm text-[#6B7280]">Cập nhật {article.time} · Tổng hợp từ <strong className="text-[#374151]">{article.sources} nguồn</strong></p>
+          <p className="text-sm text-[#6B7280]">Cập nhật {new Date(apiArticle.published_at).toLocaleString('vi-VN')} · Story phiên bản {apiArticle.story_version}</p>
         </div>
         <div className="mb-6">
           <EntityChips entities={article.entities} />
@@ -48,28 +54,16 @@ export default function ArticleDetailPage() {
 
         {/* Cover image */}
         <div className="relative aspect-[16/9] rounded-xl overflow-hidden bg-[#E5E7EB] mb-8">
-          <img src={article.img} alt={article.headline} className="w-full h-full object-cover" />
+          <div className="w-full h-full bg-gradient-to-br from-[#EAF2E1] to-[#DCE7CF]" aria-label="Ảnh bài viết" />
         </div>
 
         {/* Body */}
         <div className="prose-like space-y-5 mb-10">
-          {(article.body && article.body.length > 0 ? article.body : [
-            'Arsenal đang đẩy mạnh các cuộc đàm phán với đại diện của tiền đạo trẻ mà họ nhắm tới trong kỳ chuyển nhượng hè này. Theo thông tin từ nhiều nguồn uy tín, câu lạc bộ London đã có những tiến triển đáng kể.',
-            'Tuy nhiên, trở ngại lớn nhất vẫn là mức phí chuyển nhượng. Câu lạc bộ chủ quản yêu cầu khoản phí lên đến 80 triệu euro, trong khi Arsenal chỉ sẵn sàng trả tối đa 65 triệu euro.',
-            'HLV Mikel Arteta đã xác nhận rằng đội bóng đang tìm kiếm sự tăng cường, nhưng từ chối tiết lộ cụ thể về tên cầu thủ.',
-          ]).map((p, i) => (
+          {apiArticle.body_vi.split(/\n\s*\n/).filter(Boolean).map((p, i) => (
             <p key={i} className="text-base sm:text-[17px] text-[#1F2937] leading-[1.75]">{p}</p>
           ))}
 
           <h2 className="text-xl font-bold text-[#111827] mt-8 mb-3">Diễn biến tiếp theo</h2>
-          <p className="text-base sm:text-[17px] text-[#1F2937] leading-[1.75]">
-            Thương vụ này dự kiến sẽ ngã ngũ trong vòng hai tuần tới khi cửa sổ chuyển nhượng sắp đóng lại. Arsenal cần ít nhất một tiền đạo mới để cạnh tranh ở Premier League và Champions League mùa tới.
-          </p>
-
-          {/* Pull quote */}
-          <blockquote className="border-l-4 border-[#78A83D] pl-5 py-1 my-6">
-            <p className="text-lg italic text-[#374151] leading-relaxed">"Chúng tôi đang làm việc rất chăm chỉ trong kỳ chuyển nhượng này." — Mikel Arteta</p>
-          </blockquote>
         </div>
 
         <hr className="border-[#E5E7EB] my-8" />
@@ -108,16 +102,7 @@ export default function ArticleDetailPage() {
           {timelineOpen && (
             <div className="relative pl-6">
               <div className="absolute left-2 top-2 bottom-2 w-px bg-[#E5E7EB]" />
-              {timeline.map((item, i) => (
-                <div key={i} className="relative mb-5 last:mb-0">
-                  <div className={`absolute -left-4 top-1.5 w-3 h-3 rounded-full border-2 ${item.current ? 'bg-[#78A83D] border-[#78A83D]' : 'bg-white border-[#D1D5DB]'}`} />
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-xs font-mono text-[#6B7280] flex-shrink-0">{item.time}</span>
-                    <p className="text-sm text-[#374151]">{item.event}</p>
-                  </div>
-                  <p className="text-xs text-[#9CA3AF] mt-0.5 ml-10">{item.sources} nguồn</p>
-                </div>
-              ))}
+              <StoryTimeline storyId={apiArticle.story_id} />
             </div>
           )}
         </section>

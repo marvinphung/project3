@@ -35,3 +35,5 @@ tokens remain supported for backward-compatible local development. Phase 6.1
 now has a typed public API client and loading/error state hook. Phase 6.2 has a
 reusable Vietnamese Story timeline component and hook, plus a public
 entity-to-Story mapping endpoint so player timelines resolve canonical slugs.
+The article detail route now consumes the public article endpoint and its
+persisted Story timeline; homepage and related-card data still use fixtures.
