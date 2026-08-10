@@ -62,6 +62,9 @@ from footballpulse_intelligence_service.persistence.postgres_tables import (
     stories,
     story_entities,
 )
+from footballpulse_intelligence_service.persistence.processed_event_repository import (
+    PostgresProcessedEventStore,
+)
 from footballpulse_intelligence_service.persistence.story_repository import PostgresStoryRepository
 from psycopg import sql
 from sqlalchemy import create_engine
@@ -852,4 +855,27 @@ def test_story_matching_orchestration_runs_end_to_end_with_postgres(
             {"id": result.audit.id},
         ).scalar_one()
     assert count == 1
+    engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
+)
+def test_processed_event_store_is_idempotent(migrated_database: str) -> None:
+    engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
+    store = PostgresProcessedEventStore(engine)
+    event = ProcessedEvent.create(
+        record_id=UUID(int=950),
+        consumer_name="story-matching-v1",
+        event_id=UUID(int=951),
+        event_type="story.match.v1",
+        processed_at=NOW,
+    )
+
+    assert store.is_processed(event.consumer_name, event.event_id) is False
+    assert store.mark_processed(event) is True
+    assert store.is_processed(event.consumer_name, event.event_id) is True
+    assert store.mark_processed(event) is False
     engine.dispose()
