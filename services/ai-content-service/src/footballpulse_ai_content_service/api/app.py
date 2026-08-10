@@ -18,10 +18,14 @@ class EnrichmentBatchResponse(BaseModel):
     status: str
     collection_batch_ids: list[str]
     created_at: datetime
+    success_count: int = 0
+    error_count: int = 0
 
 
 class EnrichmentBatchCompleteRequest(BaseModel):
     status: str = Field(pattern=r"^(COMPLETED|PARTIAL|FAILED_RETRYABLE|FAILED_TERMINAL)$")
+    success_count: int = Field(default=0, ge=0)
+    error_count: int = Field(default=0, ge=0)
 
 
 class EnrichmentBatchRegistry:
@@ -50,12 +54,20 @@ class EnrichmentBatchRegistry:
             self._batches[batch_id] = current
         return current
 
-    def complete(self, batch_id: UUID, status: str) -> EnrichmentBatchResponse | None:
+    def complete(
+        self, batch_id: UUID, status: str, success_count: int, error_count: int
+    ) -> EnrichmentBatchResponse | None:
         current = self._batches.get(batch_id)
         if current is None:
             return None
         if current.status in {"RUNNING", "PREPARING"}:
-            current = current.model_copy(update={"status": status})
+            current = current.model_copy(
+                update={
+                    "status": status,
+                    "success_count": success_count,
+                    "error_count": error_count,
+                }
+            )
             self._batches[batch_id] = current
         return current
 
@@ -123,7 +135,9 @@ def create_app(*, internal_token: str, registry: EnrichmentBatchRegistry | None 
             authorization[7:], internal_token
         ):
             raise HTTPException(status_code=401, detail="invalid bearer token")
-        batch = batches.complete(batch_id, request.status)
+        batch = batches.complete(
+            batch_id, request.status, request.success_count, request.error_count
+        )
         if batch is None:
             raise HTTPException(status_code=404, detail="enrichment batch not found")
         return batch

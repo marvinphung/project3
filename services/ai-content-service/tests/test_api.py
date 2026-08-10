@@ -43,7 +43,8 @@ async def test_enrichment_batch_contract_requires_internal_token() -> None:
         completed = await client.post(
             f"/internal/v1/enrichment-batches/{batch_id}/complete",
             headers={"Authorization": "Bearer ai-internal"},
-            json={"status": "COMPLETED"},
+            json={"status": "COMPLETED", "success_count": 1, "error_count": 0},
         )
     assert completed.status_code == 200
     assert completed.json()["status"] == "COMPLETED"
+    assert completed.json()["success_count"] == 1
