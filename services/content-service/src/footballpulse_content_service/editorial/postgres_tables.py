@@ -51,6 +51,7 @@ publication_outbox = sa.Table(
     sa.Column("state", sa.String(length=16), nullable=False),
     sa.Column("attempt_count", sa.Integer(), nullable=False),
     sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+    sa.Column("last_failed_at", sa.DateTime(timezone=True), nullable=True),
     sa.Column("last_error", sa.Text(), nullable=True),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
 )

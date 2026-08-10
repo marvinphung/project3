@@ -29,6 +29,7 @@ def upgrade() -> None:
         sa.Column("state", sa.String(length=16), nullable=False, server_default="PENDING"),
         sa.Column("attempt_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("last_failed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_error", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint("state IN ('PENDING', 'PUBLISHED')", name="ck_publication_outbox_state"),

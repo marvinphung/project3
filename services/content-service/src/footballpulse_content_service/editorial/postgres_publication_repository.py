@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
+from uuid import UUID
+
 import sqlalchemy as sa
 from sqlalchemy.engine import Engine, RowMapping
 from sqlalchemy.exc import IntegrityError
@@ -108,3 +111,57 @@ class PostgresPublicationRepository:
                 "publication conflicts with existing snapshot"
             ) from error
         return publication
+
+    def list_pending(
+        self, *, limit: int, now: datetime
+    ) -> list[PublicationPublishedEvent]:
+        with self._engine.connect() as connection:
+            rows = (
+                connection.execute(
+                    sa.select(publication_outbox)
+                    .where(
+                        publication_outbox.c.state == "PENDING",
+                        publication_outbox.c.occurred_at <= now,
+                    )
+                    .order_by(publication_outbox.c.occurred_at)
+                    .limit(limit)
+                )
+                .mappings()
+                .all()
+            )
+        return [
+            PublicationPublishedEvent(
+                event_id=row["event_id"],
+                topic=row["topic"],
+                key=row["message_key"],
+                occurred_at=row["occurred_at"],
+                payload=row["payload"],
+            )
+            for row in rows
+        ]
+
+    def mark_published(self, event_id: UUID, *, published_at: datetime) -> None:
+        with self._engine.begin() as connection:
+            connection.execute(
+                publication_outbox.update()
+                .where(
+                    publication_outbox.c.event_id == event_id,
+                    publication_outbox.c.state == "PENDING",
+                )
+                .values(state="PUBLISHED", published_at=published_at)
+            )
+
+    def record_failure(self, event_id: UUID, *, failed_at: datetime, error: str) -> None:
+        with self._engine.begin() as connection:
+            connection.execute(
+                publication_outbox.update()
+                .where(
+                    publication_outbox.c.event_id == event_id,
+                    publication_outbox.c.state == "PENDING",
+                )
+                .values(
+                    attempt_count=publication_outbox.c.attempt_count + 1,
+                    last_failed_at=failed_at,
+                    last_error=error[:2000],
+                )
+            )
