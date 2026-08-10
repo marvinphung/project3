@@ -57,7 +57,11 @@ def build_app(environment: Mapping[str, str] | None = None) -> FastAPI:
     app.router.routes.extend(admin_app.router.routes)
     app.exception_handlers.update(admin_app.exception_handlers)
     app.openapi_schema = None
-    install_gateway_middleware(app)
+    install_gateway_middleware(
+        app,
+        max_requests=int(values.get("FOOTBALLPULSE_API_RATE_LIMIT", "120")),
+        window_seconds=int(values.get("FOOTBALLPULSE_API_RATE_WINDOW_SECONDS", "60")),
+    )
     return app
 
 
