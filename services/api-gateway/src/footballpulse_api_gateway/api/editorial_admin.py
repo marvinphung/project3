@@ -9,6 +9,8 @@ from uuid import UUID
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from footballpulse_content_service.editorial.publication import PublicationConflictError
+from footballpulse_content_service.editorial.repository import RevisionConflictError
 from pydantic import BaseModel
 
 
@@ -102,6 +104,29 @@ def create_editorial_admin_app(
         return JSONResponse(
             status_code=401,
             content={"error": {"code": "UNAUTHORIZED", "message": "invalid bearer token"}},
+        )
+
+    @app.exception_handler(RevisionConflictError)
+    async def revision_conflict_handler(_: Request, exc: RevisionConflictError) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={"error": {"code": "EDITORIAL_CONFLICT", "message": str(exc)}},
+        )
+
+    @app.exception_handler(PublicationConflictError)
+    async def publication_conflict_handler(
+        _: Request, exc: PublicationConflictError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={"error": {"code": "PUBLICATION_CONFLICT", "message": str(exc)}},
+        )
+
+    @app.exception_handler(ValueError)
+    async def validation_error_handler(_: Request, exc: ValueError) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={"error": {"code": "DOMAIN_VALIDATION_FAILED", "message": str(exc)}},
         )
 
     def response(view: EditorialRevisionView) -> EditorialRevisionResponse:

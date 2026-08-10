@@ -10,6 +10,7 @@ from footballpulse_api_gateway.api.editorial_admin import (
     PublicationView,
     create_editorial_admin_app,
 )
+from footballpulse_content_service.editorial.repository import RevisionConflictError
 
 NOW = datetime(2026, 8, 10, 12, tzinfo=UTC)
 ARTICLE_ID = UUID(int=1)
@@ -91,3 +92,23 @@ async def test_editorial_admin_publish_uses_idempotency_key() -> None:
 
     assert response.status_code == 200
     assert response.json()["slug"] == "arsenal-bid"
+
+
+@pytest.mark.asyncio
+async def test_editorial_admin_maps_revision_conflict_to_409() -> None:
+    class ConflictService(MemoryEditorialService):
+        def approve(self, article_id, *, expected_revision_number, now):
+            raise RevisionConflictError("expected revision is no longer current")
+
+    transport = httpx.ASGITransport(
+        app=create_editorial_admin_app(ConflictService(), admin_token="admin-token")
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            f"/admin/v1/articles/{ARTICLE_ID}/approve",
+            headers={"Authorization": "Bearer admin-token"},
+            json={"expected_revision_number": 1},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "EDITORIAL_CONFLICT"
