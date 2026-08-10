@@ -128,6 +128,10 @@ nguyên Unicode, punctuation, tỷ số cùng currency như `€180m`.
   integrity/config/programming error không bị che.
 - llama.cpp adapter test JSON Schema mode, deterministic temperature, output token
   budget, deadline stopping và fatal native error mà không cần cài model runtime.
+- Story/Claim migration test khóa status, confidence/evidence bounds, unique source,
+  entity, fingerprint, evidence range, processed event và outbox deduplication.
+- PostgreSQL integration test chứng minh atomic create/replay, optimistic update,
+  stale-version rollback và rollback marker/outbox cho từng unique-link conflict.
 - Kaggle CLI unit test khóa argument array, timeout, redaction và output allow-list.
 - Batch importer test partial/missing/unknown/hash mismatch/conflicting duplicate và
   binding của `job-report` với manifest.

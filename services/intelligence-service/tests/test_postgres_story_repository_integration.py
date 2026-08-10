@@ -336,3 +336,86 @@ def test_optimistic_update_commits_atomically_and_stale_update_rolls_back_marker
     assert stale_marker_count == 0
     assert outbox_count == 2
     engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("duplicate_kind", ["source", "entity", "claim", "evidence"])
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
+)
+def test_unique_aggregate_link_conflict_rolls_back_event_and_story_version(
+    migrated_database: str,
+    duplicate_kind: str,
+) -> None:
+    engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
+    repository = PostgresStoryRepository(engine)
+    story, source, entity, claim, evidence, processed, outbox = aggregate()
+    repository.create_from_event(
+        story=story,
+        sources=(source,),
+        entities=(entity,),
+        claims=(claim,),
+        evidence=(evidence,),
+        processed_event=processed,
+        outbox_events=(outbox,),
+    )
+    updated = story.observe(at=NOW + timedelta(hours=6), confidence_score=Decimal("0.7000"))
+    conflict_marker = ProcessedEvent.create(
+        record_id=uuid4(),
+        consumer_name="story-builder-v1",
+        event_id=uuid4(),
+        event_type="article.enriched",
+        processed_at=NOW + timedelta(hours=6),
+    )
+    conflict_outbox = OutboxEvent.create(
+        event_id=uuid4(),
+        aggregate_type="STORY",
+        aggregate_id=story.id,
+        event_type="story.updated",
+        deduplication_key=f"conflict:{duplicate_kind}:{story.id}",
+        payload={"story_id": str(story.id), "version": 2},
+        now=NOW + timedelta(hours=6),
+    )
+    duplicate_source = replace(source, id=uuid4())
+    duplicate_entity = replace(entity, id=uuid4())
+    duplicate_claim = replace(claim, id=uuid4())
+    duplicate_evidence = replace(evidence, id=uuid4())
+    deltas = {
+        "source": ((duplicate_source,), (), (), ()),
+        "entity": ((), (duplicate_entity,), (), ()),
+        "claim": ((), (), (duplicate_claim,), ()),
+        "evidence": ((), (), (), (duplicate_evidence,)),
+    }
+    new_sources, new_entities, new_claims, new_evidence = deltas[duplicate_kind]
+
+    with pytest.raises(StoryConflictError, match="conflicts"):
+        repository.update_from_event(
+            story=updated,
+            expected_version=1,
+            sources=new_sources,
+            entities=new_entities,
+            claims=new_claims,
+            evidence=new_evidence,
+            processed_event=conflict_marker,
+            outbox_events=(conflict_outbox,),
+        )
+
+    assert repository.get(story.id) == story
+    with engine.connect() as connection:
+        marker_count = connection.execute(
+            sa.text(
+                "SELECT count(*) FROM intelligence_schema.processed_events WHERE event_id = :id"
+            ),
+            {"id": conflict_marker.event_id},
+        ).scalar_one()
+        outbox_count = connection.execute(
+            sa.text(
+                "SELECT count(*) FROM intelligence_schema.outbox_events "
+                "WHERE deduplication_key = :key"
+            ),
+            {"key": conflict_outbox.deduplication_key},
+        ).scalar_one()
+    assert marker_count == 0
+    assert outbox_count == 0
+    engine.dispose()

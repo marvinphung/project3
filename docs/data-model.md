@@ -219,27 +219,42 @@ measurement. Input/model đổi tạo row mới; historical vector không bị o
 
 #### Story và claims
 
-`stories` giữ category, working headline English, confirmation tổng quan,
-fingerprint, English embedding, version và timestamps. `story_entities` và
-`story_sources` là link duy nhất; source link chỉ giữ Mongo article ID và bounded
-snapshot.
+`stories` là aggregate root, giữ `event_type`, trạng thái
+`DEVELOPING|CONFIRMED|STALE|CLOSED`, `confidence_score` trong `[0, 1]`, thời gian
+quan sát đầu/cuối và optimistic `version`. WP 4.1 chưa tính confidence; repository
+chỉ bảo vệ invariant và update theo `WHERE id + expected_version`.
 
-`story_claims` giữ:
+`story_sources` liên kết duy nhất `(story_id, article_version_id)`, giữ Mongo
+article-version UUID, source UUID, reliability tier và thời gian quan sát. Không có
+FK xuyên MongoDB/PostgreSQL. `story_entities` liên kết duy nhất một canonical entity
+vào Story và chỉ nhận `PLAYER|COACH|CLUB|COMPETITION`.
+
+`claims` giữ:
 
 ```json
 {
-  "subject_id": "club-arsenal",
+  "subject_entity_id": "player-vinicius-junior",
   "predicate": "SUBMITTED_BID",
-  "object_id": "player-vinicius-junior",
-  "qualifiers": {"amount": 180000000, "currency": "EUR"},
-  "confirmation": "MULTI_SOURCE",
-  "source_article_ids": []
+  "object_entity_id": "club-arsenal",
+  "object_value": {"amount": 180000000, "currency": "EUR"},
+  "statement_en": "Arsenal submitted a €180m bid.",
+  "certainty": 0.7,
+  "occurred_at_bucket": "UTC"
 }
 ```
 
-Claim có stable key từ subject/predicate/object/qualifiers để chống duplicate
-delivery. Confirmation thuộc từng claim; Story confirmation chỉ là projection
-tổng quan.
+Claim fingerprint SHA-256 được tạo deterministic từ Story, subject, predicate,
+object/value và occurred bucket. Unique `(story_id, claim_fingerprint)` gom các
+cách diễn đạt khác nhau nhưng giữ Claim mới khi dữ kiện thay đổi.
+
+`claim_evidence` liên kết nhiều-nhiều Claim với StorySource, giữ quote tiếng Anh
+ngắn và half-open offsets trỏ về `cleaned_content` trong MongoDB. Unique
+`(claim_id, story_source_id, evidence_start, evidence_end)` ngăn replay evidence.
+
+`processed_events` unique `(consumer_name, event_id)` và `outbox_events` unique
+`deduplication_key`. Repository ghi processed marker, Story/Claim delta và outbox
+trong một transaction. Replay trả no-op; unique conflict hoặc stale Story version
+rollback cả marker và outbox để event có thể retry.
 
 #### Timeline
 
