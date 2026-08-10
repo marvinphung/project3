@@ -263,6 +263,9 @@ class Claim:
             ClaimConfirmation(confirmation),
         )
 
+    def with_confirmation(self, confirmation: ClaimConfirmation) -> Claim:
+        return replace(self, confirmation=ClaimConfirmation(confirmation))
+
 
 def _claim_fingerprint(
     *,

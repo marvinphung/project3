@@ -176,6 +176,28 @@ def test_claim_confirmation_defaults_to_rumour_and_can_be_set() -> None:
     )
 
 
+def test_claim_can_transition_confirmation_without_changing_fingerprint() -> None:
+    claim = Claim.create(
+        claim_id=CLAIM_ID,
+        story_id=STORY_ID,
+        subject_entity_id=PLAYER_ID,
+        predicate=ClaimPredicate.SUBMITTED_BID,
+        object_entity_id=CLUB_ID,
+        object_value={"amount": 180_000_000},
+        statement_en="Arsenal submitted a bid.",
+        certainty=Decimal("0.7"),
+        occurred_at=NOW,
+        occurred_at_bucket=NOW,
+        now=NOW,
+    )
+
+    updated = claim.with_confirmation(ClaimConfirmation.MULTI_SOURCE)
+
+    assert updated.confirmation is ClaimConfirmation.MULTI_SOURCE
+    assert updated.fingerprint == claim.fingerprint
+    assert updated.created_at == claim.created_at
+
+
 def test_claim_requires_grounded_object_statement_and_valid_certainty() -> None:
     arguments = {
         "claim_id": CLAIM_ID,

@@ -17,6 +17,7 @@ from footballpulse_intelligence_service.application.story_matching import (
     StoryMatchingOrchestrator,
     StoryMatchRequest,
 )
+from footballpulse_intelligence_service.domain.claim_confirmation import ClaimConfirmation
 from footballpulse_intelligence_service.domain.delivery import OutboxEvent, ProcessedEvent
 from footballpulse_intelligence_service.domain.embedding import (
     EMBEDDING_DIMENSIONS,
@@ -305,6 +306,49 @@ def test_create_aggregate_and_replay_are_atomic_and_idempotent(
         ).scalar_one()
     assert counts == (1, 1, 2, 1, 1, 1, 1)
     assert source_cluster == UUID(int=109)
+    engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
+)
+def test_claim_confirmation_update_is_scoped_to_story_and_preserves_fingerprint(
+    migrated_database: str,
+) -> None:
+    engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
+    repository = PostgresStoryRepository(engine)
+    story, source, entity_links, claim, evidence, processed, outbox = aggregate()
+    repository.create_from_event(
+        story=story,
+        sources=(source,),
+        entities=entity_links,
+        claims=(claim,),
+        evidence=(evidence,),
+        processed_event=processed,
+        outbox_events=(outbox,),
+    )
+
+    assert repository.update_claim_confirmation(
+        story_id=story.id,
+        claim_id=claim.id,
+        confirmation=ClaimConfirmation.MULTI_SOURCE,
+    ) is True
+    with engine.connect() as connection:
+        row = connection.execute(
+            sa.text(
+                "SELECT confirmation, claim_fingerprint FROM intelligence_schema.claims "
+                "WHERE id = :claim_id"
+            ),
+            {"claim_id": claim.id},
+        ).one()
+    assert row == ("MULTI_SOURCE", claim.fingerprint)
+    assert repository.update_claim_confirmation(
+        story_id=UUID(int=999),
+        claim_id=claim.id,
+        confirmation=ClaimConfirmation.OFFICIAL,
+    ) is False
     engine.dispose()
 
 

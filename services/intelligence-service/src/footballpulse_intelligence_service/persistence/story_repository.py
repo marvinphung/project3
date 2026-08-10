@@ -11,6 +11,7 @@ from sqlalchemy.engine import Connection, Engine, RowMapping
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.dml import ReturningInsert
 
+from footballpulse_intelligence_service.domain.claim_confirmation import ClaimConfirmation
 from footballpulse_intelligence_service.domain.delivery import OutboxEvent, ProcessedEvent
 from footballpulse_intelligence_service.domain.errors import StoryConflictError
 from footballpulse_intelligence_service.domain.story import (
@@ -200,6 +201,23 @@ class PostgresStoryRepository:
                 .one_or_none()
             )
         return None if row is None else _story_from_row(row)
+
+    def update_claim_confirmation(
+        self,
+        *,
+        story_id: UUID,
+        claim_id: UUID,
+        confirmation: ClaimConfirmation,
+    ) -> bool:
+        """Update one Claim confirmation without changing its fingerprint."""
+        with self._engine.begin() as connection:
+            updated = connection.execute(
+                claims_table.update()
+                .where(claims_table.c.id == claim_id, claims_table.c.story_id == story_id)
+                .values(confirmation=ClaimConfirmation(confirmation).value)
+                .returning(claims_table.c.id)
+            ).scalar_one_or_none()
+        return updated is not None
 
     def update_from_event(
         self,
