@@ -31,5 +31,6 @@ Phase Gate 4 is approved. Phase 5.1 grounded generation, 5.2 editorial revisions
 5.3 idempotent publication, and the first 5.5 public/admin API façade are implemented.
 The credential model, JWT/Argon2 token endpoint, PostgreSQL user repository,
 local bootstrap, and JWT role enforcement are implemented. Static admin/editor
-tokens remain supported for backward-compatible local development. The next
-checkpoint is the Phase 5 review gate before frontend work.
+tokens remain supported for backward-compatible local development. Phase 6.1
+now has a typed public API client and loading/error state hook; browser build
+verification is pending because the local pnpm toolchain is unavailable.

@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { articles } from '../data/mock'
-import { NewsRow, SectionHeading, StatusBadge, EntityChip } from '../components/ui'
+import { usePublicArticles } from '../api/hooks'
+import { EmptyState, LoadingSkeleton, NewsRow, SectionHeading, EntityChip } from '../components/ui'
+import type { Article } from '../data/mock'
 
 const filters = ['Tất cả', 'Mới nhất', 'Nhiều nguồn', 'Chính thức']
 
@@ -14,6 +16,18 @@ const trendingEntities = [
 
 export default function LatestNewsPage() {
   const [active, setActive] = useState('Tất cả')
+  const remote = usePublicArticles()
+  const displayArticles: Article[] = remote.data
+    ? remote.data.map((article) => ({
+        id: article.slug,
+        headline: article.title_vi,
+        summary: article.body_vi,
+        time: new Date(article.published_at).toLocaleString('vi-VN'),
+        sources: 1,
+        entities: [],
+        img: 'https://images.unsplash.com/photo-1489944440615-453fc2b6a9a9?w=800&h=450&fit=crop&auto=format',
+      }))
+    : articles
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8">
@@ -38,7 +52,17 @@ export default function LatestNewsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-10">
         <section>
           <div>
-            {articles.map(a => <NewsRow key={a.id} article={a} />)}
+            {remote.loading && <LoadingSkeleton />}
+            {!remote.loading && remote.error && (
+              <EmptyState
+                message="Chưa thể tải tin mới"
+                sub="API đang không khả dụng. Vui lòng thử lại sau."
+              />
+            )}
+            {!remote.loading && !remote.error && displayArticles.length === 0 && (
+              <EmptyState message="Chưa có bài viết được xuất bản" />
+            )}
+            {!remote.loading && !remote.error && displayArticles.map(a => <NewsRow key={a.id} article={a} />)}
           </div>
           <div className="mt-8 text-center">
             <button className="inline-flex items-center gap-2 px-6 py-2.5 border border-[#E5E7EB] rounded-lg text-sm font-medium text-[#374151] hover:border-[#78A83D] hover:text-[#78A83D] transition-colors">
