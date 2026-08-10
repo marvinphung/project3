@@ -5,5 +5,17 @@ from footballpulse_ai_content_service.contracts.enrichment import (
     ArticleEnrichmentOutput,
     ClaimOutput,
 )
+from footballpulse_ai_content_service.contracts.generation import (
+    GeneratedStoryArticle,
+    GroundedStoryClaim,
+    StoryArticleGenerationInput,
+)
 
-__all__ = ["ArticleEnrichmentInput", "ArticleEnrichmentOutput", "ClaimOutput"]
+__all__ = [
+    "ArticleEnrichmentInput",
+    "ArticleEnrichmentOutput",
+    "ClaimOutput",
+    "GeneratedStoryArticle",
+    "GroundedStoryClaim",
+    "StoryArticleGenerationInput",
+]
