@@ -12,4 +12,5 @@ Local configuration:
 
 `footballpulse_ai_enrichment` chạy sau collection 30 phút, gửi collection batch
 IDs tới `FOOTBALLPULSE_AI_ENRICHMENT_URL`. AI service cần cung cấp endpoint
-`POST /internal/v1/enrichment-batches` trước khi DAG này được bật production.
+`POST /internal/v1/enrichment-batches` hiện đã có contract runtime tối thiểu:
+trả batch `PREPARING`; worker/provider execution vẫn là bước kế tiếp.

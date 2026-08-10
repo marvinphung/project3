@@ -66,7 +66,6 @@ resource number phải kèm fixture/benchmark. Contract/API/event thay đổi c�
 compatibility; không silently cập nhật payload đã có consumer.
 ## Airflow / AI enrichment
 
-- AI content service hiện mới có application/provider contracts, chưa có HTTP
-  runtime endpoint cho `enrichment batch`. DAG 7.2 cần chốt boundary (REST hay
-  queue event), authentication token và lifecycle start/poll/import trước khi
-  triển khai.
+- AI content service đã có HTTP contract tối thiểu cho `enrichment batch` và
+  trả trạng thái `PREPARING`; cần triển khai worker lifecycle start/poll/import
+  và quyết định REST hay queue event cho các bước tiếp theo.

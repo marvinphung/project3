@@ -1,0 +1,56 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from secrets import compare_digest
+from uuid import UUID, uuid4
+
+from fastapi import FastAPI, Header, HTTPException
+from pydantic import BaseModel, Field
+
+
+class EnrichmentBatchRequest(BaseModel):
+    collection_batch_ids: list[str] = Field(min_length=1, max_length=100)
+    window_started_at: datetime
+
+
+class EnrichmentBatchResponse(BaseModel):
+    id: UUID
+    status: str
+    collection_batch_ids: list[str]
+    created_at: datetime
+
+
+class EnrichmentBatchRegistry:
+    def __init__(self) -> None:
+        self._batches: dict[UUID, EnrichmentBatchResponse] = {}
+
+    def create(self, request: EnrichmentBatchRequest) -> EnrichmentBatchResponse:
+        batch = EnrichmentBatchResponse(
+            id=uuid4(),
+            status="PREPARING",
+            collection_batch_ids=request.collection_batch_ids,
+            created_at=datetime.now(UTC),
+        )
+        self._batches[batch.id] = batch
+        return batch
+
+
+def create_app(*, internal_token: str, registry: EnrichmentBatchRegistry | None = None) -> FastAPI:
+    app = FastAPI(title="FootballPulse AI Content Service", version="0.1.0")
+    batches = registry or EnrichmentBatchRegistry()
+
+    @app.post(
+        "/internal/v1/enrichment-batches",
+        status_code=202,
+        response_model=EnrichmentBatchResponse,
+    )
+    async def create_enrichment_batch(
+        request: EnrichmentBatchRequest, authorization: str | None = Header(default=None)
+    ) -> EnrichmentBatchResponse:
+        if authorization is None or not authorization.startswith("Bearer ") or not compare_digest(
+            authorization[7:], internal_token
+        ):
+            raise HTTPException(status_code=401, detail="invalid bearer token")
+        return batches.create(request)
+
+    return app

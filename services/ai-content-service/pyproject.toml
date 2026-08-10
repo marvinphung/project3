@@ -3,9 +3,11 @@ name = "footballpulse-ai-content-service"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "fastapi>=0.116,<1",
     "footballpulse-event-contracts",
     "pydantic>=2.12,<3",
     "pymongo>=4.16,<5",
+    "uvicorn>=0.35,<1",
 ]
 
 [project.optional-dependencies]
@@ -18,6 +20,7 @@ footballpulse-event-contracts = { workspace = true }
 
 [project.scripts]
 footballpulse-ai-content-service-health = "footballpulse_ai_content_service.health:main"
+footballpulse-ai-content-service = "footballpulse_ai_content_service.server:main"
 
 [build-system]
 requires = ["hatchling"]

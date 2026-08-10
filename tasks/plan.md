@@ -49,4 +49,5 @@ orchestrates those batches every six hours and queries crawler `sources/due`
 for source selection. Mock HTTP coverage now verifies due-source auth,
 idempotency, and batch payloads.
 AI enrichment orchestration contract is also covered by a 30-minute follow-up
-DAG; its service endpoint remains an explicit implementation dependency.
+DAG, and the AI service now exposes the minimal authenticated `PREPARING`
+batch endpoint. Provider/Kaggle execution lifecycle remains next.
