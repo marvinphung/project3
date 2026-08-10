@@ -76,6 +76,10 @@ def create_app(*, internal_token: str, registry: EnrichmentBatchRegistry | None 
     app = FastAPI(title="FootballPulse AI Content Service", version="0.1.0")
     batches = registry or EnrichmentBatchRegistry()
 
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        return {"service": "ai-content-service", "status": "ok"}
+
     @app.post(
         "/internal/v1/enrichment-batches",
         status_code=202,

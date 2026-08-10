@@ -48,3 +48,12 @@ async def test_enrichment_batch_contract_requires_internal_token() -> None:
     assert completed.status_code == 200
     assert completed.json()["status"] == "COMPLETED"
     assert completed.json()["success_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_health_does_not_require_authentication() -> None:
+    transport = httpx.ASGITransport(app=create_app(internal_token="ai-internal"))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"service": "ai-content-service", "status": "ok"}
