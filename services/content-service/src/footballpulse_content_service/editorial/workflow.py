@@ -4,14 +4,14 @@ from collections.abc import Callable
 from datetime import datetime
 from uuid import UUID
 
-from footballpulse_content_service.editorial.repository import EditorialRevisionRepository
+from footballpulse_content_service.editorial.repository import EditorialRevisionStore
 from footballpulse_content_service.editorial.revision import EditorialRevision
 
 
 class EditorialWorkflow:
     """Application-level orchestration for optimistic editorial transitions."""
 
-    def __init__(self, repository: EditorialRevisionRepository) -> None:
+    def __init__(self, repository: EditorialRevisionStore) -> None:
         self._repository = repository
 
     def submit_for_review(

@@ -5,10 +5,21 @@ from collections.abc import Mapping
 
 import uvicorn
 from fastapi import FastAPI
+from footballpulse_content_service.editorial.postgres_publication_repository import (
+    PostgresPublicationRepository,
+)
+from footballpulse_content_service.editorial.postgres_repository import (
+    PostgresEditorialRevisionRepository,
+)
+from footballpulse_content_service.editorial.publication import PublicationService
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
+from footballpulse_api_gateway.api.editorial_admin import create_editorial_admin_app
 from footballpulse_api_gateway.api.public import create_public_app
+from footballpulse_api_gateway.application.editorial_admin_adapter import (
+    ContentEditorialAdminAdapter,
+)
 from footballpulse_api_gateway.persistence.public_read_repository import (
     PostgresPublicReadRepository,
 )
@@ -31,7 +42,21 @@ def database_url(environment: Mapping[str, str]) -> str:
 def build_app(environment: Mapping[str, str] | None = None) -> FastAPI:
     values = os.environ if environment is None else environment
     engine = create_engine(database_url(values), pool_pre_ping=True)
-    return create_public_app(PostgresPublicReadRepository(engine))
+    revision_repository = PostgresEditorialRevisionRepository(engine)
+    publication_service = PublicationService(PostgresPublicationRepository(engine))
+    editorial_service = ContentEditorialAdminAdapter(
+        revision_repository=revision_repository,
+        publication_service=publication_service,
+    )
+    app = create_public_app(PostgresPublicReadRepository(engine))
+    admin_app = create_editorial_admin_app(
+        editorial_service,
+        admin_token=values.get("FOOTBALLPULSE_API_ADMIN_TOKEN", "local-admin-token"),
+    )
+    app.router.routes.extend(admin_app.router.routes)
+    app.exception_handlers.update(admin_app.exception_handlers)
+    app.openapi_schema = None
+    return app
 
 
 def main() -> None:

@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from footballpulse_content_service.editorial.publication import PublicationService
-from footballpulse_content_service.editorial.repository import EditorialRevisionRepository
+from footballpulse_content_service.editorial.repository import EditorialRevisionStore
 from footballpulse_content_service.editorial.revision import EditorialRevision
 from footballpulse_content_service.editorial.workflow import EditorialWorkflow
 
@@ -17,7 +17,7 @@ class ContentEditorialAdminAdapter:
     def __init__(
         self,
         *,
-        revision_repository: EditorialRevisionRepository,
+        revision_repository: EditorialRevisionStore,
         publication_service: PublicationService,
     ) -> None:
         self._revision_repository = revision_repository

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Protocol
 from uuid import UUID
 
 from footballpulse_content_service.editorial.revision import EditorialRevision
@@ -7,6 +8,12 @@ from footballpulse_content_service.editorial.revision import EditorialRevision
 
 class RevisionConflictError(RuntimeError):
     """The revision changed since the caller loaded it."""
+
+
+class EditorialRevisionStore(Protocol):
+    def get_current(self, generated_article_id: UUID) -> EditorialRevision | None: ...
+
+    def update(self, revision: EditorialRevision, *, expected_revision_number: int) -> None: ...
 
 
 class EditorialRevisionRepository:

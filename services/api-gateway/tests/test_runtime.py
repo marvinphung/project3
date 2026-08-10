@@ -12,8 +12,10 @@ def test_database_url_prefers_explicit_environment_value() -> None:
 def test_build_app_exposes_public_routes_without_connecting_until_request() -> None:
     app = build_app(
         {
-            "FOOTBALLPULSE_DATABASE_URL": "postgresql+psycopg://user:pass@localhost/db"
+            "FOOTBALLPULSE_DATABASE_URL": "postgresql+psycopg://user:pass@localhost/db",
+            "FOOTBALLPULSE_API_ADMIN_TOKEN": "admin-test-token",
         }
     )
 
     assert "/api/v1/articles/{slug}" in app.openapi()["paths"]
+    assert "/admin/v1/articles/{article_id}/publish" in app.openapi()["paths"]
