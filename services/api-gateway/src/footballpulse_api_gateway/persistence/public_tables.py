@@ -6,6 +6,21 @@ from sqlalchemy.dialects import postgresql
 content_metadata = sa.MetaData(schema="content_schema")
 intelligence_metadata = sa.MetaData(schema="intelligence_schema")
 
+entities = sa.Table(
+    "entities",
+    intelligence_metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("entity_type", sa.String(length=32), nullable=False),
+    sa.Column("slug", sa.String(length=200), nullable=False),
+)
+
+story_entities = sa.Table(
+    "story_entities",
+    intelligence_metadata,
+    sa.Column("story_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("entity_id", postgresql.UUID(as_uuid=True), nullable=False),
+)
+
 publications = sa.Table(
     "publications",
     content_metadata,

@@ -1,4 +1,4 @@
-import { useStoryTimeline } from '../api/timeline'
+import { useEntityStoryTimeline, useStoryTimeline } from '../api/timeline'
 import { EmptyState, LoadingSkeleton } from './ui'
 
 function formatTime(value: string) {
@@ -10,10 +10,21 @@ function formatTime(value: string) {
   }).format(new Date(value))
 }
 
-export default function StoryTimeline({ storyId }: { storyId: string | null }) {
-  const timeline = useStoryTimeline(storyId)
+export default function StoryTimeline({
+  storyId,
+  entityType,
+  entitySlug,
+}: {
+  storyId: string | null
+  entityType?: string
+  entitySlug?: string
+}) {
+  const directTimeline = useStoryTimeline(storyId)
+  const entityTimeline = useEntityStoryTimeline(entityType ?? '', entitySlug ?? '')
+  const resolvedStoryId = storyId ?? (entityType && entitySlug ? 'entity' : null)
+  const timeline = storyId ? directTimeline : entityTimeline
 
-  if (!storyId) {
+  if (!resolvedStoryId) {
     return (
       <EmptyState
         message="Story timeline chưa được liên kết"

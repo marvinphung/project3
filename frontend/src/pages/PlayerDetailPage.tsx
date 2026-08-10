@@ -30,7 +30,7 @@ export default function PlayerDetailPage() {
         <section>
           <div className="mb-8 rounded-xl border border-[#E5E7EB] bg-white p-5">
             <SectionHeading>Timeline diễn biến</SectionHeading>
-            <StoryTimeline storyId={storyId} />
+            <StoryTimeline storyId={storyId} entityType="PLAYER" entitySlug={player.id} />
           </div>
           <SectionHeading>Tin mới nhất về {player.name}</SectionHeading>
           {allArticles.map(a => <NewsRow key={a.id} article={a} />)}

@@ -15,6 +15,12 @@ export type PublicTimelineEntry = {
   confirmation: string
 }
 
+export type PublicEntityStories = {
+  entity_type: string
+  entity_slug: string
+  story_ids: string[]
+}
+
 type ListResponse<T> = { items: T[] }
 
 export class ApiError extends Error {
@@ -73,5 +79,11 @@ export function getStoryTimeline(
   const suffix = query.toString() ? `?${query}` : ''
   return request<ListResponse<PublicTimelineEntry>>(
     `/api/v1/stories/${encodeURIComponent(storyId)}/timeline${suffix}`,
+  )
+}
+
+export function getEntityStories(entityType: string, entitySlug: string) {
+  return request<PublicEntityStories>(
+    `/api/v1/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entitySlug)}/stories`,
   )
 }

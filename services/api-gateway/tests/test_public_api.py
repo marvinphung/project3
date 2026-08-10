@@ -7,6 +7,7 @@ import httpx
 import pytest
 from footballpulse_api_gateway.api.public import (
     PublicArticle,
+    PublicEntityStories,
     PublicTimelineEntry,
     create_public_app,
 )
@@ -30,6 +31,8 @@ TIMELINE = PublicTimelineEntry(
 
 
 class MemoryPublicRepository:
+    def list_entity_stories(self, entity_type: str, entity_slug: str) -> PublicEntityStories:
+        return PublicEntityStories(entity_type, entity_slug, (ARTICLE.story_id,))
     def get_article_by_slug(self, slug: str) -> PublicArticle | None:
         return ARTICLE if slug == ARTICLE.slug else None
 
@@ -56,6 +59,7 @@ async def test_public_article_and_story_timeline_routes() -> None:
         timeline = await client.get(
             f"/api/v1/stories/{ARTICLE.story_id}/timeline?limit=10&offset=0&confirmation=REPORTED"
         )
+        entity_stories = await client.get("/api/v1/entities/player/vinicius/stories")
 
         assert article.status_code == 200
         assert article.json()["title_vi"] == "Arsenal hỏi mua Vinícius"
@@ -63,6 +67,8 @@ async def test_public_article_and_story_timeline_routes() -> None:
         assert timeline.status_code == 200
         assert timeline.json()["items"][0]["confirmation"] == "REPORTED"
         assert timeline.headers["cache-control"] == "public, max-age=30"
+        assert entity_stories.status_code == 200
+        assert entity_stories.json()["story_ids"] == [str(ARTICLE.story_id)]
 
 
 @pytest.mark.asyncio

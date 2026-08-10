@@ -5,8 +5,17 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.engine import Engine, RowMapping
 
-from footballpulse_api_gateway.api.public import PublicArticle, PublicTimelineEntry
-from footballpulse_api_gateway.persistence.public_tables import publications, timeline_entries
+from footballpulse_api_gateway.api.public import (
+    PublicArticle,
+    PublicEntityStories,
+    PublicTimelineEntry,
+)
+from footballpulse_api_gateway.persistence.public_tables import (
+    entities,
+    publications,
+    story_entities,
+    timeline_entries,
+)
 
 
 def _article_from_row(row: RowMapping) -> PublicArticle:
@@ -78,3 +87,19 @@ class PostgresPublicReadRepository:
                 .all()
             )
         return [_timeline_from_row(row) for row in rows]
+
+    def list_entity_stories(self, entity_type: str, entity_slug: str) -> PublicEntityStories:
+        statement = (
+            sa.select(entities.c.entity_type, entities.c.slug, story_entities.c.story_id)
+            .join(story_entities, story_entities.c.entity_id == entities.c.id)
+            .where(entities.c.entity_type == entity_type.upper(), entities.c.slug == entity_slug)
+            .distinct()
+            .order_by(story_entities.c.story_id)
+        )
+        with self._engine.connect() as connection:
+            rows = connection.execute(statement).mappings().all()
+        return PublicEntityStories(
+            entity_type=entity_type.upper(),
+            entity_slug=entity_slug,
+            story_ids=tuple(row["story_id"] for row in rows),
+        )

@@ -29,6 +29,13 @@ class PublicTimelineEntry:
     confirmation: str
 
 
+@dataclass(frozen=True, slots=True)
+class PublicEntityStories:
+    entity_type: str
+    entity_slug: str
+    story_ids: tuple[UUID, ...]
+
+
 class PublicReadRepository(Protocol):
     def get_article_by_slug(self, slug: str) -> PublicArticle | None: ...
 
@@ -44,6 +51,8 @@ class PublicReadRepository(Protocol):
         offset: int,
         confirmation: str | None,
     ) -> list[PublicTimelineEntry]: ...
+
+    def list_entity_stories(self, entity_type: str, entity_slug: str) -> PublicEntityStories: ...
 
 
 class ArticleResponse(BaseModel):
@@ -73,6 +82,12 @@ class TimelineEntryResponse(BaseModel):
 
 class TimelineResponse(BaseModel):
     items: list[TimelineEntryResponse]
+
+
+class EntityStoriesResponse(BaseModel):
+    entity_type: str
+    entity_slug: str
+    story_ids: list[UUID]
 
 
 def create_public_app(repository: PublicReadRepository) -> FastAPI:
@@ -125,6 +140,18 @@ def create_public_app(repository: PublicReadRepository) -> FastAPI:
                     confirmation=confirmation,
                 )
             ]
+        )
+
+    @app.get(
+        "/api/v1/entities/{entity_type}/{entity_slug}/stories",
+        response_model=EntityStoriesResponse,
+    )
+    async def get_entity_stories(entity_type: str, entity_slug: str) -> EntityStoriesResponse:
+        result = repository.list_entity_stories(entity_type, entity_slug)
+        return EntityStoriesResponse(
+            entity_type=result.entity_type,
+            entity_slug=result.entity_slug,
+            story_ids=list(result.story_ids),
         )
 
     return app

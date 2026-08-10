@@ -59,7 +59,7 @@
 ## Phase 6 — Frontend
 
 - [ ] WP 6.1 Typed API client and application states (implemented; frontend build verification pending)
-- [ ] WP 6.2 Public entity timelines (timeline component done; entity-to-Story mapping remains)
+- [x] WP 6.2 Public entity timelines
 - [ ] WP 6.3 Public articles and Story views
 - [ ] WP 6.4 Admin batch/source/failure operations
 - [ ] WP 6.5 Editorial and Story correction UI
