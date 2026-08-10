@@ -213,6 +213,21 @@ claim_evidence = sa.Table(
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
 )
 
+timeline_entries = sa.Table(
+    "timeline_entries",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("story_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("window_start", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("window_end", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("summary_en", sa.Text(), nullable=False),
+    sa.Column("summary_vi", sa.Text(), nullable=False),
+    sa.Column("confirmation", sa.String(length=16), nullable=False),
+    sa.Column("used_claim_ids", postgresql.JSONB(), nullable=False),
+    sa.Column("source_article_ids", postgresql.JSONB(), nullable=False),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+)
+
 processed_events = sa.Table(
     "processed_events",
     metadata,

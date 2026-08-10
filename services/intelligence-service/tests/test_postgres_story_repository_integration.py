@@ -46,6 +46,7 @@ from footballpulse_intelligence_service.domain.story_candidate_scoring import (
 )
 from footballpulse_intelligence_service.domain.story_embedding import StoryEmbeddingRecord
 from footballpulse_intelligence_service.domain.story_match_audit import StoryMatchAuditRecord
+from footballpulse_intelligence_service.domain.timeline import TimelineEntry
 from footballpulse_intelligence_service.persistence.candidate_repository import (
     CandidateQuery,
     PostgresStoryCandidateRepository,
@@ -70,6 +71,9 @@ from footballpulse_intelligence_service.persistence.processed_event_repository i
     PostgresProcessedEventStore,
 )
 from footballpulse_intelligence_service.persistence.story_repository import PostgresStoryRepository
+from footballpulse_intelligence_service.persistence.timeline_repository import (
+    PostgresTimelineRepository,
+)
 from psycopg import sql
 from sqlalchemy import create_engine
 
@@ -397,6 +401,35 @@ def test_evidence_append_and_confirmation_update_are_atomic(
             {"claim_id": claim.id},
         ).one()
     assert row == ("MULTI_SOURCE", 2)
+    engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
+)
+def test_timeline_repository_is_unique_per_story_window(
+    migrated_database: str,
+) -> None:
+    engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
+    repository = PostgresTimelineRepository(engine)
+    start = NOW.replace(hour=5)
+    entry = TimelineEntry.create(
+        entry_id=UUID(int=120),
+        story_id=STORY_ID,
+        window_start=start,
+        summary_en="Arsenal submitted a bid.",
+        summary_vi="Arsenal đã gửi đề nghị.",
+        confirmation=ClaimConfirmation.REPORTED,
+        used_claim_ids=(UUID(int=121),),
+        source_article_ids=(ARTICLE_ID,),
+        created_at=NOW,
+    )
+
+    assert repository.add_once(entry) is True
+    assert repository.add_once(entry) is False
+    assert repository.get(STORY_ID, start) == entry
     engine.dispose()
 
 
