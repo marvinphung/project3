@@ -85,6 +85,9 @@ class StoryMatchDecision:
     ranked_candidates: tuple[CandidateDecisionInput, ...]
     reason_codes: tuple[str, ...]
     matcher_version: str
+    review_threshold: float
+    attach_threshold: float
+    near_tie_margin: float
     embedding_model_name: str
     embedding_model_version: str
 
@@ -200,6 +203,9 @@ class StoryCandidateDecisionPolicy:
             ranked,
             reasons,
             self._config.matcher_version,
+            self._config.review_threshold,
+            self._config.attach_threshold,
+            self._config.near_tie_margin,
             model_name,
             model_version,
         )

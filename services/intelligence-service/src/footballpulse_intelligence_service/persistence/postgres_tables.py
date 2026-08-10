@@ -112,6 +112,7 @@ story_match_decisions = sa.Table(
     sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
     sa.Column("article_version_id", postgresql.UUID(as_uuid=True), nullable=False),
     sa.Column("input_hash", sa.String(length=64), nullable=False),
+    sa.Column("candidate_set_hash", sa.String(length=64), nullable=False),
     sa.Column("action", sa.String(length=16), nullable=False),
     sa.Column("selected_story_id", postgresql.UUID(as_uuid=True), nullable=True),
     sa.Column("selected_story_version", sa.Integer(), nullable=True),

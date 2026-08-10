@@ -62,6 +62,9 @@ def test_policy_attaches_clear_high_scoring_candidate_with_audit_context() -> No
     assert [item.story_id for item in decision.ranked_candidates] == [STORY_A, STORY_B]
     assert decision.reason_codes == ("TOP_SCORE_ATTACHABLE",)
     assert decision.matcher_version == "story-matcher-v1"
+    assert decision.review_threshold == 55.0
+    assert decision.attach_threshold == 75.0
+    assert decision.near_tie_margin == 5.0
     assert decision.embedding_model_name == "BAAI/bge-small-en-v1.5"
 
 

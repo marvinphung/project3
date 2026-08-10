@@ -29,10 +29,23 @@ from footballpulse_intelligence_service.domain.story import (
     StorySource,
     StoryStatus,
 )
+from footballpulse_intelligence_service.domain.story_candidate_decision import (
+    CandidateDecisionInput,
+    StoryCandidateDecisionPolicy,
+    StoryCandidatePolicyConfig,
+)
+from footballpulse_intelligence_service.domain.story_candidate_scoring import (
+    StoryCandidateScore,
+    StoryCandidateScoreComponents,
+)
 from footballpulse_intelligence_service.domain.story_embedding import StoryEmbeddingRecord
+from footballpulse_intelligence_service.domain.story_match_audit import StoryMatchAuditRecord
 from footballpulse_intelligence_service.persistence.candidate_repository import (
     CandidateQuery,
     PostgresStoryCandidateRepository,
+)
+from footballpulse_intelligence_service.persistence.match_audit_repository import (
+    PostgresStoryMatchAuditRepository,
 )
 from footballpulse_intelligence_service.persistence.postgres_tables import (
     stories,
@@ -555,4 +568,83 @@ def test_candidate_repository_hard_filters_current_embeddings_and_orders_exact_t
 
     top_one = repository.find_candidates(replace(result.query, top_k=1))
     assert [candidate.story_id for candidate in top_one.candidates] == [story_ids["best"]]
+    engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
+)
+def test_match_audit_repository_persists_ranked_decision_idempotently(
+    migrated_database: str,
+) -> None:
+    engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
+    repository = PostgresStoryMatchAuditRepository(engine)
+    score = StoryCandidateScore(
+        81.5,
+        StoryCandidateScoreComponents(24.0, 25.0, 7.5, 20.0, 5.0),
+        ("PRIMARY_ENTITY_MATCH", "PREDICATE_PROGRESSION"),
+    )
+    decision = StoryCandidateDecisionPolicy(
+        StoryCandidatePolicyConfig(55.0, 75.0, 5.0, "story-matcher-v1")
+    ).decide(
+        candidates=(CandidateDecisionInput(STORY_ID, 3, score),),
+        missing_current_embedding_story_ids=(),
+        embedding_model_name="BAAI/bge-small-en-v1.5",
+        embedding_model_version="pinned-revision",
+    )
+    audit = StoryMatchAuditRecord.create(
+        article_version_id=ARTICLE_ID,
+        input_hash="a" * 64,
+        decision=decision,
+        now=NOW,
+    )
+
+    assert repository.add_once(audit) == audit
+    assert repository.add_once(audit) == audit
+    assert repository.get(audit.id) == audit
+
+    with engine.connect() as connection:
+        decision_count = connection.execute(
+            sa.text(
+                "SELECT count(*) FROM intelligence_schema.story_match_decisions "
+                "WHERE id = :id"
+            ),
+            {"id": audit.id},
+        ).scalar_one()
+        candidate_count = connection.execute(
+            sa.text(
+                "SELECT count(*) FROM intelligence_schema.story_match_candidate_scores "
+                "WHERE decision_id = :id"
+            ),
+            {"id": audit.id},
+        ).scalar_one()
+    assert (decision_count, candidate_count) == (1, 1)
+
+    broken_id = UUID(int=999)
+    broken_candidate = replace(
+        audit.candidates[0],
+        id=UUID(int=998),
+        decision_id=broken_id,
+        total_score=Decimal("101.000"),
+    )
+    broken_audit = replace(
+        audit,
+        id=broken_id,
+        input_hash="b" * 64,
+        candidate_set_hash="c" * 64,
+        candidates=(broken_candidate,),
+    )
+    with pytest.raises(sa.exc.IntegrityError):
+        repository.add_once(broken_audit)
+    with engine.connect() as connection:
+        rolled_back = connection.execute(
+            sa.text(
+                "SELECT count(*) FROM intelligence_schema.story_match_decisions "
+                "WHERE id = :id"
+            ),
+            {"id": broken_id},
+        ).scalar_one()
+    assert rolled_back == 0
     engine.dispose()

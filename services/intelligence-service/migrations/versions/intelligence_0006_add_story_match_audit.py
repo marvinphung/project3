@@ -24,6 +24,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("article_version_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("input_hash", sa.String(length=64), nullable=False),
+        sa.Column("candidate_set_hash", sa.String(length=64), nullable=False),
         sa.Column("action", sa.String(length=16), nullable=False),
         sa.Column("selected_story_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("selected_story_version", sa.Integer(), nullable=True),
@@ -43,6 +44,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "input_hash ~ '^[0-9a-f]{64}$'",
             name="ck_story_match_decisions_input_hash",
+        ),
+        sa.CheckConstraint(
+            "candidate_set_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_story_match_decisions_candidate_hash",
         ),
         sa.CheckConstraint(
             "action IN ('ATTACH', 'CREATE', 'REVIEW')",
@@ -72,6 +77,7 @@ def upgrade() -> None:
         sa.UniqueConstraint(
             "article_version_id",
             "input_hash",
+            "candidate_set_hash",
             "matcher_version",
             "embedding_model_name",
             "embedding_model_version",

@@ -199,3 +199,4 @@ def test_intelligence_migration_adds_immutable_story_match_audit() -> None:
         "time_distance_score",
     ):
         assert f'"{component}"' in migration
+    assert '"candidate_set_hash"' in migration
