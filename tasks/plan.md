@@ -29,5 +29,7 @@ Canonical detailed plan:
 
 Phase Gate 4 is approved. Phase 5.1 grounded generation, 5.2 editorial revisions,
 5.3 idempotent publication, and the first 5.5 public/admin API façade are implemented.
-The next action is to define the credential model before implementing JWT/Argon2
-authentication; static admin/editor bearer tokens currently protect local development.
+The credential model and JWT/Argon2 token endpoint are now implemented. Static
+admin/editor bearer tokens still protect the editorial routes during the local
+transition; the next authentication slice is persistent users and JWT role
+enforcement on those routes.

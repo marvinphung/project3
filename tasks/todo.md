@@ -52,7 +52,7 @@
 - [x] WP 5.1 Grounded long-form generation
 - [x] WP 5.2 Revision/review state machine
 - [x] WP 5.3 Idempotent publication
-- [ ] WP 5.4 Authentication/RBAC/gateway middleware (JWT/Argon2 remains)
+- [ ] WP 5.4 Authentication/RBAC/gateway middleware (JWT token endpoint done; persistent users and route enforcement remain)
 - [x] WP 5.5 Public/admin OpenAPI façade (read/admin routes implemented)
 - [ ] Phase Gate 5 approved
 
