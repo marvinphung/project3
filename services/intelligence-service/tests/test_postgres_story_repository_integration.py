@@ -13,6 +13,10 @@ import psycopg
 import pytest
 import sqlalchemy as sa
 from footballpulse_intelligence_service.domain.delivery import OutboxEvent, ProcessedEvent
+from footballpulse_intelligence_service.domain.embedding import (
+    EMBEDDING_DIMENSIONS,
+    EmbeddingVector,
+)
 from footballpulse_intelligence_service.domain.entity import EntityType
 from footballpulse_intelligence_service.domain.errors import StoryConflictError
 from footballpulse_intelligence_service.domain.story import (
@@ -24,6 +28,15 @@ from footballpulse_intelligence_service.domain.story import (
     StoryEventType,
     StorySource,
     StoryStatus,
+)
+from footballpulse_intelligence_service.domain.story_embedding import StoryEmbeddingRecord
+from footballpulse_intelligence_service.persistence.candidate_repository import (
+    CandidateQuery,
+    PostgresStoryCandidateRepository,
+)
+from footballpulse_intelligence_service.persistence.postgres_tables import (
+    stories,
+    story_entities,
 )
 from footballpulse_intelligence_service.persistence.story_repository import PostgresStoryRepository
 from psycopg import sql
@@ -435,4 +448,111 @@ def test_unique_aggregate_link_conflict_rolls_back_event_and_story_version(
         ).scalar_one()
     assert marker_count == 0
     assert outbox_count == 0
+    engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
+)
+def test_candidate_repository_hard_filters_current_embeddings_and_orders_exact_top_k(
+    migrated_database: str,
+) -> None:
+    engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
+    repository = PostgresStoryCandidateRepository(engine)
+    same_vector = EmbeddingVector.create([1.0] + [0.0] * (EMBEDDING_DIMENSIONS - 1))
+    distant_vector = EmbeddingVector.create([0.0, 1.0] + [0.0] * (EMBEDDING_DIMENSIONS - 2))
+    story_ids = {
+        name: UUID(int=300 + index)
+        for index, name in enumerate(
+            ("best", "stale", "injury", "closed", "old", "no_overlap", "missing")
+        )
+    }
+
+    def story_row(
+        name: str,
+        *,
+        event_type: str = "TRANSFER",
+        status: str = "DEVELOPING",
+        age_days: int = 1,
+        version: int = 1,
+    ) -> dict[str, object]:
+        observed = NOW - timedelta(days=age_days)
+        return {
+            "id": story_ids[name],
+            "event_type": event_type,
+            "status": status,
+            "confidence_score": Decimal("0.5000"),
+            "first_seen_at": observed,
+            "last_seen_at": observed,
+            "version": version,
+            "created_at": observed,
+            "updated_at": observed,
+        }
+
+    rows = [
+        story_row("best"),
+        story_row("stale", status="STALE", age_days=20),
+        story_row("injury", event_type="INJURY"),
+        story_row("closed", status="CLOSED"),
+        story_row("old", age_days=31),
+        story_row("no_overlap"),
+        story_row("missing", version=2),
+    ]
+    entity_rows = [
+        {
+            "id": uuid4(),
+            "story_id": row["id"],
+            "entity_id": ARSENAL_ID if row["id"] == story_ids["no_overlap"] else PLAYER_ID,
+            "entity_type": "CLUB" if row["id"] == story_ids["no_overlap"] else "PLAYER",
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+    with engine.begin() as connection:
+        connection.execute(stories.insert(), rows)
+        connection.execute(story_entities.insert(), entity_rows)
+
+    def embedding(name: str, vector: EmbeddingVector, *, story_version: int = 1) -> None:
+        repository.add_embedding_once(
+            StoryEmbeddingRecord.create(
+                story_id=story_ids[name],
+                story_version=story_version,
+                input_hash=(f"{story_ids[name].int:064x}")[-64:],
+                input_builder_version="story-embedding-input-v1",
+                model_name="BAAI/bge-small-en-v1.5",
+                model_version="pinned-revision",
+                vector=vector,
+                token_count=20,
+                now=NOW,
+            )
+        )
+
+    for name in ("best", "injury", "closed", "old", "no_overlap", "missing"):
+        embedding(name, same_vector)
+    embedding("stale", distant_vector)
+
+    result = repository.find_candidates(
+        CandidateQuery(
+            event_type=StoryEventType.TRANSFER,
+            entity_ids=(PLAYER_ID,),
+            observed_at=NOW,
+            query_vector=same_vector,
+            input_builder_version="story-embedding-input-v1",
+            model_name="BAAI/bge-small-en-v1.5",
+            model_version="pinned-revision",
+            top_k=20,
+        )
+    )
+
+    assert [candidate.story_id for candidate in result.candidates] == [
+        story_ids["best"],
+        story_ids["stale"],
+    ]
+    assert result.candidates[0].cosine_similarity == pytest.approx(1.0)
+    assert result.missing_current_embedding_story_ids == (story_ids["missing"],)
+
+    top_one = repository.find_candidates(replace(result.query, top_k=1))
+    assert [candidate.story_id for candidate in top_one.candidates] == [story_ids["best"]]
     engine.dispose()

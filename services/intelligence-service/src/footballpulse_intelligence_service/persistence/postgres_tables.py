@@ -90,6 +90,22 @@ article_embeddings = sa.Table(
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
 )
 
+story_embeddings = sa.Table(
+    "story_embeddings",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("story_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("story_version", sa.Integer(), nullable=False),
+    sa.Column("input_hash", sa.String(length=64), nullable=False),
+    sa.Column("input_builder_version", sa.String(length=100), nullable=False),
+    sa.Column("model_name", sa.String(length=200), nullable=False),
+    sa.Column("model_version", sa.String(length=200), nullable=False),
+    sa.Column("dimensions", sa.SmallInteger(), nullable=False),
+    sa.Column("embedding", VECTOR(384), nullable=False),
+    sa.Column("token_count", sa.Integer(), nullable=False),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+)
+
 stories = sa.Table(
     "stories",
     metadata,
