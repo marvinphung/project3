@@ -16,3 +16,7 @@ IDs tới `FOOTBALLPULSE_AI_ENRICHMENT_URL`. AI service cần cung cấp endpoin
 trả batch `PREPARING`; trạng thái có thể poll qua
 `GET /internal/v1/enrichment-batches/{batch_id}`. Worker/provider execution
 vẫn là bước kế tiếp.
+
+`footballpulse_ai_reprocess.py` là workflow manual cho batch lỗi: operator
+truyền collection batch IDs, workflow tạo batch mới và poll bounded tới terminal
+state; workflow này không chạy theo schedule.
