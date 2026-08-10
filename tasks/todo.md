@@ -58,7 +58,7 @@
 
 ## Phase 6 — Frontend
 
-- [ ] WP 6.1 Typed API client and application states (implemented; frontend build verification pending)
+- [x] WP 6.1 Typed API client and application states
 - [x] WP 6.2 Public entity timelines
 - [x] WP 6.3 Public articles and Story views
 - [ ] WP 6.4 Admin batch/source/failure operations (JWT login done; admin API screens remain)
