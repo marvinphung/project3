@@ -36,4 +36,6 @@ now has a typed public API client and loading/error state hook. Phase 6.2 has a
 reusable Vietnamese Story timeline component and hook, plus a public
 entity-to-Story mapping endpoint so player timelines resolve canonical slugs.
 The article detail route now consumes the public article endpoint and its
-persisted Story timeline; homepage and related-card data still use fixtures.
+persisted Story timeline. Homepage and latest-news cards now use the same
+public API adapter; entity chips and richer source metadata remain future API
+fields.

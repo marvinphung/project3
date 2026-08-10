@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { articles } from '../data/mock'
 import { usePublicArticles } from '../api/hooks'
+import { toArticle } from '../api/adapters'
 import { EmptyState, LoadingSkeleton, NewsRow, SectionHeading, EntityChip } from '../components/ui'
 import type { Article } from '../data/mock'
 
@@ -17,17 +18,7 @@ const trendingEntities = [
 export default function LatestNewsPage() {
   const [active, setActive] = useState('Tất cả')
   const remote = usePublicArticles()
-  const displayArticles: Article[] = remote.data
-    ? remote.data.map((article) => ({
-        id: article.slug,
-        headline: article.title_vi,
-        summary: article.body_vi,
-        time: new Date(article.published_at).toLocaleString('vi-VN'),
-        sources: 1,
-        entities: [],
-        img: 'https://images.unsplash.com/photo-1489944440615-453fc2b6a9a9?w=800&h=450&fit=crop&auto=format',
-      }))
-    : articles
+  const displayArticles: Article[] = remote.data ? remote.data.map(toArticle) : articles
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8">

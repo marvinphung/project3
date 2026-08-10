@@ -1,6 +1,8 @@
 import { Link } from 'react-router'
 import { articles, players, clubs, coaches } from '../data/mock'
-import { LargeNewsCard, MediumNewsCard, NewsRow, SectionHeading, EntityChip } from '../components/ui'
+import { usePublicArticles } from '../api/hooks'
+import { toArticle } from '../api/adapters'
+import { EmptyState, LargeNewsCard, LoadingSkeleton, MediumNewsCard, NewsRow, SectionHeading, EntityChip } from '../components/ui'
 
 const trendingEntities = [
   { type: 'club' as const, id: 'arsenal', name: 'Arsenal' },
@@ -14,16 +16,19 @@ const trendingEntities = [
 ]
 
 export default function HomePage() {
-  const hero = articles[0]
-  const secondary = articles.slice(1, 4)
-  const latest = articles.slice(0, 8)
+  const remote = usePublicArticles(8)
+  const liveArticles = remote.data?.map(toArticle) ?? []
+  const content = liveArticles.length > 0 ? liveArticles : articles
+  const hero = content[0]
+  const secondary = content.slice(1, 4)
+  const latest = content.slice(0, 8)
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8">
       {/* Hero */}
       <section className="mb-12">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-8">
-          <LargeNewsCard article={hero} />
+          {remote.loading ? <LoadingSkeleton /> : remote.error ? <EmptyState message="Chưa thể tải tin nổi bật" sub={remote.error.message} /> : <LargeNewsCard article={hero} />}
           <div className="flex flex-col gap-5">
             {secondary.map(a => <MediumNewsCard key={a.id} article={a} />)}
           </div>
