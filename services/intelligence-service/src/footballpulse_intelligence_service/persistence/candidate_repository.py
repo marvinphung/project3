@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -14,22 +14,13 @@ from footballpulse_intelligence_service.domain.story import (
     StoryEventType,
     StoryStatus,
 )
+from footballpulse_intelligence_service.domain.story_candidate_scoring import story_event_window
 from footballpulse_intelligence_service.domain.story_embedding import StoryEmbeddingRecord
 from footballpulse_intelligence_service.persistence.postgres_tables import (
     stories,
     story_embeddings,
     story_entities,
 )
-
-_EVENT_WINDOWS = {
-    StoryEventType.MATCH: timedelta(days=3),
-    StoryEventType.INJURY: timedelta(days=21),
-    StoryEventType.DISCIPLINARY: timedelta(days=14),
-    StoryEventType.TRANSFER: timedelta(days=30),
-    StoryEventType.CONTRACT: timedelta(days=30),
-    StoryEventType.MANAGERIAL: timedelta(days=30),
-    StoryEventType.OTHER: timedelta(days=7),
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,7 +180,7 @@ class PostgresStoryCandidateRepository:
                 story_entities.c.entity_id.in_(query.entity_ids),
             )
         )
-        window_start = query.observed_at - _EVENT_WINDOWS[StoryEventType(query.event_type)]
+        window_start = query.observed_at - story_event_window(query.event_type)
         return (
             stories.c.event_type == StoryEventType(query.event_type).value,
             stories.c.status != StoryStatus.CLOSED.value,
