@@ -3,10 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Lock
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 from uuid import UUID, uuid4
 
 from footballpulse_content_service.editorial.revision import EditorialRevision, RevisionState
+
+if TYPE_CHECKING:
+    from footballpulse_content_service.editorial.publication_outbox import PublicationOutbox
 
 
 class PublicationConflictError(RuntimeError):
@@ -56,8 +59,11 @@ class InMemoryPublicationRepository:
 
 
 class PublicationService:
-    def __init__(self, repository: PublicationRepository) -> None:
+    def __init__(
+        self, repository: PublicationRepository, *, outbox: PublicationOutbox | None = None
+    ) -> None:
         self._repository = repository
+        self._outbox = outbox
 
     def publish(
         self,
@@ -79,8 +85,9 @@ class PublicationService:
         if existing is not None:
             if existing.revision_id != revision.id:
                 raise PublicationConflictError("idempotency key belongs to another revision")
+            self._emit(existing)
             return existing
-        return self._repository.create(
+        publication = self._repository.create(
             Publication(
                 id=uuid4(),
                 generated_article_id=revision.generated_article_id,
@@ -96,3 +103,14 @@ class PublicationService:
                 published_at=published_at,
             )
         )
+        self._emit(publication)
+        return publication
+
+    def _emit(self, publication: Publication) -> None:
+        if self._outbox is None:
+            return
+        from footballpulse_content_service.editorial.publication_outbox import (
+            PublicationPublishedEvent,
+        )
+
+        self._outbox.add_once(PublicationPublishedEvent.from_publication(publication))
