@@ -188,6 +188,10 @@ Thứ tự mở rộng mục tiêu:
 4. Gateway/frontend.
 5. Airflow profile khi cần schedule/demo.
 
+Để chạy Collection DAG local, dùng `docker compose --profile airflow up -d`.
+Profile này khởi tạo metadata Airflow trong PostgreSQL và mở API server tại
+`127.0.0.1:${FOOTBALLPULSE_AIRFLOW_PORT:-8080}`.
+
 `depends_on` không thay application retry. Readiness chỉ true khi dependency
 bắt buộc usable. Shutdown ngừng nhận việc mới, không acknowledge việc chưa ghi
 bền vững, flush outbox/producer cần thiết và đóng resource.

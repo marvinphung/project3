@@ -70,3 +70,27 @@ def test_kafka_bootstrap_prepares_the_named_volume_without_deleting_data() -> No
     )
     assert services["kafka-init"]["user"] == "0:0"
     assert any("chown -R 1000:1000" in argument for argument in services["kafka-init"]["command"])
+
+
+def test_airflow_profile_contains_scheduler_and_api_server() -> None:
+    result = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            ".env.example",
+            "--profile",
+            "airflow",
+            "config",
+            "--format",
+            "json",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    services = JSON_OBJECT.validate_python(json.loads(result.stdout))["services"]
+    assert {"airflow-init", "airflow-scheduler", "airflow-api-server"} <= set(services)
+    assert services["airflow-api-server"]["ports"][0]["host_ip"] == "127.0.0.1"
