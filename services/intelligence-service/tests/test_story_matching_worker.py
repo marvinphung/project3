@@ -56,6 +56,24 @@ class FakeMatcher:
         return self.outcome  # type: ignore[no-any-return]
 
 
+class AtomicFakeMatcher(FakeMatcher):
+    handles_processed_events = True
+
+    def __init__(self, outcome: object) -> None:
+        super().__init__(outcome)
+        self.processed_events: list[ProcessedEvent | None] = []
+
+    def match(
+        self,
+        request: StoryMatchRequest,
+        *,
+        now: datetime,
+        processed_event: ProcessedEvent | None = None,
+    ) -> StoryMatchResult:
+        self.processed_events.append(processed_event)
+        return super().match(request, now=now)
+
+
 class FakeProcessedStore:
     def __init__(self, *, processed: bool = False) -> None:
         self.processed = processed
@@ -161,6 +179,20 @@ async def test_worker_skips_duplicate_and_marks_successful_event_processed() -> 
     assert duplicate.status is StoryWorkStatus.SKIPPED_DUPLICATE
     assert duplicate.result is None
     assert len(store.marked) == 1
+
+
+@pytest.mark.asyncio
+async def test_worker_delegates_processed_marker_to_atomic_matcher() -> None:
+    store = FakeProcessedStore()
+    matcher = AtomicFakeMatcher(match_result(MatchAction.ATTACH))
+    worker = StoryMatchingWorker(matcher, processed_store=store, clock=lambda: NOW)
+
+    work = await worker.run(work_request())
+
+    assert work.status is StoryWorkStatus.COMPLETED_ATTACHED
+    assert len(matcher.processed_events) == 1
+    assert matcher.processed_events[0] is not None
+    assert store.marked == []
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@ from footballpulse_intelligence_service.application.story_matching import (
     StoryMatchingOrchestrator,
     StoryMatchRequest,
 )
+from footballpulse_intelligence_service.domain.delivery import ProcessedEvent
 from footballpulse_intelligence_service.domain.embedding import EmbeddingVector
 from footballpulse_intelligence_service.domain.story import (
     ClaimPredicate,
@@ -59,6 +60,17 @@ class FakeAuditRepository:
 
     def add_once(self, record: StoryMatchAuditRecord) -> StoryMatchAuditRecord:
         self.records.append(record)
+        return record
+
+
+class FakeCommitRepository:
+    def __init__(self) -> None:
+        self.calls: list[tuple[StoryMatchAuditRecord, ProcessedEvent]] = []
+
+    def commit(
+        self, record: StoryMatchAuditRecord, event: ProcessedEvent
+    ) -> StoryMatchAuditRecord:
+        self.calls.append((record, event))
         return record
 
 
@@ -145,6 +157,35 @@ def test_orchestrator_does_not_create_audit_when_context_is_missing() -> None:
     with pytest.raises(StoryMatchContextRetryableError):
         orchestrator.match(request(), now=NOW)
     assert audit.records == []
+
+
+def test_orchestrator_uses_atomic_commit_when_processed_event_is_supplied() -> None:
+    query = candidate_query()
+    candidate = StoryVectorCandidate(STORY_ID, 3, StoryStatus.DEVELOPING, NOW, 1.0)
+    commit = FakeCommitRepository()
+    orchestrator = StoryMatchingOrchestrator(
+        candidate_repository=FakeCandidateRepository(
+            CandidateRetrievalResult(query, (candidate,), ())
+        ),
+        context_repository=FakeContextRepository((context(),)),
+        audit_repository=FakeAuditRepository(),
+        commit_repository=commit,
+        policy=StoryCandidateDecisionPolicy(
+            StoryCandidatePolicyConfig(55.0, 75.0, 5.0, "story-matcher-v1")
+        ),
+    )
+    event = ProcessedEvent.create(
+        record_id=UUID(int=600),
+        consumer_name="story-matching-v1",
+        event_id=UUID(int=601),
+        event_type="story.match.v1",
+        processed_at=NOW,
+    )
+
+    result = orchestrator.match(request(), now=NOW, processed_event=event)
+
+    assert result.audit == commit.calls[0][0]
+    assert commit.calls[0][1] == event
 
 
 def test_orchestrator_propagates_missing_embedding_retry_without_audit() -> None:

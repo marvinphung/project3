@@ -55,6 +55,9 @@ from footballpulse_intelligence_service.persistence.context_repository import (
 from footballpulse_intelligence_service.persistence.match_audit_repository import (
     PostgresStoryMatchAuditRepository,
 )
+from footballpulse_intelligence_service.persistence.match_commit_repository import (
+    PostgresStoryMatchCommitRepository,
+)
 from footballpulse_intelligence_service.persistence.postgres_tables import (
     claims as claims_table,
 )
@@ -878,4 +881,57 @@ def test_processed_event_store_is_idempotent(migrated_database: str) -> None:
     assert store.mark_processed(event) is True
     assert store.is_processed(event.consumer_name, event.event_id) is True
     assert store.mark_processed(event) is False
+    engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
+)
+def test_match_commit_repository_writes_audit_and_marker_atomically(
+    migrated_database: str,
+) -> None:
+    engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
+    audit_repository = PostgresStoryMatchAuditRepository(engine)
+    commit_repository = PostgresStoryMatchCommitRepository(engine)
+    score = StoryCandidateScore(
+        81.5,
+        StoryCandidateScoreComponents(24.0, 25.0, 7.5, 20.0, 5.0),
+        ("PRIMARY_ENTITY_MATCH", "PREDICATE_PROGRESSION"),
+    )
+    decision = StoryCandidateDecisionPolicy(
+        StoryCandidatePolicyConfig(55.0, 75.0, 5.0, "story-matcher-v1")
+    ).decide(
+        candidates=(CandidateDecisionInput(STORY_ID, 3, score),),
+        missing_current_embedding_story_ids=(),
+        embedding_model_name="BAAI/bge-small-en-v1.5",
+        embedding_model_version="pinned-revision",
+    )
+    audit = StoryMatchAuditRecord.create(
+        article_version_id=ARTICLE_ID,
+        input_hash="9" * 64,
+        decision=decision,
+        now=NOW,
+    )
+    event = ProcessedEvent.create(
+        record_id=UUID(int=980),
+        consumer_name="story-matching-v1",
+        event_id=UUID(int=981),
+        event_type="story.match.v1",
+        processed_at=NOW,
+    )
+
+    persisted = commit_repository.commit(audit, event)
+
+    assert persisted == audit_repository.get(audit.id)
+    with engine.connect() as connection:
+        marker_count = connection.execute(
+            sa.text(
+                "SELECT count(*) FROM intelligence_schema.processed_events "
+                "WHERE consumer_name = :consumer AND event_id = :event"
+            ),
+            {"consumer": event.consumer_name, "event": event.event_id},
+        ).scalar_one()
+    assert marker_count == 1
     engine.dispose()

@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
+from footballpulse_intelligence_service.domain.delivery import ProcessedEvent
 from footballpulse_intelligence_service.domain.embedding import EmbeddingVector
 from footballpulse_intelligence_service.domain.story import ClaimPredicate, StoryEventType
 from footballpulse_intelligence_service.domain.story_candidate_decision import (
@@ -54,6 +55,12 @@ class StoryMatchAuditRepository(Protocol):
     def add_once(self, record: StoryMatchAuditRecord) -> StoryMatchAuditRecord: ...
 
 
+class StoryMatchCommitRepository(Protocol):
+    def commit(
+        self, record: StoryMatchAuditRecord, processed_event: ProcessedEvent
+    ) -> StoryMatchAuditRecord: ...
+
+
 class StoryMatchContextRetryableError(Exception):
     def __init__(self, story_ids: tuple[UUID, ...]) -> None:
         self.story_ids = story_ids
@@ -73,14 +80,23 @@ class StoryMatchingOrchestrator:
         candidate_repository: StoryCandidateRepository,
         context_repository: StoryCandidateContextRepository,
         audit_repository: StoryMatchAuditRepository,
+        commit_repository: StoryMatchCommitRepository | None = None,
         policy: StoryCandidateDecisionPolicy,
     ) -> None:
         self._candidate_repository = candidate_repository
         self._context_repository = context_repository
         self._audit_repository = audit_repository
+        self._commit_repository = commit_repository
         self._policy = policy
+        self.handles_processed_events = commit_repository is not None
 
-    def match(self, request: StoryMatchRequest, *, now: datetime) -> StoryMatchResult:
+    def match(
+        self,
+        request: StoryMatchRequest,
+        *,
+        now: datetime,
+        processed_event: ProcessedEvent | None = None,
+    ) -> StoryMatchResult:
         vector = EmbeddingVector.create(request.query_vector)
         retrieval = self._candidate_repository.find_candidates(
             CandidateQuery(
@@ -99,13 +115,20 @@ class StoryMatchingOrchestrator:
                 retrieval,
                 candidates=(),
                 now=now,
+                processed_event=processed_event,
             )
         contexts = self._load_contexts(retrieval.candidates)
         candidate_inputs = tuple(
             self._score(request, candidate, contexts[candidate.story_id])
             for candidate in retrieval.candidates
         )
-        return self._decide_with_policy(request, retrieval, candidates=candidate_inputs, now=now)
+        return self._decide_with_policy(
+            request,
+            retrieval,
+            candidates=candidate_inputs,
+            now=now,
+            processed_event=processed_event,
+        )
 
     def _load_contexts(
         self, candidates: tuple[StoryVectorCandidate, ...]
@@ -154,6 +177,7 @@ class StoryMatchingOrchestrator:
         *,
         candidates: tuple[CandidateDecisionInput, ...],
         now: datetime,
+        processed_event: ProcessedEvent | None,
     ) -> StoryMatchResult:
         decision = self._policy.decide(
             candidates=candidates,
@@ -161,12 +185,16 @@ class StoryMatchingOrchestrator:
             embedding_model_name=request.embedding_model_name,
             embedding_model_version=request.embedding_model_version,
         )
-        audit = self._audit_repository.add_once(
-            StoryMatchAuditRecord.create(
-                article_version_id=request.article_version_id,
-                input_hash=request.input_hash,
-                decision=decision,
-                now=now,
-            )
+        audit_record = StoryMatchAuditRecord.create(
+            article_version_id=request.article_version_id,
+            input_hash=request.input_hash,
+            decision=decision,
+            now=now,
         )
+        if processed_event is not None:
+            if self._commit_repository is None:
+                raise RuntimeError("processed event requires atomic Story match commit repository")
+            audit = self._commit_repository.commit(audit_record, processed_event)
+        else:
+            audit = self._audit_repository.add_once(audit_record)
         return StoryMatchResult(decision, audit)

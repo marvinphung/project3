@@ -22,7 +22,13 @@ from footballpulse_intelligence_service.domain.story_candidate_decision import (
 
 
 class StoryMatcher(Protocol):
-    def match(self, request: StoryMatchRequest, *, now: datetime) -> StoryMatchResult: ...
+    def match(
+        self,
+        request: StoryMatchRequest,
+        *,
+        now: datetime,
+        processed_event: ProcessedEvent | None = None,
+    ) -> StoryMatchResult: ...
 
 
 class ProcessedEventStore(Protocol):
@@ -88,11 +94,30 @@ class StoryMatchingWorker:
                     None,
                 )
             try:
-                result = await asyncio.to_thread(
-                    self._matcher.match,
-                    request.request,
-                    now=self._clock(),
+                processed_event = (
+                    ProcessedEvent.create(
+                        record_id=request.event_id,
+                        consumer_name=self._consumer_name,
+                        event_id=request.event_id,
+                        event_type="story.match.v1",
+                        processed_at=self._clock(),
+                    )
+                    if self._processed_store is not None
+                    else None
                 )
+                if getattr(self._matcher, "handles_processed_events", False):
+                    result = await asyncio.to_thread(
+                        self._matcher.match,
+                        request.request,
+                        now=self._clock(),
+                        processed_event=processed_event,
+                    )
+                else:
+                    result = await asyncio.to_thread(
+                        self._matcher.match,
+                        request.request,
+                        now=self._clock(),
+                    )
             except (
                 StoryCandidateRetryableError,
                 StoryMatchContextRetryableError,
@@ -113,17 +138,13 @@ class StoryMatchingWorker:
                     type(error).__name__,
                     self._clock(),
                 )
-            if self._processed_store is not None:
+            if self._processed_store is not None and not getattr(
+                self._matcher, "handles_processed_events", False
+            ):
                 try:
-                    self._processed_store.mark_processed(
-                        ProcessedEvent.create(
-                            record_id=request.event_id,
-                            consumer_name=self._consumer_name,
-                            event_id=request.event_id,
-                            event_type="story.match.v1",
-                            processed_at=self._clock(),
-                        )
-                    )
+                    if processed_event is None:
+                        raise RuntimeError("processed event was not created")
+                    self._processed_store.mark_processed(processed_event)
                 except Exception as error:
                     return StoryWorkResult(
                         request.event_id,
