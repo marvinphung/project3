@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from footballpulse_intelligence_service.domain.story import ClaimEvidence, StorySource
 
 
 class ClaimConfirmation(StrEnum):
@@ -43,3 +47,24 @@ def calculate_claim_confirmation(
     else:
         level = ClaimConfirmation.RUMOUR
     return ClaimConfirmationResult(level, len(independent_clusters))
+
+
+def calculate_claim_confirmation_from_evidence(
+    evidence: tuple[ClaimEvidence, ...],
+    sources: tuple[StorySource, ...],
+) -> ClaimConfirmationResult:
+    source_by_link = {source.id: source for source in sources}
+    evidence_sources: list[ClaimEvidenceSource] = []
+    for item in evidence:
+        source = source_by_link.get(item.story_source_id)
+        if source is None:
+            raise ValueError("claim evidence references an unknown StorySource")
+        evidence_sources.append(
+            ClaimEvidenceSource(
+                source_id=source.source_id,
+                source_cluster_id=source.source_cluster_id,
+                is_official=source.is_official,
+                supports_claim=True,
+            )
+        )
+    return calculate_claim_confirmation(tuple(evidence_sources))
