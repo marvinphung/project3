@@ -5,6 +5,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.18,<2",
     "fastapi>=0.116,<1",
+    "footballpulse-content-service",
     "psycopg[binary]>=3.3,<4",
     "sqlalchemy>=2.0,<3",
     "uvicorn>=0.35,<1",
@@ -13,6 +14,9 @@ dependencies = [
 [project.scripts]
 footballpulse-api-gateway-health = "footballpulse_api_gateway.health:main"
 footballpulse-api-gateway = "footballpulse_api_gateway.runtime:main"
+
+[tool.uv.sources]
+footballpulse-content-service = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
