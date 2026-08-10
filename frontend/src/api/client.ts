@@ -96,6 +96,48 @@ export function authHeaders(): Record<string, string> {
   return token ? { Authorization: `${token.token_type} ${token.access_token}` } : {}
 }
 
+export type EditorialRevision = {
+  generated_article_id: string
+  revision_id: string
+  revision_number: number
+  story_version: number
+  state: string
+  updated_at: string
+}
+
+async function adminRequest<T>(path: string, body: unknown) {
+  return request<T>(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  })
+}
+
+export function submitArticle(articleId: string, expectedRevisionNumber: number) {
+  return adminRequest<EditorialRevision>(`/admin/v1/articles/${articleId}/submit`, {
+    expected_revision_number: expectedRevisionNumber,
+  })
+}
+
+export function approveArticle(articleId: string, expectedRevisionNumber: number) {
+  return adminRequest<EditorialRevision>(`/admin/v1/articles/${articleId}/approve`, {
+    expected_revision_number: expectedRevisionNumber,
+  })
+}
+
+export function rejectArticle(articleId: string, expectedRevisionNumber: number) {
+  return adminRequest<EditorialRevision>(`/admin/v1/articles/${articleId}/reject`, {
+    expected_revision_number: expectedRevisionNumber,
+  })
+}
+
+export function publishArticle(articleId: string, slug: string, idempotencyKey: string) {
+  return adminRequest(`/admin/v1/articles/${articleId}/publish`, {
+    slug,
+    idempotency_key: idempotencyKey,
+  })
+}
+
 export function listArticles(params: { limit?: number; offset?: number; storyId?: string } = {}) {
   const query = new URLSearchParams()
   if (params.limit !== undefined) query.set('limit', String(params.limit))

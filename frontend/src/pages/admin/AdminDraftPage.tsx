@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ApiError, approveArticle, publishArticle, rejectArticle, submitArticle } from '../../api/client'
 
 const drafts = [
   { id: 1, headline: 'Arsenal tăng tốc đàm phán trong thương vụ chiêu mộ tiền đạo trẻ', story: 'Arsenal Transfer Saga', status: 'pending', warning: true, time: '20 phút trước' },
@@ -22,8 +23,29 @@ const StatusBadge = ({ status }: { status: string }) => {
 export default function AdminDraftPage() {
   const [selected, setSelected] = useState<typeof drafts[0] | null>(null)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [actionState, setActionState] = useState<{ loading: boolean; message: string }>({ loading: false, message: '' })
 
   const draft = selected ?? drafts[0]
+
+  const runAction = async (action: 'submit' | 'approve' | 'reject' | 'publish') => {
+    const articleId = String(draft.id)
+    if (!/^[0-9a-f-]{36}$/i.test(articleId)) {
+      setActionState({ loading: false, message: 'Bản nháp demo chưa có UUID từ backend.' })
+      setShowConfirm(false)
+      return
+    }
+    setActionState({ loading: true, message: '' })
+    try {
+      if (action === 'submit') await submitArticle(articleId, 1)
+      if (action === 'approve') await approveArticle(articleId, 1)
+      if (action === 'reject') await rejectArticle(articleId, 1)
+      if (action === 'publish') await publishArticle(articleId, `draft-${articleId}`, crypto.randomUUID())
+      setActionState({ loading: false, message: 'Đã cập nhật trạng thái thành công.' })
+      setShowConfirm(false)
+    } catch (error) {
+      setActionState({ loading: false, message: error instanceof ApiError ? error.message : 'Không thể cập nhật bản nháp.' })
+    }
+  }
 
   return (
     <div className="p-6">
@@ -57,8 +79,8 @@ export default function AdminDraftPage() {
             <div className="flex flex-wrap gap-2">
               <button className="px-4 py-2 border border-[#E5E7EB] text-[#374151] rounded-lg text-sm font-medium hover:bg-[#F3F4F6] transition-colors">Lưu bản nháp</button>
               <button className="px-4 py-2 border border-[#E5E7EB] text-[#374151] rounded-lg text-sm font-medium hover:bg-[#F3F4F6] transition-colors">Yêu cầu tạo lại</button>
-              <button className="px-4 py-2 bg-[#2E7D32] text-white rounded-lg text-sm font-semibold hover:bg-[#246328] transition-colors">Phê duyệt</button>
-              <button className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors">Từ chối</button>
+              <button onClick={() => void runAction('approve')} disabled={actionState.loading} className="px-4 py-2 bg-[#2E7D32] text-white rounded-lg text-sm font-semibold hover:bg-[#246328] transition-colors disabled:opacity-50">Phê duyệt</button>
+              <button onClick={() => void runAction('reject')} disabled={actionState.loading} className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50">Từ chối</button>
               <button
                 onClick={() => setShowConfirm(true)}
                 className="px-4 py-2 bg-[#78A83D] text-white rounded-lg text-sm font-semibold hover:bg-[#6a9435] transition-colors"
@@ -66,6 +88,7 @@ export default function AdminDraftPage() {
                 Xuất bản
               </button>
             </div>
+            {actionState.message && <p className="mt-3 text-sm text-[#6B7280]">{actionState.message}</p>}
           </div>
 
           {/* Right: review panel */}
@@ -152,7 +175,7 @@ export default function AdminDraftPage() {
             <p className="text-sm text-[#6B7280] mb-6">Bài viết sẽ được công bố ngay lập tức cho tất cả người dùng. Bạn có chắc chắn muốn xuất bản không?</p>
             <div className="flex gap-3">
               <button onClick={() => setShowConfirm(false)} className="flex-1 py-2 border border-[#E5E7EB] text-[#374151] rounded-lg text-sm font-medium hover:bg-[#F3F4F6] transition-colors">Hủy</button>
-              <button onClick={() => setShowConfirm(false)} className="flex-1 py-2 bg-[#78A83D] text-white rounded-lg text-sm font-semibold hover:bg-[#6a9435] transition-colors">Xuất bản</button>
+              <button onClick={() => void runAction('publish')} disabled={actionState.loading} className="flex-1 py-2 bg-[#78A83D] text-white rounded-lg text-sm font-semibold hover:bg-[#6a9435] transition-colors disabled:opacity-50">Xuất bản</button>
             </div>
           </div>
         </div>

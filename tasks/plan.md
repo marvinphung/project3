@@ -38,5 +38,6 @@ entity-to-Story mapping endpoint so player timelines resolve canonical slugs.
 The article detail route now consumes the public article endpoint and its
 persisted Story timeline. Homepage and latest-news cards now use the same
 public API adapter; entity chips and richer source metadata remain future API
-fields. Admin login now obtains and stores a real JWT; admin mutation screens
-still need to send the bearer token and consume their write APIs.
+fields. Admin login now obtains and stores a real JWT. Draft review actions now
+have bearer-authenticated API clients; fixture rows remain intentionally
+disabled until they carry backend UUIDs.
