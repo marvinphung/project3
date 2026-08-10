@@ -120,3 +120,37 @@ def test_intelligence_migration_adds_versioned_pgvector_embeddings() -> None:
     assert "uq_article_embeddings_input_model" in migration
     assert "hnsw" not in migration.casefold()
     assert "ivfflat" not in migration.casefold()
+
+
+def test_intelligence_migration_adds_story_claim_and_delivery_invariants() -> None:
+    migration = (
+        ROOT
+        / "services/intelligence-service/migrations/versions/"
+        / "intelligence_0004_add_story_claim_model.py"
+    ).read_text()
+
+    for table in (
+        "stories",
+        "story_sources",
+        "story_entities",
+        "claims",
+        "claim_evidence",
+        "processed_events",
+        "outbox_events",
+    ):
+        assert f'"{table}"' in migration
+    for status in ("DEVELOPING", "CONFIRMED", "STALE", "CLOSED"):
+        assert status in migration
+    for constraint in (
+        "uq_story_sources_article",
+        "uq_story_entities_entity",
+        "uq_claims_fingerprint",
+        "uq_claim_evidence_range",
+        "uq_processed_events_consumer_event",
+        "uq_outbox_events_deduplication_key",
+        "ck_stories_confidence_score",
+        "ck_claim_evidence_range",
+    ):
+        assert constraint in migration
+    assert 'down_revision: str | None = "intelligence_0003"' in migration
+    assert "source_schema." not in migration
