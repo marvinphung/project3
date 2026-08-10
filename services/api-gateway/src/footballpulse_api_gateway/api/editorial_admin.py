@@ -13,6 +13,8 @@ from footballpulse_content_service.editorial.publication import PublicationConfl
 from footballpulse_content_service.editorial.repository import RevisionConflictError
 from pydantic import BaseModel
 
+from footballpulse_api_gateway.auth import Role, TokenService
+
 
 @dataclass(frozen=True, slots=True)
 class EditorialRevisionView:
@@ -93,7 +95,11 @@ class ForbiddenError(Exception):
 
 
 def create_editorial_admin_app(
-    service: EditorialAdminService, *, admin_token: str, editor_token: str | None = None
+    service: EditorialAdminService,
+    *,
+    admin_token: str,
+    editor_token: str | None = None,
+    token_service: TokenService | None = None,
 ) -> FastAPI:
     app = FastAPI(title="FootballPulse Editorial Admin API", version="0.1.0")
 
@@ -104,8 +110,14 @@ def create_editorial_admin_app(
             raise PermissionError
         if compare_digest(credentials.credentials, admin_token):
             return
-        if editor_token is None or not compare_digest(credentials.credentials, editor_token):
+        if editor_token is not None and compare_digest(credentials.credentials, editor_token):
+            return
+        if token_service is None:
             raise PermissionError
+        try:
+            token_service.decode(credentials.credentials)
+        except ValueError as error:
+            raise PermissionError from error
 
     async def authorize_admin(
         credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(BEARER_SCHEME)],
@@ -116,7 +128,14 @@ def create_editorial_admin_app(
             return
         if editor_token is not None and compare_digest(credentials.credentials, editor_token):
             raise ForbiddenError
-        raise PermissionError
+        if token_service is None:
+            raise PermissionError
+        try:
+            claims = token_service.decode(credentials.credentials)
+        except ValueError as error:
+            raise PermissionError from error
+        if claims.role is not Role.ADMIN:
+            raise ForbiddenError
 
     @app.exception_handler(PermissionError)
     async def permission_error_handler(_: Request, __: PermissionError) -> JSONResponse:

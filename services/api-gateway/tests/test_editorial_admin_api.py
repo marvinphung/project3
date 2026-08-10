@@ -10,6 +10,7 @@ from footballpulse_api_gateway.api.editorial_admin import (
     PublicationView,
     create_editorial_admin_app,
 )
+from footballpulse_api_gateway.auth import Role, TokenService
 from footballpulse_content_service.editorial.repository import RevisionConflictError
 
 NOW = datetime(2026, 8, 10, 12, tzinfo=UTC)
@@ -137,3 +138,38 @@ async def test_editor_token_can_review_but_cannot_publish() -> None:
     assert approved.status_code == 200
     assert publication.status_code == 403
     assert publication.json()["error"]["code"] == "FORBIDDEN"
+
+
+@pytest.mark.asyncio
+async def test_jwt_role_controls_editorial_routes() -> None:
+    service = MemoryEditorialService()
+    token_service = TokenService("local-secret-012345678901234567890123", clock=lambda: NOW)
+    editor_jwt = token_service.issue(subject="editor", role=Role.EDITOR, now=NOW)
+    admin_jwt = token_service.issue(subject="admin", role=Role.ADMIN, now=NOW)
+    transport = httpx.ASGITransport(
+        app=create_editorial_admin_app(
+            service,
+            admin_token="static-admin-token",
+            token_service=token_service,
+        )
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        reviewed = await client.post(
+            f"/admin/v1/articles/{ARTICLE_ID}/approve",
+            headers={"Authorization": f"Bearer {editor_jwt}"},
+            json={"expected_revision_number": 1},
+        )
+        forbidden = await client.post(
+            f"/admin/v1/articles/{ARTICLE_ID}/publish",
+            headers={"Authorization": f"Bearer {editor_jwt}"},
+            json={"slug": "arsenal-bid", "idempotency_key": "publish-1"},
+        )
+        published = await client.post(
+            f"/admin/v1/articles/{ARTICLE_ID}/publish",
+            headers={"Authorization": f"Bearer {admin_jwt}"},
+            json={"slug": "arsenal-bid", "idempotency_key": "publish-2"},
+        )
+
+    assert reviewed.status_code == 200
+    assert forbidden.status_code == 403
+    assert published.status_code == 200
