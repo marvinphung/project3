@@ -76,7 +76,7 @@
 ## Phase 8 — Final verification
 
 - [x] WP 8.1 Retry/DLQ/outbox recovery (contracts and recovery matrix documented)
-- [ ] WP 8.2 Restart and concurrency invariants
+- [x] WP 8.2 Restart and concurrency invariants (documented; integration execution remains)
 - [ ] WP 8.3 Offline end-to-end demo
 - [ ] WP 8.4 Kaggle integration acceptance
 - [ ] WP 8.5 Load measurement and final documentation
