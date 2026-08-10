@@ -163,6 +163,42 @@ uv run footballpulse-crawler-service
 Mặc định service bind `127.0.0.1:8011`; có thể đổi bằng
 `FOOTBALLPULSE_CRAWLER_PORT`.
 
+### Chạy crawl thật một cửa sổ
+
+Runner local đăng ký sẵn catalog RSS, sitemap và HTML trong danh sách nguồn của
+FootballPulse, sau đó đọc link bài, tải HTML, clean nội dung và ghi vào MongoDB
+(`source_articles`). Mỗi source có batch riêng; nội dung không đổi sẽ không tạo
+article version mới.
+
+Xem catalog:
+
+```bash
+./.venv/bin/python scripts/run-real-crawl.py --list-sources
+```
+
+Chạy thử một nguồn, tối đa 10 bài:
+
+```bash
+FOOTBALLPULSE_POSTGRES_PORT=5432 \
+FOOTBALLPULSE_MONGODB_URL='mongodb://127.0.0.1:27017/?replicaSet=rs0&directConnection=true' \
+./.venv/bin/python scripts/run-real-crawl.py \
+  --source 'The Guardian Football' \
+  --max-articles 10
+```
+
+Chạy tất cả nguồn trong catalog:
+
+```bash
+FOOTBALLPULSE_POSTGRES_PORT=5432 \
+FOOTBALLPULSE_MONGODB_URL='mongodb://127.0.0.1:27017/?replicaSet=rs0&directConnection=true' \
+./.venv/bin/python scripts/run-real-crawl.py --max-articles 10
+```
+
+Các source HTML/sitemap chỉ dùng trang listing để lấy URL bài; crawler vẫn tải
+HTML từng bài và áp dụng allowlist domain, redirect limit, response limit và
+SSRF safety policy. Một số nguồn có thể chặn datacenter/IP hoặc yêu cầu
+JavaScript; khi đó batch ghi `failed` và không làm mất các bài đã tải thành công.
+
 Có thể khởi động thủ công:
 
 ```bash

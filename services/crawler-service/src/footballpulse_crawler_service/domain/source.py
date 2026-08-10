@@ -11,6 +11,8 @@ from footballpulse_crawler_service.domain.errors import DomainValidationError
 
 class SourceType(StrEnum):
     RSS = "RSS"
+    SITEMAP = "SITEMAP"
+    HTML = "HTML"
     MOCK = "MOCK"
 
 

@@ -9,6 +9,7 @@ dependencies = [
     "feedparser>=6.0,<7",
     "footballpulse-fetch-artifacts",
     "httpx>=0.28,<1",
+    "pymongo>=4.16,<5",
     "psycopg[binary]>=3.3,<4",
     "sqlalchemy>=2.0,<3",
     "trafilatura>=2.0,<3",
