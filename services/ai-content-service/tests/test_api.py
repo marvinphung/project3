@@ -30,3 +30,11 @@ async def test_enrichment_batch_contract_requires_internal_token() -> None:
         )
     assert status.status_code == 200
     assert status.json()["id"] == batch_id
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        started = await client.post(
+            f"/internal/v1/enrichment-batches/{batch_id}/start",
+            headers={"Authorization": "Bearer ai-internal"},
+        )
+    assert started.status_code == 200
+    assert started.json()["status"] == "RUNNING"
