@@ -43,13 +43,25 @@ class PostgresPublicReadRepository:
             )
         return None if row is None else _article_from_row(row)
 
-    def list_story_timeline(self, story_id: UUID) -> list[PublicTimelineEntry]:
+    def list_story_timeline(
+        self,
+        story_id: UUID,
+        *,
+        limit: int,
+        offset: int,
+        confirmation: str | None,
+    ) -> list[PublicTimelineEntry]:
+        conditions = [timeline_entries.c.story_id == story_id]
+        if confirmation is not None:
+            conditions.append(timeline_entries.c.confirmation == confirmation)
         with self._engine.connect() as connection:
             rows = (
                 connection.execute(
                     sa.select(timeline_entries)
-                    .where(timeline_entries.c.story_id == story_id)
+                    .where(*conditions)
                     .order_by(timeline_entries.c.window_start)
+                    .offset(offset)
+                    .limit(limit)
                 )
                 .mappings()
                 .all()

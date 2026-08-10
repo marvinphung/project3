@@ -33,8 +33,12 @@ class MemoryPublicRepository:
     def get_article_by_slug(self, slug: str) -> PublicArticle | None:
         return ARTICLE if slug == ARTICLE.slug else None
 
-    def list_story_timeline(self, story_id: UUID) -> list[PublicTimelineEntry]:
-        return [TIMELINE] if story_id == ARTICLE.story_id else []
+    def list_story_timeline(
+        self, story_id: UUID, *, limit: int, offset: int, confirmation: str | None
+    ) -> list[PublicTimelineEntry]:
+        if story_id != ARTICLE.story_id or (confirmation and TIMELINE.confirmation != confirmation):
+            return []
+        return [TIMELINE][offset : offset + limit]
 
 
 @pytest.mark.asyncio
@@ -42,12 +46,16 @@ async def test_public_article_and_story_timeline_routes() -> None:
     transport = httpx.ASGITransport(app=create_public_app(MemoryPublicRepository()))
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         article = await client.get("/api/v1/articles/arsenal-bid")
-        timeline = await client.get(f"/api/v1/stories/{ARTICLE.story_id}/timeline")
+        timeline = await client.get(
+            f"/api/v1/stories/{ARTICLE.story_id}/timeline?limit=10&offset=0&confirmation=REPORTED"
+        )
 
         assert article.status_code == 200
         assert article.json()["title_vi"] == "Arsenal hỏi mua Vinícius"
+        assert article.headers["cache-control"] == "public, max-age=60"
         assert timeline.status_code == 200
         assert timeline.json()["items"][0]["confirmation"] == "REPORTED"
+        assert timeline.headers["cache-control"] == "public, max-age=30"
 
 
 @pytest.mark.asyncio
