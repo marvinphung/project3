@@ -37,7 +37,7 @@ export class ApiError extends Error {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: { Accept: 'application/json', ...init?.headers },
@@ -53,6 +53,47 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     )
   }
   return (await response.json()) as T
+}
+
+export type AuthToken = {
+  access_token: string
+  token_type: string
+  expires_in: number
+  role: 'EDITOR' | 'ADMIN'
+}
+
+export function login(username: string, password: string) {
+  return request<AuthToken>('/auth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+}
+
+const AUTH_STORAGE_KEY = 'footballpulse.auth'
+
+export function saveAuthToken(token: AuthToken) {
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(token))
+}
+
+export function getAuthToken(): AuthToken | null {
+  const raw = localStorage.getItem(AUTH_STORAGE_KEY)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as AuthToken
+  } catch {
+    localStorage.removeItem(AUTH_STORAGE_KEY)
+    return null
+  }
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem(AUTH_STORAGE_KEY)
+}
+
+export function authHeaders(): Record<string, string> {
+  const token = getAuthToken()
+  return token ? { Authorization: `${token.token_type} ${token.access_token}` } : {}
 }
 
 export function listArticles(params: { limit?: number; offset?: number; storyId?: string } = {}) {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
+import { ApiError, login, saveAuthToken } from '../../api/client'
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState('')
@@ -8,7 +9,7 @@ export default function AdminLoginPage() {
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     if (!email || !password) {
@@ -16,14 +17,14 @@ export default function AdminLoginPage() {
       return
     }
     setLoading(true)
-    setTimeout(() => {
-      if (email === 'admin@footballpulse.vn' && password === 'admin123') {
-        navigate('/admin')
-      } else {
-        setError('Email hoặc mật khẩu không đúng.')
-        setLoading(false)
-      }
-    }, 1000)
+    try {
+      const token = await login(email, password)
+      saveAuthToken(token)
+      navigate('/admin')
+    } catch (error) {
+      setError(error instanceof ApiError ? error.message : 'Không thể kết nối tới hệ thống.')
+      setLoading(false)
+    }
   }
 
   return (
@@ -82,7 +83,7 @@ export default function AdminLoginPage() {
             </button>
           </form>
 
-          <p className="text-xs text-[#9CA3AF] mt-4 text-center">Demo: admin@footballpulse.vn / admin123</p>
+          <p className="text-xs text-[#9CA3AF] mt-4 text-center">Dùng tài khoản đã bootstrap trong API gateway.</p>
         </div>
       </div>
     </div>

@@ -61,7 +61,7 @@
 - [ ] WP 6.1 Typed API client and application states (implemented; frontend build verification pending)
 - [x] WP 6.2 Public entity timelines
 - [ ] WP 6.3 Public articles and Story views
-- [ ] WP 6.4 Admin batch/source/failure operations
+- [ ] WP 6.4 Admin batch/source/failure operations (JWT login done; admin API screens remain)
 - [ ] WP 6.5 Editorial and Story correction UI
 - [ ] Phase Gate 6 approved
 
