@@ -11,7 +11,16 @@ const sourcesData = [
   { id: 6, name: 'Kicker', type: 'RSS', status: 'disabled', lastCrawl: '1 ngày trước', articles: 0, errors: 0 },
 ]
 
-type Source = typeof sourcesData[0]
+type DisplaySource = {
+  id: string
+  name: string
+  type: string
+  status: string
+  lastCrawl: string
+  articles: number
+  errors: number
+  backend?: Source
+}
 
 const StatusChip = ({ status }: { status: string }) => {
   const map: Record<string, string> = {
@@ -37,7 +46,7 @@ export default function AdminSourcesPage() {
       .then((response) => setRemote({ items: response.items, loading: false, error: null }))
       .catch((error: unknown) => setRemote({ items: [], loading: false, error: error instanceof ApiError ? error.message : 'Không thể tải nguồn tin' }))
   }, [])
-  const displaySources = remote.items.length > 0 ? remote.items.map((source) => ({
+  const displaySources: DisplaySource[] = remote.items.length > 0 ? remote.items.map((source) => ({
     id: source.id,
     name: source.name,
     type: source.source_type,
@@ -45,17 +54,17 @@ export default function AdminSourcesPage() {
     lastCrawl: source.last_discovered_at ? new Date(source.last_discovered_at).toLocaleString('vi-VN') : 'Chưa crawl',
     articles: 0,
     errors: 0,
-  })) : sourcesData
-  const handleToggle = async (source: (typeof displaySources)[number]) => {
-    if (!/^[0-9a-f-]{36}$/i.test(String(source.id))) {
+    backend: source,
+  })) : sourcesData.map((source) => ({ ...source, id: String(source.id) }))
+  const handleToggle = async (source: DisplaySource) => {
+    const backend = source.backend
+    if (!backend || !/^[0-9a-f-]{36}$/i.test(backend.id)) {
       setRemote((current) => ({ ...current, error: 'Nguồn fixture chưa có UUID từ backend.' }))
       return
     }
-    const current = remote.items.find((item) => item.id === source.id)
-    if (!current) return
-    setToggling(current.id)
+    setToggling(backend.id)
     try {
-      const updated = await toggleSource(current.id, !current.enabled, current.version)
+      const updated = await toggleSource(backend.id, !backend.enabled, backend.version)
       setRemote((state) => ({ ...state, items: state.items.map((item) => item.id === updated.id ? updated : item), error: null }))
     } catch (error) {
       setRemote((state) => ({ ...state, error: error instanceof ApiError ? error.message : 'Không thể cập nhật nguồn tin' }))
@@ -121,7 +130,7 @@ export default function AdminSourcesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => void handleToggle(s)} disabled={toggling === s.id} className="px-2 py-1 text-xs text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded transition-colors disabled:opacity-50">
+                      <button onClick={() => void handleToggle(s)} disabled={toggling === String(s.id)} className="px-2 py-1 text-xs text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded transition-colors disabled:opacity-50">
                         {s.status === 'disabled' ? 'Bật' : 'Tắt'}
                       </button>
                       <button onClick={() => void handleCrawl(s)} disabled={crawling === String(s.id)} className="px-2 py-1 text-xs text-[#6B7280] hover:text-[#78A83D] hover:bg-[#F3F4F6] rounded transition-colors disabled:opacity-50">Crawl</button>
