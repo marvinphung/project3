@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlalchemy.engine import Engine, RowMapping
+from sqlalchemy.engine import Connection, Engine, RowMapping
 
 from footballpulse_api_gateway.api.public import (
     PublicArticle,
     PublicEntityStories,
+    PublicEntityTag,
     PublicTimelineEntry,
 )
 from footballpulse_api_gateway.persistence.public_tables import (
@@ -39,6 +41,27 @@ def _timeline_from_row(row: RowMapping) -> PublicTimelineEntry:
     )
 
 
+def _with_entities(connection: Connection, article: PublicArticle) -> PublicArticle:
+    rows = connection.execute(
+        sa.select(
+            entities.c.id,
+            entities.c.entity_type,
+            entities.c.canonical_name,
+            entities.c.slug,
+        )
+        .join(story_entities, story_entities.c.entity_id == entities.c.id)
+        .where(story_entities.c.story_id == article.story_id)
+        .order_by(entities.c.canonical_name)
+    ).mappings().all()
+    return replace(
+        article,
+        entities=tuple(
+            PublicEntityTag(row["id"], row["entity_type"], row["canonical_name"], row["slug"])
+            for row in rows
+        ),
+    )
+
+
 class PostgresPublicReadRepository:
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
@@ -50,7 +73,7 @@ class PostgresPublicReadRepository:
                 .mappings()
                 .one_or_none()
             )
-        return None if row is None else _article_from_row(row)
+            return None if row is None else _with_entities(connection, _article_from_row(row))
 
     def list_articles(
         self, *, limit: int, offset: int, story_id: UUID | None
@@ -61,7 +84,7 @@ class PostgresPublicReadRepository:
         statement = statement.offset(offset).limit(limit)
         with self._engine.connect() as connection:
             rows = connection.execute(statement).mappings().all()
-        return [_article_from_row(row) for row in rows]
+            return [_with_entities(connection, _article_from_row(row)) for row in rows]
 
     def list_story_timeline(
         self,

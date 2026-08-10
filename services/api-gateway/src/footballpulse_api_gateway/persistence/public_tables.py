@@ -12,6 +12,7 @@ entities = sa.Table(
     sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
     sa.Column("entity_type", sa.String(length=32), nullable=False),
     sa.Column("slug", sa.String(length=200), nullable=False),
+    sa.Column("canonical_name", sa.String(length=200), nullable=False),
 )
 
 story_entities = sa.Table(

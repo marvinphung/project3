@@ -11,7 +11,11 @@ export function toArticle(article: PublicArticle): Article {
     summary: article.body_vi,
     time: new Date(article.published_at).toLocaleString('vi-VN'),
     sources: 1,
-    entities: [],
+    entities: article.entities.map((entity) => ({
+      type: entity.entity_type.toLowerCase() as 'club' | 'player' | 'coach',
+      id: entity.slug,
+      name: entity.name,
+    })),
     img: fallbackImage,
   }
 }

@@ -8,6 +8,7 @@ import pytest
 from footballpulse_api_gateway.api.public import (
     PublicArticle,
     PublicEntityStories,
+    PublicEntityTag,
     PublicTimelineEntry,
     create_public_app,
 )
@@ -21,6 +22,7 @@ ARTICLE = PublicArticle(
     story_id=UUID(int=2),
     story_version=4,
     published_at=NOW,
+    entities=(PublicEntityTag(UUID(int=3), "PLAYER", "Vinícius Júnior", "vinicius"),),
 )
 TIMELINE = PublicTimelineEntry(
     story_id=UUID(int=2),
@@ -63,6 +65,7 @@ async def test_public_article_and_story_timeline_routes() -> None:
 
         assert article.status_code == 200
         assert article.json()["title_vi"] == "Arsenal hỏi mua Vinícius"
+        assert article.json()["entities"][0]["slug"] == "vinicius"
         assert article.headers["cache-control"] == "public, max-age=60"
         assert timeline.status_code == 200
         assert timeline.json()["items"][0]["confirmation"] == "REPORTED"

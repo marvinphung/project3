@@ -6,6 +6,7 @@ export type PublicArticle = {
   story_id: string
   story_version: number
   published_at: string
+  entities: { id: string; entity_type: string; name: string; slug: string }[]
 }
 
 export type PublicTimelineEntry = {

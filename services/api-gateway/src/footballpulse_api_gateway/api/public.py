@@ -19,6 +19,15 @@ class PublicArticle:
     story_id: UUID
     story_version: int
     published_at: datetime
+    entities: tuple[PublicEntityTag, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PublicEntityTag:
+    id: UUID
+    entity_type: str
+    name: str
+    slug: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +74,16 @@ class ArticleResponse(BaseModel):
     story_id: UUID
     story_version: int
     published_at: datetime
+    entities: list[EntityTagResponse]
+
+
+class EntityTagResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    entity_type: str
+    name: str
+    slug: str
 
 
 class ArticleListResponse(BaseModel):
