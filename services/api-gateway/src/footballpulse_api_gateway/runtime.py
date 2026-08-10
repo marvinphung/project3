@@ -20,6 +20,7 @@ from footballpulse_api_gateway.api.public import create_public_app
 from footballpulse_api_gateway.application.editorial_admin_adapter import (
     ContentEditorialAdminAdapter,
 )
+from footballpulse_api_gateway.middleware import install_gateway_middleware
 from footballpulse_api_gateway.persistence.public_read_repository import (
     PostgresPublicReadRepository,
 )
@@ -56,6 +57,7 @@ def build_app(environment: Mapping[str, str] | None = None) -> FastAPI:
     app.router.routes.extend(admin_app.router.routes)
     app.exception_handlers.update(admin_app.exception_handlers)
     app.openapi_schema = None
+    install_gateway_middleware(app)
     return app
 
 
