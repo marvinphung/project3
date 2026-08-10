@@ -46,4 +46,5 @@ public API, and source listing now consumes the crawler admin API when
 crawler versioned toggle endpoint. Admin crawl triggering now opens an
 idempotent batch through the crawler service. The first collection DAG now
 orchestrates those batches every six hours and queries crawler `sources/due`
-for source selection.
+for source selection. Mock HTTP coverage now verifies due-source auth,
+idempotency, and batch payloads.
