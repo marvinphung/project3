@@ -45,5 +45,5 @@ public API, and source listing now consumes the crawler admin API when
 `VITE_CRAWLER_API_BASE_URL` is configured. Source enable/disable now uses the
 crawler versioned toggle endpoint. Admin crawl triggering now opens an
 idempotent batch through the crawler service. The first collection DAG now
-orchestrates those batches every six hours; due-source discovery is temporarily
-configured by `FOOTBALLPULSE_DUE_SOURCE_IDS`.
+orchestrates those batches every six hours and queries crawler `sources/due`
+for source selection.

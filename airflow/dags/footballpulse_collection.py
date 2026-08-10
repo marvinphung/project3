@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
@@ -40,6 +41,18 @@ def trigger_crawler_batches(
     return created
 
 
+def fetch_due_source_ids(*, crawler_url: str, at: datetime) -> list[str]:
+    """Read due enabled sources from the crawler service."""
+    token = os.environ.get("FOOTBALLPULSE_CRAWLER_INTERNAL_TOKEN", "")
+    query = urlencode({"at": at.isoformat(), "limit": 200})
+    request = Request(
+        f"{crawler_url.rstrip('/')}/internal/v1/sources/due?{query}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    with urlopen(request, timeout=30) as response:  # noqa: S310 - configured local URL
+        return [item["id"] for item in json.loads(response.read())["items"]]
+
+
 try:
     import pendulum
     from airflow.decorators import dag, task
@@ -54,9 +67,11 @@ try:
     )
     def footballpulse_collection():
         @task
-        def load_due_source_ids() -> list[str]:
-            value = os.environ.get("FOOTBALLPULSE_DUE_SOURCE_IDS", "")
-            return [item.strip() for item in value.split(",") if item.strip()]
+        def load_due_source_ids(**context) -> list[str]:
+            return fetch_due_source_ids(
+                crawler_url=os.environ.get("FOOTBALLPULSE_CRAWLER_URL", "http://crawler:8000"),
+                at=context["data_interval_start"].in_timezone("Asia/Ho_Chi_Minh"),
+            )
 
         @task
         def open_crawl_batches(source_ids: list[str], **context) -> list[str]:

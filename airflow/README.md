@@ -8,5 +8,4 @@ Local configuration:
 
 - `FOOTBALLPULSE_CRAWLER_URL` — crawler base URL.
 - `FOOTBALLPULSE_CRAWLER_ADMIN_TOKEN` — bearer token for the crawler admin API.
-- `FOOTBALLPULSE_DUE_SOURCE_IDS` — temporary comma-separated source IDs until
-  the due-source query is exposed to the scheduler.
+- `FOOTBALLPULSE_CRAWLER_INTERNAL_TOKEN` — bearer token for the due-source API.
