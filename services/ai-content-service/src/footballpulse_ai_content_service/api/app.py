@@ -34,6 +34,9 @@ class EnrichmentBatchRegistry:
         self._batches[batch.id] = batch
         return batch
 
+    def get(self, batch_id: UUID) -> EnrichmentBatchResponse | None:
+        return self._batches.get(batch_id)
+
 
 def create_app(*, internal_token: str, registry: EnrichmentBatchRegistry | None = None) -> FastAPI:
     app = FastAPI(title="FootballPulse AI Content Service", version="0.1.0")
@@ -52,5 +55,21 @@ def create_app(*, internal_token: str, registry: EnrichmentBatchRegistry | None 
         ):
             raise HTTPException(status_code=401, detail="invalid bearer token")
         return batches.create(request)
+
+    @app.get(
+        "/internal/v1/enrichment-batches/{batch_id}",
+        response_model=EnrichmentBatchResponse,
+    )
+    async def get_enrichment_batch(
+        batch_id: UUID, authorization: str | None = Header(default=None)
+    ) -> EnrichmentBatchResponse:
+        if authorization is None or not authorization.startswith("Bearer ") or not compare_digest(
+            authorization[7:], internal_token
+        ):
+            raise HTTPException(status_code=401, detail="invalid bearer token")
+        batch = batches.get(batch_id)
+        if batch is None:
+            raise HTTPException(status_code=404, detail="enrichment batch not found")
+        return batch
 
     return app

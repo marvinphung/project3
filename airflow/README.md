@@ -13,4 +13,6 @@ Local configuration:
 `footballpulse_ai_enrichment` chạy sau collection 30 phút, gửi collection batch
 IDs tới `FOOTBALLPULSE_AI_ENRICHMENT_URL`. AI service cần cung cấp endpoint
 `POST /internal/v1/enrichment-batches` hiện đã có contract runtime tối thiểu:
-trả batch `PREPARING`; worker/provider execution vẫn là bước kế tiếp.
+trả batch `PREPARING`; trạng thái có thể poll qua
+`GET /internal/v1/enrichment-batches/{batch_id}`. Worker/provider execution
+vẫn là bước kế tiếp.
