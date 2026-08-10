@@ -327,6 +327,7 @@ version = "0.1.0"
 source = { editable = "services/api-gateway" }
 dependencies = [
     { name = "alembic" },
+    { name = "fastapi" },
     { name = "psycopg", extra = ["binary"] },
     { name = "sqlalchemy" },
 ]
@@ -334,6 +335,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.18,<2" },
+    { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
 ]
