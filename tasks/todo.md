@@ -77,7 +77,7 @@
 
 - [x] WP 8.1 Retry/DLQ/outbox recovery (contracts and recovery matrix documented)
 - [x] WP 8.2 Restart and concurrency invariants (documented; integration execution remains)
-- [ ] WP 8.3 Offline end-to-end demo
+- [x] WP 8.3 Offline end-to-end demo
 - [ ] WP 8.4 Kaggle integration acceptance
 - [ ] WP 8.5 Load measurement and final documentation
 - [ ] Final Phase Gate approved by user
