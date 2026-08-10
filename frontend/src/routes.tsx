@@ -12,6 +12,7 @@ import ClubDetailPage from './pages/ClubDetailPage'
 import CoachDetailPage from './pages/CoachDetailPage'
 import SearchPage from './pages/SearchPage'
 import NotFoundPage from './pages/NotFoundPage'
+import StoryPage from './pages/StoryPage'
 
 import AdminLayout from './pages/admin/AdminLayout'
 import AdminLoginPage from './pages/admin/AdminLoginPage'
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
       { path: 'hlv', Component: CoachesPage },
       { path: 'hlv/:id', Component: CoachDetailPage },
       { path: 'bai-viet/:id', Component: ArticleDetailPage },
+      { path: 'story/:id', Component: StoryPage },
       { path: 'tim-kiem', Component: SearchPage },
       { path: '*', Component: NotFoundPage },
     ],
