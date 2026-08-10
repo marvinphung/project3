@@ -40,12 +40,12 @@
 
 ## Phase 4 — Story and timeline
 
-- [ ] WP 4.1 Story/claim PostgreSQL model
-- [ ] WP 4.2 Hybrid candidate retrieval
-- [ ] WP 4.3 Confirmation/source independence
-- [ ] WP 4.4 Material Change Detector
-- [ ] WP 4.5 Bilingual timeline aggregation
-- [ ] Phase Gate 4 approved
+- [x] WP 4.1 Story/claim PostgreSQL model
+- [x] WP 4.2 Hybrid candidate retrieval
+- [x] WP 4.3 Confirmation/source independence
+- [x] WP 4.4 Material Change Detector
+- [x] WP 4.5 Bilingual timeline aggregation
+- [x] Phase Gate 4 approved
 
 ## Phase 5 — Editorial and API
 

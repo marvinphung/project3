@@ -27,7 +27,7 @@ Canonical detailed plan:
 
 ## Current next action
 
-WP 4.1 and Collaboration Gate 4.1 are complete. The WP 4.2 hybrid candidate
-retrieval design is approved. The next action is incremental implementation of
-versioned Story embeddings, hard-filter/vector retrieval, explainable rule score
-and configurable decisions; thresholds remain unlocked until benchmark review.
+Phase Gate 4 is approved. Story/claim persistence, hybrid matching, confirmation,
+material-change detection and bilingual timeline projection are implemented.
+The next action is WP 5.1: define grounded long-form generation contracts before
+connecting an AI provider.
