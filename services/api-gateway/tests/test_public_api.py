@@ -33,6 +33,13 @@ class MemoryPublicRepository:
     def get_article_by_slug(self, slug: str) -> PublicArticle | None:
         return ARTICLE if slug == ARTICLE.slug else None
 
+    def list_articles(
+        self, *, limit: int, offset: int, story_id: UUID | None
+    ) -> list[PublicArticle]:
+        if story_id is not None and story_id != ARTICLE.story_id:
+            return []
+        return [ARTICLE][offset : offset + limit]
+
     def list_story_timeline(
         self, story_id: UUID, *, limit: int, offset: int, confirmation: str | None
     ) -> list[PublicTimelineEntry]:
@@ -68,3 +75,15 @@ async def test_public_article_returns_not_found_envelope() -> None:
         assert response.json() == {
             "error": {"code": "ARTICLE_NOT_FOUND", "message": "article not found"}
         }
+
+
+@pytest.mark.asyncio
+async def test_public_article_list_supports_pagination_and_story_filter() -> None:
+    transport = httpx.ASGITransport(app=create_public_app(MemoryPublicRepository()))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            f"/api/v1/articles?limit=10&offset=0&story_id={ARTICLE.story_id}"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["slug"] == "arsenal-bid"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Annotated, Protocol
 from uuid import UUID
 
 from fastapi import FastAPI, Query, Response
@@ -32,6 +32,10 @@ class PublicTimelineEntry:
 class PublicReadRepository(Protocol):
     def get_article_by_slug(self, slug: str) -> PublicArticle | None: ...
 
+    def list_articles(
+        self, *, limit: int, offset: int, story_id: UUID | None
+    ) -> list[PublicArticle]: ...
+
     def list_story_timeline(
         self,
         story_id: UUID,
@@ -54,6 +58,10 @@ class ArticleResponse(BaseModel):
     published_at: datetime
 
 
+class ArticleListResponse(BaseModel):
+    items: list[ArticleResponse]
+
+
 class TimelineEntryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -69,6 +77,23 @@ class TimelineResponse(BaseModel):
 
 def create_public_app(repository: PublicReadRepository) -> FastAPI:
     app = FastAPI(title="FootballPulse Public API", version="0.1.0")
+
+    @app.get("/api/v1/articles", response_model=ArticleListResponse)
+    async def list_articles(
+        response: Response,
+        limit: int = Query(20, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+        story_id: Annotated[UUID | None, Query()] = None,
+    ) -> ArticleListResponse:
+        response.headers["Cache-Control"] = "public, max-age=30"
+        return ArticleListResponse(
+            items=[
+                ArticleResponse.model_validate(item)
+                for item in repository.list_articles(
+                    limit=limit, offset=offset, story_id=story_id
+                )
+            ]
+        )
 
     @app.get("/api/v1/articles/{slug}", response_model=ArticleResponse)
     async def get_article(slug: str, response: Response) -> ArticleResponse | JSONResponse:

@@ -43,6 +43,17 @@ class PostgresPublicReadRepository:
             )
         return None if row is None else _article_from_row(row)
 
+    def list_articles(
+        self, *, limit: int, offset: int, story_id: UUID | None
+    ) -> list[PublicArticle]:
+        statement = sa.select(publications).order_by(publications.c.published_at.desc())
+        if story_id is not None:
+            statement = statement.where(publications.c.story_id == story_id)
+        statement = statement.offset(offset).limit(limit)
+        with self._engine.connect() as connection:
+            rows = connection.execute(statement).mappings().all()
+        return [_article_from_row(row) for row in rows]
+
     def list_story_timeline(
         self,
         story_id: UUID,
