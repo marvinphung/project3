@@ -4,11 +4,15 @@ import sqlalchemy as sa
 from sqlalchemy.engine import Engine, RowMapping
 from sqlalchemy.exc import IntegrityError
 
-from footballpulse_content_service.editorial.postgres_tables import publications
+from footballpulse_content_service.editorial.postgres_tables import (
+    publication_outbox,
+    publications,
+)
 from footballpulse_content_service.editorial.publication import (
     Publication,
     PublicationConflictError,
 )
+from footballpulse_content_service.editorial.publication_outbox import PublicationPublishedEvent
 
 
 def _values(publication: Publication) -> dict[str, object]:
@@ -64,6 +68,38 @@ class PostgresPublicationRepository:
         try:
             with self._engine.begin() as connection:
                 connection.execute(publications.insert().values(**_values(publication)))
+        except IntegrityError as error:
+            existing = self.get_by_idempotency_key(publication.idempotency_key)
+            if existing is not None and existing.revision_id == publication.revision_id:
+                return existing
+            raise PublicationConflictError(
+                "publication conflicts with existing snapshot"
+            ) from error
+        return publication
+
+    def create_with_outbox(
+        self,
+        publication: Publication,
+        event: PublicationPublishedEvent,
+    ) -> Publication:
+        try:
+            with self._engine.begin() as connection:
+                connection.execute(publications.insert().values(**_values(publication)))
+                connection.execute(
+                    publication_outbox.insert().values(
+                        event_id=event.event_id,
+                        publication_id=publication.id,
+                        topic=event.topic,
+                        message_key=event.key,
+                        payload=dict(event.payload),
+                        occurred_at=event.occurred_at,
+                        state="PENDING",
+                        attempt_count=0,
+                        published_at=None,
+                        last_error=None,
+                        created_at=event.occurred_at,
+                    )
+                )
         except IntegrityError as error:
             existing = self.get_by_idempotency_key(publication.idempotency_key)
             if existing is not None and existing.revision_id == publication.revision_id:

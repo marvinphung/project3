@@ -38,3 +38,19 @@ publications = sa.Table(
     sa.Column("idempotency_key", sa.String(length=200), nullable=False),
     sa.Column("published_at", sa.DateTime(timezone=True), nullable=False),
 )
+
+publication_outbox = sa.Table(
+    "publication_outbox",
+    metadata,
+    sa.Column("event_id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("publication_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("topic", sa.String(length=100), nullable=False),
+    sa.Column("message_key", sa.String(length=200), nullable=False),
+    sa.Column("payload", postgresql.JSONB(), nullable=False),
+    sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("state", sa.String(length=16), nullable=False),
+    sa.Column("attempt_count", sa.Integer(), nullable=False),
+    sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+    sa.Column("last_error", sa.Text(), nullable=True),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+)
