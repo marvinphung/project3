@@ -180,6 +180,16 @@ def create_app(
         )
 
     @app.get(
+        "/admin/v1/crawl-batches/{batch_id}",
+        response_model=CrawlBatchResponse,
+        responses=ERROR_RESPONSES,
+        dependencies=[Depends(admin_auth)],
+    )
+    def get_crawl_batch(batch_id: UUID) -> CrawlBatchResponse:
+        batch = batch_service.get(batch_id)
+        return CrawlBatchResponse.from_domain(batch)
+
+    @app.get(
         "/internal/v1/sources/due",
         response_model=SourceListResponse,
         responses=ERROR_RESPONSES,

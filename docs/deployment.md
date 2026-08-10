@@ -192,6 +192,20 @@ Thứ tự mở rộng mục tiêu:
 Profile này khởi tạo metadata Airflow trong PostgreSQL và mở API server tại
 `127.0.0.1:${FOOTBALLPULSE_AIRFLOW_PORT:-8080}`.
 
+### Chạy enrichment hoàn toàn offline
+
+AI service có chế độ worker deterministic để phát triển local, không cần Kaggle
+hay tải model. Bật `FOOTBALLPULSE_AI_OFFLINE_WORKER=true` (Compose đã bật mặc
+định), rồi chạy:
+
+```bash
+uv run python scripts/run-offline-enrichment.py
+```
+
+Worker này tạo summary tiếng Anh ổn định từ nội dung đã làm sạch và trả về
+đúng `article-enrichment.v1`; khi cần chất lượng model thật, tắt cờ này và
+chọn `FOOTBALLPULSE_AI_PROVIDER=local` cùng đường dẫn GGUF Qwen.
+
 `depends_on` không thay application retry. Readiness chỉ true khi dependency
 bắt buộc usable. Shutdown ngừng nhận việc mới, không acknowledge việc chưa ghi
 bền vững, flush outbox/producer cần thiết và đóng resource.

@@ -179,6 +179,7 @@ services:
     restart: unless-stopped
     environment:
       FOOTBALLPULSE_AI_INTERNAL_TOKEN: ${FOOTBALLPULSE_AI_INTERNAL_TOKEN:-local-ai-internal-token}
+      FOOTBALLPULSE_AI_OFFLINE_WORKER: ${FOOTBALLPULSE_AI_OFFLINE_WORKER:-true}
       FOOTBALLPULSE_AI_PORT: "8000"
     ports:
       - "127.0.0.1:${FOOTBALLPULSE_AI_PORT:-8002}:8000"

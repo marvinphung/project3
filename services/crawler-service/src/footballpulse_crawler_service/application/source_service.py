@@ -153,3 +153,9 @@ class CrawlBatchService:
             completed_at=self._clock(),
         )
         return self._batch_repository.save(completed)
+
+    def get(self, batch_id: UUID) -> CrawlBatch:
+        batch = self._batch_repository.get(batch_id)
+        if batch is None:
+            raise SourceNotFoundError(f"crawl batch {batch_id} was not found")
+        return batch
