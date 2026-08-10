@@ -21,3 +21,20 @@ editorial_revisions = sa.Table(
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
 )
+
+publications = sa.Table(
+    "publications",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("generated_article_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("revision_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("story_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("story_version", sa.Integer(), nullable=False),
+    sa.Column("slug", sa.String(length=200), nullable=False),
+    sa.Column("title_en", sa.Text(), nullable=False),
+    sa.Column("body_en", sa.Text(), nullable=False),
+    sa.Column("title_vi", sa.Text(), nullable=False),
+    sa.Column("body_vi", sa.Text(), nullable=False),
+    sa.Column("idempotency_key", sa.String(length=200), nullable=False),
+    sa.Column("published_at", sa.DateTime(timezone=True), nullable=False),
+)

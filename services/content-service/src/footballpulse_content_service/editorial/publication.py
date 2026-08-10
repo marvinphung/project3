@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Lock
+from typing import Protocol
 from uuid import UUID, uuid4
 
 from footballpulse_content_service.editorial.revision import EditorialRevision, RevisionState
@@ -28,6 +29,12 @@ class Publication:
     published_at: datetime
 
 
+class PublicationRepository(Protocol):
+    def get_by_idempotency_key(self, key: str) -> Publication | None: ...
+
+    def create(self, publication: Publication) -> Publication: ...
+
+
 class InMemoryPublicationRepository:
     def __init__(self) -> None:
         self._by_key: dict[str, Publication] = {}
@@ -49,7 +56,7 @@ class InMemoryPublicationRepository:
 
 
 class PublicationService:
-    def __init__(self, repository: InMemoryPublicationRepository) -> None:
+    def __init__(self, repository: PublicationRepository) -> None:
         self._repository = repository
 
     def publish(
