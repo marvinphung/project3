@@ -117,6 +117,13 @@ def test_admin_source_flow_and_internal_due_query() -> None:
     assert first_batch.status_code == 201
     assert replayed_batch.json()["id"] == first_batch.json()["id"]
 
+    manual_batch = client.post(
+        f"/admin/v1/sources/{SOURCE_ID}/crawl",
+        headers=ADMIN_HEADERS,
+        json={"idempotency_key": "manual:bbc:2026-08-01T00:00:00Z"},
+    )
+    assert manual_batch.status_code == 201
+
     disabled = client.post(
         f"/admin/v1/sources/{SOURCE_ID}/toggle",
         headers=ADMIN_HEADERS,

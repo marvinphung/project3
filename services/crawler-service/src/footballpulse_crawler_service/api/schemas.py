@@ -54,6 +54,12 @@ class SourceToggleRequest(BaseModel):
     expected_version: int = Field(ge=1)
 
 
+class CrawlTriggerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    idempotency_key: str = Field(min_length=1, max_length=256)
+
+
 class SourceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

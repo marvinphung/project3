@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from secrets import compare_digest
 from typing import Annotated, Any
 from uuid import UUID
@@ -17,6 +18,7 @@ from footballpulse_crawler_service.api.schemas import (
     CrawlBatchCompleteRequest,
     CrawlBatchOpenRequest,
     CrawlBatchResponse,
+    CrawlTriggerRequest,
     ErrorBody,
     ErrorEnvelope,
     SourceConfigurationRequest,
@@ -158,6 +160,22 @@ def create_app(
                 source_id,
                 enabled=request.enabled,
                 expected_version=request.expected_version,
+            )
+        )
+
+    @app.post(
+        "/admin/v1/sources/{source_id}/crawl",
+        status_code=201,
+        response_model=CrawlBatchResponse,
+        responses=ERROR_RESPONSES,
+        dependencies=[Depends(admin_auth)],
+    )
+    def trigger_crawl(source_id: UUID, request: CrawlTriggerRequest) -> CrawlBatchResponse:
+        return CrawlBatchResponse.from_domain(
+            batch_service.open(
+                source_id=source_id,
+                idempotency_key=request.idempotency_key,
+                window_started_at=datetime.now(UTC),
             )
         )
 

@@ -126,6 +126,14 @@ export function toggleSource(sourceId: string, enabled: boolean, expectedVersion
   })
 }
 
+export function triggerSourceCrawl(sourceId: string, idempotencyKey: string) {
+  return request(`${CRAWLER_API_BASE_URL}/admin/v1/sources/${sourceId}/crawl`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ idempotency_key: idempotencyKey }),
+  })
+}
+
 export type EditorialRevision = {
   generated_article_id: string
   revision_id: string
