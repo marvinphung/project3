@@ -102,6 +102,8 @@ def test_owner_migrations_upgrade_idempotently_and_downgrade_cleanly(
             ("intelligence_schema", "processed_events"),
             ("intelligence_schema", "outbox_events"),
             ("intelligence_schema", "story_embeddings"),
+            ("intelligence_schema", "story_match_decisions"),
+            ("intelligence_schema", "story_match_candidate_scores"),
             ("intelligence_schema", "alembic_version_intelligence"),
         } <= tables
         seed_counts = connection.execute(
@@ -135,6 +137,7 @@ def test_owner_migrations_upgrade_idempotently_and_downgrade_cleanly(
             "'entity_aliases', 'entity_audit_log', 'unresolved_entity_mentions', "
             "'article_embeddings', 'stories', 'story_sources', 'story_entities', "
             "'claims', 'claim_evidence', 'processed_events', 'outbox_events', "
-            "'story_embeddings')"
+            "'story_embeddings', 'story_match_decisions', "
+            "'story_match_candidate_scores')"
         ).fetchone()
         assert product_table_count == (0,)

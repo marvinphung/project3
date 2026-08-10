@@ -171,3 +171,31 @@ def test_intelligence_migration_adds_versioned_story_embeddings_without_ann_inde
     assert "fk_story_embeddings_story" in migration
     assert "hnsw" not in migration.casefold()
     assert "ivfflat" not in migration.casefold()
+
+
+def test_intelligence_migration_adds_immutable_story_match_audit() -> None:
+    migration = (
+        ROOT
+        / "services/intelligence-service/migrations/versions/"
+        / "intelligence_0006_add_story_match_audit.py"
+    ).read_text()
+
+    assert 'down_revision: str | None = "intelligence_0005"' in migration
+    for table in ("story_match_decisions", "story_match_candidate_scores"):
+        assert f'"{table}"' in migration
+    for constraint in (
+        "uq_story_match_decisions_input_matcher",
+        "uq_story_match_candidate_scores_rank",
+        "uq_story_match_candidate_scores_story",
+        "fk_story_match_candidate_scores_decision",
+        "ck_story_match_scores_component_total",
+    ):
+        assert constraint in migration
+    for component in (
+        "vector_similarity_score",
+        "primary_entity_score",
+        "entity_overlap_score",
+        "predicate_compatibility_score",
+        "time_distance_score",
+    ):
+        assert f'"{component}"' in migration

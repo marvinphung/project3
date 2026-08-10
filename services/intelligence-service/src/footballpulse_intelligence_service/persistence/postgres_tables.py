@@ -106,6 +106,44 @@ story_embeddings = sa.Table(
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
 )
 
+story_match_decisions = sa.Table(
+    "story_match_decisions",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("article_version_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("input_hash", sa.String(length=64), nullable=False),
+    sa.Column("action", sa.String(length=16), nullable=False),
+    sa.Column("selected_story_id", postgresql.UUID(as_uuid=True), nullable=True),
+    sa.Column("selected_story_version", sa.Integer(), nullable=True),
+    sa.Column("review_threshold", sa.Numeric(precision=6, scale=3), nullable=False),
+    sa.Column("attach_threshold", sa.Numeric(precision=6, scale=3), nullable=False),
+    sa.Column("near_tie_margin", sa.Numeric(precision=6, scale=3), nullable=False),
+    sa.Column("matcher_version", sa.String(length=100), nullable=False),
+    sa.Column("embedding_model_name", sa.String(length=200), nullable=False),
+    sa.Column("embedding_model_version", sa.String(length=200), nullable=False),
+    sa.Column("reason_codes", postgresql.JSONB(), nullable=False),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+)
+
+story_match_candidate_scores = sa.Table(
+    "story_match_candidate_scores",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("decision_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("rank", sa.SmallInteger(), nullable=False),
+    sa.Column("story_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("story_version", sa.Integer(), nullable=False),
+    sa.Column("total_score", sa.Numeric(precision=6, scale=3), nullable=False),
+    sa.Column("vector_similarity_score", sa.Numeric(precision=6, scale=3), nullable=False),
+    sa.Column("primary_entity_score", sa.Numeric(precision=6, scale=3), nullable=False),
+    sa.Column("entity_overlap_score", sa.Numeric(precision=6, scale=3), nullable=False),
+    sa.Column(
+        "predicate_compatibility_score", sa.Numeric(precision=6, scale=3), nullable=False
+    ),
+    sa.Column("time_distance_score", sa.Numeric(precision=6, scale=3), nullable=False),
+    sa.Column("reason_codes", postgresql.JSONB(), nullable=False),
+)
+
 stories = sa.Table(
     "stories",
     metadata,
