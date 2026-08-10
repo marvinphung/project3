@@ -171,6 +171,25 @@ services:
     mem_limit: 768m
     cpus: 0.75
 
+  ai-content:
+    build:
+      context: .
+      dockerfile: services/ai-content-service/Dockerfile
+    profiles: ["airflow"]
+    restart: unless-stopped
+    environment:
+      FOOTBALLPULSE_AI_INTERNAL_TOKEN: ${FOOTBALLPULSE_AI_INTERNAL_TOKEN:-local-ai-internal-token}
+      FOOTBALLPULSE_AI_PORT: "8000"
+    ports:
+      - "127.0.0.1:${FOOTBALLPULSE_AI_PORT:-8002}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\")'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 768m
+    cpus: 0.75
+
 volumes:
   kafka_data:
   mongodb_data:

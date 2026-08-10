@@ -93,4 +93,5 @@ def test_airflow_profile_contains_scheduler_and_api_server() -> None:
     assert result.returncode == 0, result.stderr
     services = JSON_OBJECT.validate_python(json.loads(result.stdout))["services"]
     assert {"airflow-init", "airflow-scheduler", "airflow-api-server"} <= set(services)
+    assert services["ai-content"]["build"]["dockerfile"] == "services/ai-content-service/Dockerfile"
     assert services["airflow-api-server"]["ports"][0]["host_ip"] == "127.0.0.1"

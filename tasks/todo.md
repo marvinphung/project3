@@ -68,8 +68,8 @@
 ## Phase 7 — Orchestration
 
 - [x] WP 7.1 Collection DAG
-- [ ] WP 7.2 AI enrichment/reprocess DAGs (orchestration contract + mock test done; AI HTTP runtime pending)
-- [ ] WP 7.3 Service images and Compose profiles
+- [ ] WP 7.2 AI enrichment/reprocess DAGs (DAG + HTTP lifecycle contract done; provider worker remains)
+- [x] WP 7.3 Service images and Compose profiles (AI content runtime added)
 - [ ] WP 7.4 Operational read models
 - [ ] Phase Gate 7 approved
 
