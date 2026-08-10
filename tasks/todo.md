@@ -67,7 +67,7 @@
 
 ## Phase 7 — Orchestration
 
-- [ ] WP 7.1 Collection DAG
+- [x] WP 7.1 Collection DAG
 - [ ] WP 7.2 AI enrichment/reprocess DAGs
 - [ ] WP 7.3 Service images and Compose profiles
 - [ ] WP 7.4 Operational read models
