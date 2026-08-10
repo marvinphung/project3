@@ -1,0 +1,338 @@
+from __future__ import annotations
+
+import os
+import subprocess
+from collections.abc import Iterator
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from pathlib import Path
+from uuid import UUID, uuid4
+
+import psycopg
+import pytest
+import sqlalchemy as sa
+from footballpulse_intelligence_service.domain.delivery import OutboxEvent, ProcessedEvent
+from footballpulse_intelligence_service.domain.entity import EntityType
+from footballpulse_intelligence_service.domain.errors import StoryConflictError
+from footballpulse_intelligence_service.domain.story import (
+    Claim,
+    ClaimEvidence,
+    ClaimPredicate,
+    Story,
+    StoryEntity,
+    StoryEventType,
+    StorySource,
+    StoryStatus,
+)
+from footballpulse_intelligence_service.persistence.story_repository import PostgresStoryRepository
+from psycopg import sql
+from sqlalchemy import create_engine
+
+ROOT = Path(__file__).parents[3]
+NOW = datetime(2026, 8, 10, 12, 0, tzinfo=UTC)
+STORY_ID = UUID("018f8b45-b634-7c81-a47d-9a7c2f3cb001")
+ARTICLE_ID = UUID("018f8b45-b634-7c81-a47d-9a7c2f3cb003")
+SOURCE_ID = UUID("018f8b45-b634-7c81-a47d-9a7c2f3cb004")
+PLAYER_ID = UUID("018f8b45-b634-7c81-a47d-9a7c2f3c8101")
+ARSENAL_ID = UUID("018f8b45-b634-7c81-a47d-9a7c2f3c8103")
+
+
+def postgres_url(database: str, *, sqlalchemy_driver: bool = False) -> str:
+    scheme = "postgresql+psycopg" if sqlalchemy_driver else "postgresql"
+    user = os.getenv("FOOTBALLPULSE_POSTGRES_USER", "footballpulse")
+    password = os.getenv("FOOTBALLPULSE_POSTGRES_PASSWORD", "footballpulse_local_only")
+    host = os.getenv("FOOTBALLPULSE_POSTGRES_HOST", "127.0.0.1")
+    port = os.getenv("FOOTBALLPULSE_POSTGRES_PORT", "5432")
+    return f"{scheme}://{user}:{password}@{host}:{port}/{database}"
+
+
+@pytest.fixture
+def migrated_database() -> Iterator[str]:
+    database = f"footballpulse_story_test_{uuid4().hex}"
+    with psycopg.connect(postgres_url("postgres"), autocommit=True) as connection:
+        connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
+    environment = os.environ.copy()
+    environment["FOOTBALLPULSE_DATABASE_URL"] = postgres_url(database, sqlalchemy_driver=True)
+    migration = subprocess.run(
+        [
+            "uv",
+            "run",
+            "alembic",
+            "-c",
+            "services/intelligence-service/alembic.ini",
+            "upgrade",
+            "head",
+        ],
+        cwd=ROOT,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert migration.returncode == 0, migration.stderr
+    try:
+        yield database
+    finally:
+        with psycopg.connect(postgres_url("postgres"), autocommit=True) as connection:
+            connection.execute(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = %s AND pid <> pg_backend_pid()",
+                (database,),
+            )
+            connection.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(database)))
+
+
+def aggregate() -> tuple[
+    Story,
+    StorySource,
+    StoryEntity,
+    Claim,
+    ClaimEvidence,
+    ProcessedEvent,
+    OutboxEvent,
+]:
+    story = Story.create(
+        story_id=STORY_ID,
+        event_type=StoryEventType.TRANSFER,
+        first_seen_at=NOW,
+        confidence_score=Decimal("0.6500"),
+    )
+    source = StorySource.create(
+        link_id=UUID(int=101),
+        story_id=story.id,
+        article_version_id=ARTICLE_ID,
+        source_id=SOURCE_ID,
+        source_reliability_tier=1,
+        published_at=NOW,
+        observed_at=NOW,
+    )
+    entity = StoryEntity.create(
+        link_id=UUID(int=102),
+        story_id=story.id,
+        entity_id=PLAYER_ID,
+        entity_type=EntityType.PLAYER,
+        now=NOW,
+    )
+    claim = Claim.create(
+        claim_id=UUID(int=103),
+        story_id=story.id,
+        subject_entity_id=PLAYER_ID,
+        predicate=ClaimPredicate.SUBMITTED_BID,
+        object_entity_id=ARSENAL_ID,
+        object_value={"amount": 180_000_000, "currency": "EUR"},
+        statement_en="Arsenal submitted a €180m bid.",
+        certainty=Decimal("0.7000"),
+        occurred_at=NOW,
+        occurred_at_bucket=NOW,
+        now=NOW,
+    )
+    evidence = ClaimEvidence.create(
+        evidence_id=UUID(int=104),
+        claim_id=claim.id,
+        story_source_id=source.id,
+        quote="submitted a €180m bid",
+        start=8,
+        end=30,
+        now=NOW,
+    )
+    processed = ProcessedEvent.create(
+        record_id=UUID(int=105),
+        consumer_name="story-builder-v1",
+        event_id=UUID(int=106),
+        event_type="article.enriched",
+        processed_at=NOW,
+    )
+    outbox = OutboxEvent.create(
+        event_id=UUID(int=107),
+        aggregate_type="STORY",
+        aggregate_id=story.id,
+        event_type="story.created",
+        deduplication_key=f"story.created:{story.id}:1",
+        payload={"story_id": str(story.id), "version": 1},
+        now=NOW,
+    )
+    return story, source, entity, claim, evidence, processed, outbox
+
+
+def test_create_rejects_untraceable_aggregate_before_opening_a_transaction() -> None:
+    repository = PostgresStoryRepository(create_engine("sqlite://"))
+    story, source, entity, claim, evidence, processed, outbox = aggregate()
+
+    with pytest.raises(ValueError, match="source"):
+        repository.create_from_event(
+            story=story,
+            sources=(),
+            entities=(entity,),
+            claims=(claim,),
+            evidence=(evidence,),
+            processed_event=processed,
+            outbox_events=(outbox,),
+        )
+    with pytest.raises(ValueError, match="evidence"):
+        repository.create_from_event(
+            story=story,
+            sources=(source,),
+            entities=(entity,),
+            claims=(claim,),
+            evidence=(),
+            processed_event=processed,
+            outbox_events=(outbox,),
+        )
+    with pytest.raises(ValueError, match="outbox"):
+        repository.create_from_event(
+            story=story,
+            sources=(source,),
+            entities=(entity,),
+            claims=(claim,),
+            evidence=(evidence,),
+            processed_event=processed,
+            outbox_events=(),
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
+)
+def test_create_aggregate_and_replay_are_atomic_and_idempotent(
+    migrated_database: str,
+) -> None:
+    engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
+    repository = PostgresStoryRepository(engine)
+    story, source, entity, claim, evidence, processed, outbox = aggregate()
+
+    assert repository.create_from_event(
+        story=story,
+        sources=(source,),
+        entities=(entity,),
+        claims=(claim,),
+        evidence=(evidence,),
+        processed_event=processed,
+        outbox_events=(outbox,),
+    ) is True
+    assert repository.create_from_event(
+        story=story,
+        sources=(source,),
+        entities=(entity,),
+        claims=(claim,),
+        evidence=(evidence,),
+        processed_event=processed,
+        outbox_events=(outbox,),
+    ) is False
+
+    with engine.connect() as connection:
+        counts = connection.execute(
+            sa.text(
+                "SELECT "
+                "(SELECT count(*) FROM intelligence_schema.stories), "
+                "(SELECT count(*) FROM intelligence_schema.story_sources), "
+                "(SELECT count(*) FROM intelligence_schema.story_entities), "
+                "(SELECT count(*) FROM intelligence_schema.claims), "
+                "(SELECT count(*) FROM intelligence_schema.claim_evidence), "
+                "(SELECT count(*) FROM intelligence_schema.processed_events), "
+                "(SELECT count(*) FROM intelligence_schema.outbox_events)"
+            )
+        ).one()
+    assert counts == (1, 1, 1, 1, 1, 1, 1)
+    engine.dispose()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("FOOTBALLPULSE_RUN_STORY_INTEGRATION") != "1",
+    reason="set FOOTBALLPULSE_RUN_STORY_INTEGRATION=1 with PostgreSQL running",
+)
+def test_optimistic_update_commits_atomically_and_stale_update_rolls_back_marker(
+    migrated_database: str,
+) -> None:
+    engine = create_engine(postgres_url(migrated_database, sqlalchemy_driver=True))
+    repository = PostgresStoryRepository(engine)
+    story, source, entity, claim, evidence, processed, outbox = aggregate()
+    repository.create_from_event(
+        story=story,
+        sources=(source,),
+        entities=(entity,),
+        claims=(claim,),
+        evidence=(evidence,),
+        processed_event=processed,
+        outbox_events=(outbox,),
+    )
+
+    updated = story.observe(at=NOW + timedelta(hours=6), confidence_score=Decimal("0.8000"))
+    update_marker = ProcessedEvent.create(
+        record_id=UUID(int=201),
+        consumer_name="story-builder-v1",
+        event_id=UUID(int=202),
+        event_type="article.enriched",
+        processed_at=NOW + timedelta(hours=6),
+    )
+    update_outbox = OutboxEvent.create(
+        event_id=UUID(int=203),
+        aggregate_type="STORY",
+        aggregate_id=story.id,
+        event_type="story.updated",
+        deduplication_key=f"story.updated:{story.id}:2",
+        payload={"story_id": str(story.id), "version": 2},
+        now=NOW + timedelta(hours=6),
+    )
+
+    assert repository.update_from_event(
+        story=updated,
+        expected_version=1,
+        sources=(),
+        entities=(),
+        claims=(),
+        evidence=(),
+        processed_event=update_marker,
+        outbox_events=(update_outbox,),
+    ) is True
+    assert repository.get(story.id) == updated
+
+    stale = replace(
+        updated,
+        status=StoryStatus.CONFIRMED,
+        updated_at=NOW + timedelta(hours=12),
+    )
+    stale_marker = ProcessedEvent.create(
+        record_id=UUID(int=204),
+        consumer_name="story-builder-v1",
+        event_id=UUID(int=205),
+        event_type="article.enriched",
+        processed_at=NOW + timedelta(hours=12),
+    )
+    stale_outbox = OutboxEvent.create(
+        event_id=UUID(int=206),
+        aggregate_type="STORY",
+        aggregate_id=story.id,
+        event_type="story.updated",
+        deduplication_key=f"story.updated:{story.id}:3",
+        payload={"story_id": str(story.id), "version": 3},
+        now=NOW + timedelta(hours=12),
+    )
+    with pytest.raises(StoryConflictError, match="version"):
+        repository.update_from_event(
+            story=stale,
+            expected_version=1,
+            sources=(),
+            entities=(),
+            claims=(),
+            evidence=(),
+            processed_event=stale_marker,
+            outbox_events=(stale_outbox,),
+        )
+
+    with engine.connect() as connection:
+        stale_marker_count = connection.execute(
+            sa.text(
+                "SELECT count(*) FROM intelligence_schema.processed_events WHERE event_id = :id"
+            ),
+            {"id": stale_marker.event_id},
+        ).scalar_one()
+        outbox_count = connection.execute(
+            sa.text("SELECT count(*) FROM intelligence_schema.outbox_events")
+        ).scalar_one()
+    assert stale_marker_count == 0
+    assert outbox_count == 2
+    engine.dispose()

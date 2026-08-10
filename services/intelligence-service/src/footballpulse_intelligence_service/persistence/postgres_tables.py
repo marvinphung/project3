@@ -89,3 +89,95 @@ article_embeddings = sa.Table(
     sa.Column("truncated", sa.Boolean(), nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
 )
+
+stories = sa.Table(
+    "stories",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("event_type", sa.String(length=32), nullable=False),
+    sa.Column("status", sa.String(length=32), nullable=False),
+    sa.Column("confidence_score", sa.Numeric(precision=5, scale=4), nullable=False),
+    sa.Column("first_seen_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("version", sa.Integer(), nullable=False),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+)
+
+story_sources = sa.Table(
+    "story_sources",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("story_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("article_version_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("source_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("source_reliability_tier", sa.SmallInteger(), nullable=False),
+    sa.Column("published_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("observed_at", sa.DateTime(timezone=True), nullable=False),
+)
+
+story_entities = sa.Table(
+    "story_entities",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("story_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("entity_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("entity_type", sa.String(length=32), nullable=False),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+)
+
+claims = sa.Table(
+    "claims",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("story_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("claim_fingerprint", sa.String(length=64), nullable=False),
+    sa.Column("subject_entity_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("predicate", sa.String(length=64), nullable=False),
+    sa.Column("object_entity_id", postgresql.UUID(as_uuid=True), nullable=True),
+    sa.Column("object_value", postgresql.JSONB(), nullable=True),
+    sa.Column("statement_en", sa.Text(), nullable=False),
+    sa.Column("certainty", sa.Numeric(precision=5, scale=4), nullable=False),
+    sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=True),
+    sa.Column("occurred_at_bucket", sa.DateTime(timezone=True), nullable=True),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+)
+
+claim_evidence = sa.Table(
+    "claim_evidence",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("claim_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("story_source_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("evidence_quote", sa.Text(), nullable=False),
+    sa.Column("evidence_start", sa.Integer(), nullable=False),
+    sa.Column("evidence_end", sa.Integer(), nullable=False),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+)
+
+processed_events = sa.Table(
+    "processed_events",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("consumer_name", sa.String(length=100), nullable=False),
+    sa.Column("event_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("event_type", sa.String(length=100), nullable=False),
+    sa.Column("processed_at", sa.DateTime(timezone=True), nullable=False),
+)
+
+outbox_events = sa.Table(
+    "outbox_events",
+    metadata,
+    sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+    sa.Column("aggregate_type", sa.String(length=64), nullable=False),
+    sa.Column("aggregate_id", postgresql.UUID(as_uuid=True), nullable=False),
+    sa.Column("event_type", sa.String(length=100), nullable=False),
+    sa.Column("deduplication_key", sa.String(length=200), nullable=False),
+    sa.Column("payload", postgresql.JSONB(), nullable=False),
+    sa.Column("status", sa.String(length=16), nullable=False),
+    sa.Column("attempt_count", sa.Integer(), nullable=False),
+    sa.Column("available_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+    sa.Column("last_error", sa.Text(), nullable=True),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+)

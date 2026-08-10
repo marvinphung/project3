@@ -12,3 +12,11 @@ class AliasNotFoundError(EntityCatalogError):
 
 class EntityConflictError(EntityCatalogError):
     """Raised for uniqueness or optimistic concurrency conflicts."""
+
+
+class StoryPersistenceError(Exception):
+    """Base error for Story aggregate persistence."""
+
+
+class StoryConflictError(StoryPersistenceError):
+    """Raised for uniqueness or optimistic concurrency conflicts."""
