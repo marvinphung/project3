@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 import uuid
 from dataclasses import dataclass, replace
@@ -50,7 +51,8 @@ from footballpulse_crawler_service.domain.crawl_batch import CrawlBatchStatus
 from footballpulse_crawler_service.domain.source import NewSource, SourceType
 from footballpulse_crawler_service.extraction.artifact_handoff import ArticleArtifactHandoff
 from footballpulse_crawler_service.extraction.fetcher import HtmlFetcher
-from footballpulse_crawler_service.extraction.service import HtmlExtractionService
+from footballpulse_crawler_service.extraction.processor import ArticleContentProcessor
+from footballpulse_crawler_service.extraction.service import ExtractedArticle, HtmlExtractionService
 from footballpulse_crawler_service.persistence.postgres_repositories import (
     PostgresCrawlBatchRepository,
     PostgresSourceRepository,
@@ -70,8 +72,8 @@ class CatalogSource:
 CATALOG: tuple[CatalogSource, ...] = (
     CatalogSource("BBC Sport Football", "https://feeds.bbci.co.uk/sport/football/rss.xml", SourceType.RSS, ("bbci.co.uk", "bbc.co.uk")),
     CatalogSource("The Guardian Football", "https://www.theguardian.com/football/rss", SourceType.RSS, ("theguardian.com",)),
-    CatalogSource("ESPN Soccer", "https://www.espn.com/espn/rss/soccer/news", SourceType.RSS, ("espn.com",)),
-    CatalogSource("Transfermarkt", "https://www.transfermarkt.co.uk/rss/news", SourceType.RSS, ("transfermarkt.co.uk",)),
+    CatalogSource("ESPN Soccer", "https://www.espn.com/soccer/", SourceType.HTML, ("espn.com",)),
+    CatalogSource("Transfermarkt", "https://www.transfermarkt.co.uk/aktuell/newsarchiv", SourceType.HTML, ("transfermarkt.co.uk",)),
     CatalogSource("Sky Sports Football Sitemap", "https://www.skysports.com/sitemap_news_football.xml", SourceType.SITEMAP, ("skysports.com",)),
     CatalogSource("Sky Sports Football", "https://www.skysports.com/football", SourceType.HTML, ("skysports.com",)),
     CatalogSource("Reuters Soccer", "https://www.reuters.com/sports/soccer/", SourceType.HTML, ("reuters.com",)),
@@ -83,6 +85,107 @@ CATALOG: tuple[CatalogSource, ...] = (
 )
 
 LOGGER = logging.getLogger("footballpulse.crawler")
+BROWSER_LISTING_SOURCES = frozenset({"ESPN Soccer", "Transfermarkt", "Reuters Soccer", "Premier League"})
+BROWSER_ARTICLE_SOURCES = BROWSER_LISTING_SOURCES | frozenset({"FIFA News", "FIFA World Cup News"})
+
+
+@dataclass(frozen=True, slots=True)
+class RenderedPage:
+    requested_url: str
+    final_url: str
+    content: bytes
+    status_code: int
+    related_urls: tuple[str, ...] = ()
+
+
+class BrowserRenderer:
+    """Render only allowlisted public pages that require a real browser."""
+
+    def __init__(self, safety_policy: UrlSafetyPolicy) -> None:
+        self._safety_policy = safety_policy
+        self._playwright = None
+        self._browser = None
+        self._context = None
+
+    async def start(self) -> None:
+        from playwright.async_api import async_playwright
+
+        self._playwright = await async_playwright().start()
+        self._browser = await self._playwright.chromium.launch(
+            headless=True,
+            args=["--disable-dev-shm-usage"],
+        )
+        self._context = await self._browser.new_context(
+            locale="en-GB",
+            user_agent=(
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+            ),
+        )
+
+    async def close(self) -> None:
+        if self._context is not None:
+            await self._context.close()
+        if self._browser is not None:
+            await self._browser.close()
+        if self._playwright is not None:
+            await self._playwright.stop()
+
+    async def fetch(
+        self,
+        url: str,
+        *,
+        allowed_domains: tuple[str, ...],
+        expand_listing: bool = False,
+    ) -> RenderedPage:
+        if self._context is None:
+            raise RuntimeError("browser renderer has not been started")
+        validated = await self._safety_policy.validate(url, allowed_domains=allowed_domains)
+        page = await self._context.new_page()
+        related_urls: list[str] = []
+        if expand_listing:
+            page.on(
+                "response",
+                lambda response: related_urls.append(response.url)
+                if "api.premierleague.com/content/premierleague/text/en/" in response.url.lower()
+                else None,
+            )
+        try:
+            response = await page.goto(validated.url, wait_until="domcontentloaded", timeout=45_000)
+            if "/articles/" in urlsplit(validated.url).path.lower():
+                try:
+                    await page.wait_for_selector("article", timeout=15_000)
+                except Exception:
+                    pass
+            else:
+                try:
+                    await page.wait_for_function(
+                        "document.documentElement.outerHTML.length > 50000",
+                        timeout=15_000,
+                    )
+                except Exception:
+                    # Preserve the rendered response for diagnostics/extraction even
+                    # when a sparse page never reaches the normal news-page size.
+                    pass
+            if expand_listing:
+                for _ in range(4):
+                    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    await page.wait_for_timeout(750)
+            final = await self._safety_policy.validate(page.url, allowed_domains=allowed_domains)
+            status_code = response.status if response is not None else 200
+            if status_code >= 400:
+                raise RuntimeError(f"browser returned HTTP {status_code}")
+            content = (await page.content()).encode("utf-8")
+            log_event(
+                "browser_rendered",
+                requested_url=url,
+                final_url=final.url,
+                status_code=status_code,
+                content_length=len(content),
+            )
+            return RenderedPage(url, final.url, content, status_code, tuple(dict.fromkeys(related_urls)))
+        finally:
+            await page.close()
 
 
 def log_event(event: str, **fields: object) -> None:
@@ -135,6 +238,12 @@ def ensure_source(service: SourceService, item: CatalogSource):
 
 def _is_article_url(source: CatalogSource, url: str) -> bool:
     path = urlsplit(url).path.lower().rstrip("/")
+    if source.name == "ESPN Soccer":
+        return "/soccer/story/_/id/" in path
+    if source.name == "Transfermarkt":
+        return "/view/news/" in path
+    if source.name == "Reuters Soccer":
+        return path.startswith("/sports/soccer/") and path != "/sports/soccer"
     if source.name == "Premier League":
         return path.startswith("/en/news/") and path != "/en/news"
     if source.name == "Sky Sports Football":
@@ -144,7 +253,10 @@ def _is_article_url(source: CatalogSource, url: str) -> bool:
     if source.name == "FIFA News":
         return "/news/" in path and "/tournaments/mens/worldcup/canadamexicousa2026/" not in path
     if source.name == "FIFA World Cup News":
-        return "/tournaments/mens/worldcup/canadamexicousa2026/" in path and "/news/" in path
+        return (
+            "/tournaments/mens/worldcup/canadamexicousa2026/" in path
+            and "/articles/" in path
+        )
     return True
 
 
@@ -181,7 +293,7 @@ async def _sitemap_links(item: CatalogSource, source, client, safety, limit: int
     soup = BeautifulSoup(listing.content, "lxml-xml")
     child_urls = [node.get_text(strip=True) for node in soup.find_all("loc")]
     results: list[str] = []
-    for child_url in child_urls[:20]:
+    for child_url in child_urls[:100]:
         child = await fetcher.fetch(child_url, allowed_domains=tuple(source.allowed_domains))
         for url in article_links_from_html(child.content, child.final_url, "fifa.com", limit, item):
             if url not in results:
@@ -191,7 +303,28 @@ async def _sitemap_links(item: CatalogSource, source, client, safety, limit: int
     return results
 
 
-async def crawl_source(item: CatalogSource, source, batch, ingestion, handoff, client, safety, max_articles):
+async def _browser_article(
+    renderer: BrowserRenderer,
+    *,
+    batch_id: UUID,
+    url: str,
+    allowed: tuple[str, ...],
+) -> ExtractedArticle:
+    rendered = await renderer.fetch(url, allowed_domains=allowed)
+    extraction = ArticleContentProcessor().process(rendered.content, url=rendered.final_url)
+    return ExtractedArticle(
+        source_key=str(batch_id),
+        requested_url=url,
+        final_url=rendered.final_url,
+        content_type="text/html",
+        etag=None,
+        last_modified=None,
+        raw_html=rendered.content,
+        extraction=extraction,
+    )
+
+
+async def crawl_source(item: CatalogSource, source, batch, ingestion, handoff, client, safety, renderer, max_articles):
     allowed = tuple(source.allowed_domains)
     links: list[tuple[str, str, str | None, datetime | None]] = []
     if item.source_type is SourceType.RSS:
@@ -202,11 +335,26 @@ async def crawl_source(item: CatalogSource, source, batch, ingestion, handoff, c
         for url in await _sitemap_links(item, source, client, safety, max_articles):
             links.append((url, url.rsplit("/", 1)[-1].replace("-", " ")[:500] or url, None, None))
     else:
-        fetcher = HtmlFetcher(client=client, safety_policy=safety)
-        listing = await fetcher.fetch(source.rss_url, allowed_domains=allowed)
+        if renderer is not None and item.name in BROWSER_LISTING_SOURCES:
+            listing = await renderer.fetch(source.rss_url, allowed_domains=allowed, expand_listing=True)
+        else:
+            listing = await HtmlFetcher(client=client, safety_policy=safety).fetch(source.rss_url, allowed_domains=allowed)
         host = urlsplit(source.rss_url).hostname.lower().rstrip(".")
         for url in article_links_from_html(listing.content, listing.final_url, host, max_articles, item):
             links.append((url, url.rsplit("/", 1)[-1].replace("-", " ")[:500] or url, None, None))
+        if item.name == "Premier League":
+            # DOM also contains a small set of stale promotional links. The
+            # content API responses are the authoritative current listing.
+            links.clear()
+            for api_url in listing.related_urls:
+                match = re.search(r"/TEXT/en/(\d+)", api_url, re.IGNORECASE)
+                if match is None:
+                    continue
+                url = f"https://www.premierleague.com/en/news/{match.group(1)}"
+                if all(existing[0] != url for existing in links):
+                    links.append((url, f"Premier League article {match.group(1)}", None, None))
+                if len(links) >= max_articles:
+                    break
 
     if not links:
         raise RuntimeError("source listing contained no usable article URLs")
@@ -216,7 +364,26 @@ async def crawl_source(item: CatalogSource, source, batch, ingestion, handoff, c
     for url, rss_title, guid, published_at in links:
         artifact_id = uuid.uuid4()
         try:
-            article = await extractor.fetch_and_extract(DiscoveryJob(str(batch.id), url, allowed))
+            try:
+                article = await extractor.fetch_and_extract(DiscoveryJob(str(batch.id), url, allowed))
+            except Exception as static_error:
+                if renderer is None or item.name not in BROWSER_ARTICLE_SOURCES:
+                    raise
+                log_event(
+                    "browser_fallback",
+                    source=item.name,
+                    url=url,
+                    reason_type=type(static_error).__name__,
+                    reason=str(static_error),
+                )
+                article = await _browser_article(renderer, batch_id=batch.id, url=url, allowed=allowed)
+            if (
+                article.extraction.status.value == "FAILED"
+                and renderer is not None
+                and item.name in BROWSER_ARTICLE_SOURCES
+            ):
+                log_event("browser_fallback", source=item.name, url=url, reason_type="ExtractionFailed")
+                article = await _browser_article(renderer, batch_id=batch.id, url=url, allowed=allowed)
             if article.extraction.status.value == "FAILED":
                 failed += 1
                 log_event(
@@ -272,31 +439,38 @@ async def main_async(args: argparse.Namespace) -> int:
     handoff = ArticleArtifactHandoff(store=artifact_store)
     ingestion = ArticleIngestionService(repository=article_store, artifacts=artifact_store, clock=lambda: datetime.now(UTC))
     safety = UrlSafetyPolicy()
-    async with create_http_client(max_connections=20) as client:
-        for item in selected:
-            source = ensure_source(source_service, item)
-            batch = batch_service.open(
+    renderer = BrowserRenderer(safety) if os.getenv("FOOTBALLPULSE_BROWSER_FALLBACK", "true").lower() in {"1", "true", "yes"} else None
+    if renderer is not None:
+        await renderer.start()
+    try:
+        async with create_http_client(max_connections=20) as client:
+            for item in selected:
+                source = ensure_source(source_service, item)
+                batch = batch_service.open(
                 source_id=source.id,
                 idempotency_key=f"real:{item.name}:{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}:{uuid.uuid4().hex[:8]}",
                 window_started_at=datetime.now(UTC),
             )
-            log_event("source_started", source=item.name, url=item.url, source_id=source.id, batch_id=batch.id)
-            discovered = fetched = failed = 0
-            try:
-                discovered, fetched, failed = await crawl_source(item, source, batch, ingestion, handoff, client, safety, args.max_articles)
-                status = CrawlBatchStatus.COMPLETED if failed == 0 else CrawlBatchStatus.PARTIAL
-            except asyncio.CancelledError:
-                batch_service.complete(batch.id, status=CrawlBatchStatus.PARTIAL, discovered_count=discovered, fetched_count=fetched, failed_count=failed)
-                log_event("source_aborted", source=item.name, batch_id=batch.id)
-                raise
-            except Exception as exc:
-                discovered = 1
-                failed = 1
-                log_event("source_failed", source=item.name, batch_id=batch.id, error_type=type(exc).__name__, error=str(exc))
-                status = CrawlBatchStatus.FAILED
-            batch_service.complete(batch.id, status=status, discovered_count=discovered, fetched_count=fetched, failed_count=failed)
-            log_event("source_completed", source=item.name, batch_id=batch.id, status=status.value, discovered=discovered, fetched=fetched, failed=failed)
-    mongo_client.close()
+                log_event("source_started", source=item.name, url=item.url, source_id=source.id, batch_id=batch.id)
+                discovered = fetched = failed = 0
+                try:
+                    discovered, fetched, failed = await crawl_source(item, source, batch, ingestion, handoff, client, safety, renderer, args.max_articles)
+                    status = CrawlBatchStatus.COMPLETED if failed == 0 else CrawlBatchStatus.PARTIAL
+                except asyncio.CancelledError:
+                    batch_service.complete(batch.id, status=CrawlBatchStatus.PARTIAL, discovered_count=discovered, fetched_count=fetched, failed_count=failed)
+                    log_event("source_aborted", source=item.name, batch_id=batch.id)
+                    raise
+                except Exception as exc:
+                    discovered = 1
+                    failed = 1
+                    log_event("source_failed", source=item.name, batch_id=batch.id, error_type=type(exc).__name__, error=str(exc))
+                    status = CrawlBatchStatus.FAILED
+                batch_service.complete(batch.id, status=status, discovered_count=discovered, fetched_count=fetched, failed_count=failed)
+                log_event("source_completed", source=item.name, batch_id=batch.id, status=status.value, discovered=discovered, fetched=fetched, failed=failed)
+    finally:
+        if renderer is not None:
+            await renderer.close()
+        mongo_client.close()
     return 0
 
 

@@ -1,0 +1,18 @@
+FROM mcr.microsoft.com/playwright/python:v1.55.0-noble
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /workspace
+
+COPY packages /workspace/packages
+COPY services /workspace/services
+
+RUN pip install --no-cache-dir \
+      playwright==1.55.0 \
+      /workspace/packages/event-contracts \
+      /workspace/packages/fetch-artifacts \
+      /workspace/services/article-service \
+      /workspace/services/crawler-service
+
+COPY scripts /workspace/scripts
+
+ENV PYTHONPATH=/workspace/services/crawler-service/src:/workspace/services/article-service/src:/workspace/packages/fetch-artifacts/src:/workspace/packages/event-contracts/src

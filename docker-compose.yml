@@ -173,10 +173,10 @@ services:
       retries: 10
 
   crawler-worker:
-    image: footballpulse-runtime:local
+    image: footballpulse-crawler-worker:local
     build:
       context: .
-      dockerfile: services/runtime.Dockerfile
+      dockerfile: services/crawler-service/Dockerfile.worker
     profiles: ["app"]
     restart: "no"
     depends_on:
@@ -190,6 +190,7 @@ services:
       FOOTBALLPULSE_MONGODB_DB: ${FOOTBALLPULSE_MONGODB_DB}
       FOOTBALLPULSE_FETCH_ARTIFACT_ROOT: /workspace/.local-data/fetch-artifacts
       FOOTBALLPULSE_LOG_LEVEL: ${FOOTBALLPULSE_LOG_LEVEL:-INFO}
+      FOOTBALLPULSE_BROWSER_FALLBACK: ${FOOTBALLPULSE_BROWSER_FALLBACK:-true}
     command: ["python", "-u", "scripts/run-real-crawl.py", "--max-articles", "${FOOTBALLPULSE_CRAWL_MAX_ARTICLES:-10}"]
     volumes:
       - fetch_artifacts:/workspace/.local-data/fetch-artifacts
