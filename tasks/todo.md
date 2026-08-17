@@ -7,7 +7,7 @@ Current completion checklist:
 
 - [x] A1 Baseline verification và checklist audit
 - [x] A2 Runtime configuration
-- [ ] B1 AI provider runtime wiring
+- [x] B1 AI provider runtime wiring
 - [ ] B2 Kaggle execution lifecycle
 - [ ] B3 Mongo article-to-enrichment worker
 - [ ] C1 Entity/embedding intelligence worker

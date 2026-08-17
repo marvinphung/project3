@@ -12,8 +12,6 @@ from footballpulse_ai_content_service.providers.offline import DeterministicOffl
 
 def build_provider(
     settings: ProviderSettings,
-    *,
-    deterministic_offline: bool = False,
 ) -> EnrichmentProvider:
     """Assemble the configured provider lazily.
 
@@ -21,7 +19,7 @@ def build_provider(
     replaced here.  Local model loading happens only on the first `enrich` call.
     """
     if settings.provider is ProviderName.MOCK:
-        if deterministic_offline:
+        if settings.deterministic_offline:
             return DeterministicOfflineProvider()
         if settings.mock_fixture_path is None:
             raise ValueError("mock provider requires FOOTBALLPULSE_MOCK_FIXTURE_PATH")
@@ -39,10 +37,5 @@ def build_provider(
 
 def build_provider_from_environment(
     values: Mapping[str, str],
-    *,
-    deterministic_offline: bool = False,
 ) -> EnrichmentProvider:
-    return build_provider(
-        ProviderSettings.from_environment(values),
-        deterministic_offline=deterministic_offline,
-    )
+    return build_provider(ProviderSettings.from_environment(values))
