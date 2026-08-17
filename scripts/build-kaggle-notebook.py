@@ -40,7 +40,7 @@ def main() -> None:
                     "`/kaggle/working`.\n\n"
                     "## Input bắt buộc\n\n"
                     "1. Dataset private: `pmv259/footballpulse-ai-batches`.\n"
-                    "2. Kaggle Model: Qwen3-8B, framework Transformers, variation AWQ "
+                    "2. Kaggle Model: Qwen3-0.6B, framework Transformers, variation 0.6b "
                     "(attach từ model chính thức `qwen-lm/qwen-3`).\n"
                     "3. Accelerator: GPU. Internet có thể tắt vì model được mount làm input.\n\n"
                     "Chạy cell định nghĩa trước, sau đó chạy cell preflight. Khi preflight "

@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir \
     pip install --no-cache-dir \
       /workspace/packages/event-contracts \
       /workspace/packages/fetch-artifacts \
+      /workspace/packages/runtime-config \
       /workspace/services/article-service \
       /workspace/services/content-service \
       /workspace/services/crawler-service \

@@ -143,7 +143,7 @@ AI Content Service gom các article `AI_PENDING` thành private JSONL dataset:
 ```
 
 Không upload raw HTML, secret, embedding, Vietnamese hoặc database endpoint.
-Qwen3-8B 4-bit xử lý bài dài theo chunk khoảng 1.200 từ/overlap 150 từ, giữ global
+Qwen3-0.6B Transformers xử lý bài dài theo chunk khoảng 1.200 từ/overlap 150 từ, giữ global
 evidence offsets rồi `extract claims → validate → merge duplicates → final summary`.
 Output strict Pydantic có `summary_en`, event type, typed claims/qualifiers,
 certainty, exact evidence quote/offset và model/prompt version. Predicate chỉ lấy

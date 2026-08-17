@@ -202,7 +202,7 @@ def test_coordinator_runs_lifecycle_and_persists_success(tmp_path: Path) -> None
         batch_id=BATCH_ID,
         artifacts=prepare_artifacts(tmp_path, [success()]),
         kernel_path=tmp_path / "kernel",
-        accelerator="NvidiaTeslaP100",
+        accelerator="NvidiaTeslaT4",
     )
 
     assert result is AiBatchStatus.COMPLETED
@@ -233,7 +233,7 @@ def test_coordinator_marks_cli_failure_retryable_and_releases_lease(tmp_path: Pa
         batch_id=BATCH_ID,
         artifacts=prepare_artifacts(tmp_path, [success()]),
         kernel_path=tmp_path / "kernel",
-        accelerator="NvidiaTeslaP100",
+        accelerator="NvidiaTeslaT4",
     )
 
     assert result is AiBatchStatus.FAILED_RETRYABLE
@@ -249,7 +249,7 @@ def test_coordinator_refuses_second_concurrent_job(tmp_path: Path) -> None:
         batch_id=BATCH_ID,
         artifacts=prepare_artifacts(tmp_path, [success()]),
         kernel_path=tmp_path / "kernel",
-        accelerator="NvidiaTeslaP100",
+        accelerator="NvidiaTeslaT4",
     )
 
     assert result is None
@@ -266,7 +266,7 @@ def test_coordinator_resumes_after_dataset_upload_without_uploading_again(tmp_pa
         batch_id=BATCH_ID,
         artifacts=prepare_artifacts(tmp_path, [success()]),
         kernel_path=tmp_path / "kernel",
-        accelerator="NvidiaTeslaP100",
+        accelerator="NvidiaTeslaT4",
     )
 
     assert result is AiBatchStatus.COMPLETED
@@ -287,7 +287,7 @@ def test_coordinator_returns_existing_terminal_status_without_cli_calls(tmp_path
         batch_id=BATCH_ID,
         artifacts=prepare_artifacts(tmp_path, [success()]),
         kernel_path=tmp_path / "kernel",
-        accelerator="NvidiaTeslaP100",
+        accelerator="NvidiaTeslaT4",
     )
 
     assert result is AiBatchStatus.COMPLETED

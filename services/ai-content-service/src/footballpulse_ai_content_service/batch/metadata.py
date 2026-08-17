@@ -6,6 +6,8 @@ import re
 import shutil
 from pathlib import Path
 
+KAGGLE_PRODUCTION_ACCELERATOR = "NvidiaTeslaT4"
+
 
 class KaggleMetadataBuilder:
     _RESOURCE_SLUG = re.compile(r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
@@ -32,19 +34,22 @@ class KaggleMetadataBuilder:
             raise FileNotFoundError(runner_source)
 
         target.mkdir(parents=True, mode=0o700)
-        runner_target = target / "runner.py"
+        if runner_source.suffix != ".ipynb":
+            raise ValueError("Kaggle production source must be an .ipynb notebook")
+        runner_target = target / runner_source.name
         shutil.copyfile(runner_source, runner_target)
         os.chmod(runner_target, 0o600)
         metadata = {
             "id": kernel_slug,
             "title": "FootballPulse AI enrichment",
-            "code_file": "runner.py",
+            "code_file": runner_target.name,
             "language": "python",
-            "kernel_type": "script",
+            "kernel_type": "notebook",
             "is_private": True,
             "enable_gpu": True,
             "enable_tpu": False,
             "enable_internet": False,
+            "machine_shape": KAGGLE_PRODUCTION_ACCELERATOR,
             "dataset_sources": [dataset_slug],
             "competition_sources": [],
             "kernel_sources": [],

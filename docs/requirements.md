@@ -19,7 +19,7 @@
 - Alias resolver chỉ trả canonical ID từ catalog hoặc review state.
 - `bge-small-en-v1.5` tạo English embedding; không embed Vietnamese.
 - AI Content Service tạo private JSONL Kaggle batch với manifest/input hash.
-- Qwen3-8B 4-bit xử lý `chunk → claims → merge → summary`; Qwen3-4B local và
+- Qwen3-0.6B Transformers xử lý `chunk → claims → merge → summary`; Qwen3-4B local và
   mock provider dùng cùng contract.
 - Partial Kaggle result được import; phần thiếu về `AI_PENDING`.
 - Mọi claim phải có evidence quote, canonical/unresolved entity, controlled

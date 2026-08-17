@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from footballpulse_runtime_config import bind_log_context, configure_logging
 from pymongo import MongoClient
@@ -17,11 +18,15 @@ from footballpulse_ai_content_service.application.enrichment_worker import (
     EnrichmentWorker,
     EnrichmentWorkerReport,
 )
-from footballpulse_ai_content_service.batch.artifacts import BatchArtifactStore
+from footballpulse_ai_content_service.batch.artifacts import BatchArtifacts, BatchArtifactStore
 from footballpulse_ai_content_service.batch.coordinator import KaggleBatchCoordinator
 from footballpulse_ai_content_service.batch.domain import AiBatchJob, AiBatchStatus
 from footballpulse_ai_content_service.batch.kaggle_cli import KaggleCli
-from footballpulse_ai_content_service.batch.metadata import KaggleMetadataBuilder
+from footballpulse_ai_content_service.batch.metadata import (
+    KAGGLE_PRODUCTION_ACCELERATOR,
+    KaggleMetadataBuilder,
+)
+from footballpulse_ai_content_service.contracts.enrichment import ArticleEnrichmentInput
 from footballpulse_ai_content_service.persistence.mongo_batch_repository import (
     MongoBatchJobRepository,
     MongoEnrichmentResultSink,
@@ -56,6 +61,9 @@ class KaggleRuntimeWorker:
 
     def run_once(self, *, limit: int = 10) -> EnrichmentWorkerReport:
         now = datetime.now(UTC)
+        resumable = self._jobs.find_resumable()
+        if resumable is not None:
+            return self._resume(resumable)
         inputs = self._queue.claim_pending(limit=limit)
         if not inputs:
             _log("enrichment_batch_empty", limit=limit)
@@ -90,26 +98,16 @@ class KaggleRuntimeWorker:
         kernel_path = root / "kernels" / str(batch_id)
         KaggleMetadataBuilder().prepare_kernel(
             target=kernel_path,
-            runner_source=Path("/workspace/kaggle/ai-enrichment/runner.py"),
+            runner_source=Path("/workspace/kaggle/ai-enrichment/footballpulse-ai-enrichment.ipynb"),
             kernel_slug=os.environ["FOOTBALLPULSE_KAGGLE_KERNEL_SLUG"],
             dataset_slug=os.environ["FOOTBALLPULSE_KAGGLE_DATASET_SLUG"],
             model_source=model_version,
         )
-        with bind_log_context(correlation_id=str(batch_id), batch_id=str(batch_id)):
-            status = KaggleBatchCoordinator(
-            jobs=self._jobs,
-            cli=KaggleCli(),
-            sink=self._sink,
-            kernel_slug=os.environ["FOOTBALLPULSE_KAGGLE_KERNEL_SLUG"],
-            dataset_slug=os.environ["FOOTBALLPULSE_KAGGLE_DATASET_SLUG"],
-            worker_id=f"docker-{batch_id}",
-            clock=lambda: datetime.now(UTC),
-            ).run(
-                batch_id=batch_id,
-                artifacts=artifacts,
-                kernel_path=kernel_path,
-                accelerator="gpu",
-            )
+        status = self._run_coordinator(
+            batch_id=batch_id,
+            artifacts=artifacts,
+            kernel_path=kernel_path,
+        )
         terminal = status.value if status is not None else "LEASE_UNAVAILABLE"
         succeeded, failed = self._queue.complete_external(
             inputs,
@@ -117,6 +115,63 @@ class KaggleRuntimeWorker:
             processed_at=datetime.now(UTC),
         )
         return EnrichmentWorkerReport(len(inputs), succeeded, failed)
+
+    def _resume(self, job: AiBatchJob) -> EnrichmentWorkerReport:
+        directory = Path(job.artifact_directory)
+        artifacts = BatchArtifacts(
+            directory=directory,
+            manifest_path=directory / "manifest.json",
+            articles_path=directory / "articles.jsonl",
+            results_path=directory / "results.jsonl",
+            report_path=directory / "job-report.json",
+        )
+        inputs = tuple(
+            ArticleEnrichmentInput.model_validate(json.loads(line))
+            for line in artifacts.articles_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+        _log(
+            "enrichment_batch_resuming",
+            batch_id=job.batch_id,
+            status=job.status.value,
+            article_count=len(inputs),
+        )
+        root = Path(os.getenv("FOOTBALLPULSE_AI_BATCH_ROOT", ".footballpulse/ai-batches"))
+        status = self._run_coordinator(
+            batch_id=job.batch_id,
+            artifacts=artifacts,
+            kernel_path=root / "kernels" / str(job.batch_id),
+        )
+        terminal = status.value if status is not None else "LEASE_UNAVAILABLE"
+        succeeded, failed = self._queue.complete_external(
+            inputs,
+            terminal_status=terminal,
+            processed_at=datetime.now(UTC),
+        )
+        return EnrichmentWorkerReport(len(inputs), succeeded, failed)
+
+    def _run_coordinator(
+        self,
+        *,
+        batch_id: UUID,
+        artifacts: BatchArtifacts,
+        kernel_path: Path,
+    ) -> AiBatchStatus | None:
+        with bind_log_context(correlation_id=str(batch_id), batch_id=str(batch_id)):
+            return KaggleBatchCoordinator(
+                jobs=self._jobs,
+                cli=KaggleCli(),
+                sink=self._sink,
+                kernel_slug=os.environ["FOOTBALLPULSE_KAGGLE_KERNEL_SLUG"],
+                dataset_slug=os.environ["FOOTBALLPULSE_KAGGLE_DATASET_SLUG"],
+                worker_id=f"docker-{batch_id}",
+                clock=lambda: datetime.now(UTC),
+            ).run(
+                batch_id=batch_id,
+                artifacts=artifacts,
+                kernel_path=kernel_path,
+                accelerator=KAGGLE_PRODUCTION_ACCELERATOR,
+            )
 
 
 def _database_url() -> URL:

@@ -1,152 +1,155 @@
 # FootballPulse
 
-**FootballPulse — Automated Football News Intelligence Platform** là đồ án xây
-dựng nền tảng tự động thu thập, hiểu, tổng hợp và xuất bản tin tức bóng đá.
-Nhiều bài báo rời rạc được giữ làm bằng chứng, gom vào `Story`, chuyển thành
-timeline có mức xác thực và bài tổng hợp qua editorial review.
+FootballPulse là nền tảng tự động thu thập, phân tích và tổng hợp tin tức bóng
+đá thành các dòng sự kiện có thể theo dõi theo thời gian. Hệ thống giữ nguyên
+bài báo nguồn làm bằng chứng, dùng AI để hiểu nội dung tiếng Anh, gom các cập
+nhật liên quan vào `Story`, tạo bản trình bày tiếng Việt và xuất bản qua quy
+trình editorial review.
 
-> Tên đề tài: Thiết kế và xây dựng nền tảng tự động thu thập, tổng hợp và xuất
-> bản tin tức bóng đá theo kiến trúc microservices<br>
-> Sinh viên: Phùng Minh Vũ — 20235252
+> Đồ án: Thiết kế và xây dựng nền tảng tự động thu thập, tổng hợp và xuất bản
+> tin tức bóng đá theo kiến trúc service-oriented.
 
-## Trạng thái
+## Bài toán
 
-Các domain/service nền, crawler thật, AI contracts/adapters, Story/timeline,
-editorial/publication, API Gateway, React UI và Airflow DAG đã được triển khai ở
-mức module. Baseline ngày 2026-08-17 có 381 test pass, Ruff/mypy sạch và frontend
-production build thành công. Công việc còn lại tập trung vào runtime wiring:
-article → AI enrichment → entity/embedding → Story/timeline, operational Admin
-UI và full-stack Docker E2E. Xem
-[`completion plan`](docs/plans/2026-08-17-project-completion.md) để theo dõi.
+Một sự kiện bóng đá thường được nhiều tòa soạn cập nhật ở những thời điểm khác
+nhau. Các bài viết có thể trùng lặp, mâu thuẫn hoặc chỉ bổ sung một chi tiết mới.
+Nếu chỉ hiển thị danh sách bài báo theo thời gian, người đọc phải tự ghép toàn bộ
+diễn biến.
 
-## Python workspace
+FootballPulse chuyển luồng bài báo rời rạc thành ba lớp dữ liệu:
 
-Yêu cầu Python 3.12 và [`uv`](https://docs.astral.sh/uv/). Thiết lập môi trường
-phát triển và chạy quality gates ở repository root:
+- **Source Article**: nội dung gốc đã crawl, không bị sửa và luôn truy ngược được
+  về nguồn.
+- **Story**: một sự kiện bóng đá gồm entity, claim, evidence, mức xác thực và
+  timeline sáu giờ.
+- **Generated Article**: bài tổng hợp song ngữ được biên tập, duyệt và xuất bản
+  cho giao diện.
 
-```bash
-uv sync --all-packages --locked
-uv run pytest -q
-uv run ruff format --check .
-uv run ruff check .
-uv run mypy
-```
-
-Khởi động và kiểm tra các dependency local:
-
-```bash
-cp .env.example .env
-./scripts/smoke-dependencies.sh
-docker compose --env-file .env --profile core down
-```
-
-Script có thể chạy lặp lại, không xóa named volumes. Các port chỉ bind vào
-`127.0.0.1`; credential trong `.env.example` chỉ dành cho phát triển local.
-
-Chạy migration theo đúng data owner sau khi PostgreSQL healthy:
-
-```bash
-uv run alembic -c services/crawler-service/alembic.ini upgrade head
-uv run alembic -c services/api-gateway/alembic.ini upgrade head
-```
-
-Crawler chỉ được migrate `source_schema`; API Gateway chỉ được migrate
-`identity_schema`. Mỗi schema có Alembic version table riêng.
-
-Chạy Crawler Source API sau khi load `.env` và migrate PostgreSQL:
-
-```bash
-set -a
-source .env
-set +a
-uv run footballpulse-crawler-service
-```
-
-Service mặc định nghe tại `127.0.0.1:8011`; OpenAPI ở `/openapi.json`. Admin và
-internal routes dùng hai bearer token riêng trong `.env`.
-
-Root project quản lý workspace và công cụ phát triển; business logic vẫn thuộc
-đúng service owner. Không đặt domain logic dùng chung ở root package.
-
-Deterministic test data nằm tại `tests/fixtures/`, gồm RSS/HTML, transport
-failures, Kaggle-like JSONL và oracle timeline `00/06/12/18`. Test mặc định chạy
-offline, không cần Internet hoặc AI model.
-
-## Invariant trung tâm
-
-```text
-Source Article != Story != Generated Article
-```
-
-- **Source Article**: evidence bất biến từ một article version của nguồn.
-- **Story**: sự kiện bóng đá đang phát triển, có canonical entities, claims,
-  confirmation và timeline.
-- **Generated Article**: nội dung biên tập song ngữ, chỉ sinh từ supported claims.
-
-## Pipeline local-first
+## Luồng xử lý
 
 ```mermaid
 flowchart LR
-    A[Airflow mỗi 6 giờ] --> B[RSS allowlist]
-    B --> C[Crawl và clean HTML]
-    C --> D[MongoDB evidence]
-    D --> E[Duplicate + GLiNER + alias + embedding EN]
-    E --> F[Kaggle Qwen3-8B batch]
-    F --> G[Validate English claims]
-    G --> H[pgvector candidates + rule Story matching]
-    H --> I[Material Change Detector]
-    I -->|Có đổi| J[Timeline EN/VI trong PostgreSQL]
-    I -->|Không đổi| K[Chỉ liên kết source]
-    J --> L[FastAPI → UI tiếng Việt]
+    A[RSS / News Sitemap] --> B[Collector]
+    B --> C[Clean & Deduplicate]
+    C --> D[Entity Extraction]
+    D --> E[English Embedding]
+    E --> F[Kaggle AI Enrichment]
+    F --> G[Grounding Validation]
+    G --> H[Story & Claims]
+    H --> I[6-hour Timeline]
+    I --> J[Editorial Review]
+    J --> K[PostgreSQL Public Read Model]
+    K --> L[API & Vietnamese Web UI]
 ```
 
-English là dữ liệu chuẩn cho AI validation, search, embedding và Story logic.
-Vietnamese được materialize trong PostgreSQL để API trả nhanh cho toàn bộ giao
-diện. MongoDB giữ raw HTML, cleaned English content, immutable article versions
-và enrichment; PostgreSQL giữ source config, entity catalog, Story, claims,
-timeline, editorial và public read model.
+Pipeline mặc định chạy theo cửa sổ `00:00`, `06:00`, `12:00` và `18:00` theo
+múi giờ Việt Nam. Nếu một Story không có diễn biến mới, hệ thống không tạo thêm
+timeline entry chỉ để lặp lại nội dung cũ.
 
-## Công nghệ mục tiêu
+## Điểm nổi bật
 
-- Python 3.12, FastAPI/Pydantic và sáu backend service.
-- Kafka single-node KRaft; Airflow 3 chỉ điều phối batch.
-- MongoDB replica set cho evidence; PostgreSQL + pgvector cho product data.
-- Redis cho cache/rate limit tạm thời.
-- Trafilatura/BeautifulSoup cho HTML extraction.
-- GLiNER multi-v2.1 và `bge-small-en-v1.5` chạy local.
-- Qwen3-8B 4-bit chạy batch trên Kaggle; Qwen3-4B GGUF local là fallback.
-- React/Vite và Docker Compose profiles `core`, `airflow`, `demo`, `tools`.
+- Crawl dữ liệu thật từ RSS, news sitemap và HTML với giới hạn theo từng nguồn.
+- Chuẩn hóa URL/nội dung, phát hiện duplicate và lưu raw article trong MongoDB.
+- Nhận diện cầu thủ, câu lạc bộ, huấn luyện viên và giải đấu bằng GLiNER.
+- Tạo embedding tiếng Anh bằng BGE để tìm nội dung liên quan.
+- Chạy Qwen theo private batch trên Kaggle; dữ liệu nguồn vẫn nằm ở máy local.
+- Chỉ chấp nhận claim có evidence khớp chính xác với nội dung đã crawl.
+- Lưu dữ liệu xử lý bằng tiếng Anh; PostgreSQL giữ thêm projection tiếng Việt
+  dành cho API và giao diện.
+- Editorial workflow có các trạng thái draft, review, approve, reject và publish.
+- Structured logging cho crawler, intelligence, Kaggle batch và API.
 
-## Quy tắc timeline
+## Kiến trúc
 
-- Pipeline chạy các cửa sổ `00`, `06`, `12`, `18` giờ Việt Nam.
-- Chỉ tạo entry khi có claim mới/thay đổi, correction hoặc confirmation đổi.
-- Một Story có tối đa một aggregated entry cho mỗi cửa sổ 6 giờ.
-- Article mới nhưng không có material change vẫn được lưu/liên kết; timeline
-  không thêm dòng.
-- Timeline hợp lệ tự hiển thị; Generated Article dài phải qua review/approve.
+| Thành phần | Trách nhiệm chính | Kho dữ liệu |
+| --- | --- | --- |
+| Crawler Service | Khám phá URL, tải HTML, làm sạch và bàn giao bài viết | PostgreSQL + MongoDB |
+| Article Service | Versioning, duplicate và article event | MongoDB + Kafka |
+| Intelligence Service | Entity resolution, embedding, Story và timeline | PostgreSQL + MongoDB |
+| AI Content Service | Kaggle batch, enrichment, grounding và generation contract | MongoDB |
+| Content Service | Editorial revision và publication | PostgreSQL |
+| API Gateway | Public API, admin API và authentication boundary | PostgreSQL read model |
+| Web App | Tin mới, tìm kiếm, entity, Story timeline và editorial UI | REST API |
+| Airflow | Điều phối lịch batch sáu giờ | PostgreSQL metadata |
 
-## Bản đồ tài liệu
+MongoDB là nơi giữ Source Article và kết quả xử lý linh hoạt. PostgreSQL là
+nguồn dữ liệu có cấu trúc cho entity, Story, timeline, editorial và public API.
+Kafka vận chuyển business event; Airflow chỉ điều phối lịch chạy, không chứa
+business logic.
 
-| Tài liệu | Nội dung |
+## Công nghệ chính
+
+- Python 3.12, FastAPI, Pydantic, SQLAlchemy và Alembic
+- MongoDB, PostgreSQL/pgvector, Kafka và Redis
+- GLiNER, BGE Small English và Qwen3
+- Kaggle Notebooks cho GPU batch
+- React, TypeScript và Vite
+- Docker Compose và Apache Airflow
+
+## Chạy dự án
+
+Xem [Hướng dẫn chạy FootballPulse trên local](docs/local-development.md) để cấu
+hình môi trường, khởi động Docker, chạy crawl thật, theo dõi log và kiểm tra dữ
+liệu end-to-end.
+
+Sau khi tạo `.env`, có thể khởi động toàn bộ stack bằng một command:
+
+```bash
+docker compose --profile core --profile app --profile airflow up -d --build
+```
+
+Hướng dẫn local cũng có phương án chạy lần lượt từng lớp để dễ theo dõi log và
+xác định lỗi.
+
+Các địa chỉ mặc định sau khi stack khởi động:
+
+| Dịch vụ | Địa chỉ |
 | --- | --- |
-| [Tổng quan](docs/overview.md) | Tầm nhìn, người dùng và phạm vi |
-| [Yêu cầu](docs/requirements.md) | Yêu cầu và tiêu chí chấp nhận |
-| [Kiến trúc](docs/architecture.md) | Service, công nghệ, ownership, Airflow/Kafka |
-| [Mô hình dữ liệu](docs/data-model.md) | MongoDB/PostgreSQL aggregates và invariants |
-| [Story và timeline](docs/story-design.md) | pgvector hybrid matching, claims, cửa sổ 6 giờ |
-| [Luồng nội dung](docs/content-flow.md) | Crawl, clean, Kaggle AI, validation và generation |
-| [API và event](docs/api-design.md) | Public/admin capabilities và event catalog |
-| [Biên tập](docs/editorial-flow.md) | Timeline automation và long-form review/publish |
-| [Triển khai](docs/deployment.md) | Local topology, profiles, resources và offline mode |
-| [Kiểm thử](docs/testing.md) | Deterministic acceptance, failure và recovery |
-| [Logging vận hành](docs/operations-logging.md) | Event, correlation ID, Docker logs và Kaggle progress |
-| [Open Questions](docs/open-questions.md) | Các quyết định còn cần benchmark/contract |
-| [ADR local-first AI pipeline](docs/decisions/0001-local-first-ai-pipeline.md) | Lý do và hệ quả của thiết kế đã chốt |
-| [Implementation plan](docs/plans/2026-08-06-footballpulse-implementation.md) | 9 phase, Work Packages và Collaboration Gates |
+| Web App | <http://localhost:8443> |
+| Public/Admin API | <http://localhost:8000> |
+| API docs | <http://localhost:8000/docs> |
+| Crawler API | <http://localhost:8011> |
+| AI Content API | <http://localhost:8002> |
+| Airflow | <http://localhost:8080> |
 
-## Ngoài MVP
+## Cấu trúc repository
 
-Arbitrary-site crawling, Kubernetes/cloud production, separate vector database,
-recommendation, social features, comments, live scores, advanced search cluster,
-full multilingual processing và autonomous long-form publication không thuộc MVP.
+```text
+footballpulse/
+├── airflow/            # DAG điều phối batch
+├── docs/               # Thiết kế, quyết định và hướng dẫn vận hành
+├── frontend/           # React web app
+├── infrastructure/     # MongoDB, Kafka và database bootstrap
+├── kaggle/             # AI enrichment notebook/runner
+├── packages/           # Python package dùng chung
+├── scripts/            # Crawl, smoke check và công cụ vận hành
+├── services/           # Các Python service
+├── tests/              # Cross-service và infrastructure tests
+└── docker-compose.yml
+```
+
+## Tài liệu
+
+- [Tổng quan hệ thống](docs/overview.md)
+- [Kiến trúc](docs/architecture.md)
+- [Luồng nội dung](docs/content-flow.md)
+- [Data model](docs/data-model.md)
+- [Thiết kế Story](docs/story-design.md)
+- [API design](docs/api-design.md)
+- [Editorial flow](docs/editorial-flow.md)
+- [Testing](docs/testing.md)
+- [Open questions](docs/open-questions.md)
+
+## Nguyên tắc dữ liệu
+
+- Không xuất bản thông tin không truy được về Source Article.
+- Raw content và bản tiếng Anh là dữ liệu xử lý gốc; bản tiếng Việt là
+  presentation projection.
+- AI output không tự động trở thành sự thật: claim phải qua grounding validator
+  và nội dung phải qua editorial workflow.
+- Mọi batch, article version, Story, claim và publication có định danh để replay
+  idempotent và điều tra lỗi.
+
+## Tác giả
+
+Phùng Minh Vũ — 20235252

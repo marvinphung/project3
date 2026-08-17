@@ -20,7 +20,7 @@ flowchart TB
     Services --> M[(MongoDB replica set)]
     Services --> P[(PostgreSQL + pgvector)]
     Services --- R[(Redis)]
-    AI[AI Content Service] -. private batch .-> KG[Kaggle Qwen3-8B]
+    AI[AI Content Service] -. private batch .-> KG[Kaggle Qwen3-0.6B]
 ```
 
 Kaggle chỉ xử lý compute batch. MongoDB/PostgreSQL local vẫn là nguồn dữ liệu
@@ -55,7 +55,7 @@ local. Khi nâng version phải chạy lại transaction smoke test trên kernel
 Máy tham chiếu hiện có Ryzen 7 7735HS (8C/16T), 26 GiB RAM, Radeon 680M và không
 có CUDA/ROCm. Vì vậy:
 
-- Qwen3-8B 4-bit chạy trên Kaggle theo batch;
+- Qwen3-0.6B Transformers chạy trên Kaggle theo batch;
 - Qwen3-4B GGUF `Q4_K_M` chỉ là local fallback, nạp khi cần, concurrency 1;
 - `urchade/gliner_small-v2.1` và `bge-small-en-v1.5` chạy CPU local;
 - Kafka một broker, database pool và worker concurrency đều nhỏ/có giới hạn;
@@ -105,7 +105,7 @@ expiry chỉ cho một job chạy; artifact local mặc định ở `.footballpu
 Kaggle credentials chỉ ở local secret/environment. Không hard-code username/key
 trong Dockerfile, kernel metadata hoặc Git.
 
-Kernel dùng Qwen3-8B 4-bit attachment đã pin, `is_private=true`, GPU bật và Internet
+Kernel dùng Qwen3-0.6B Transformers attachment đã pin, `is_private=true`, GPU bật và Internet
 tắt. Dataset phải được tạo private trước lần version đầu tiên. Real smoke cần kiểm
 tra lại privacy trên Kaggle UI/CLI trước khi upload nội dung thật.
 

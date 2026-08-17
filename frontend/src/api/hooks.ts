@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ApiError, getArticle, listArticles, type PublicArticle } from './client'
+import { ApiError, getArticle, getArticleSources, getEntity, getStory, listArticles, listEntities, type ArticleListParams, type PublicArticle, type PublicArticleSource, type PublicEntity, type PublicStory } from './client'
 
 type QueryState<T> = {
   data: T | null
@@ -7,7 +7,10 @@ type QueryState<T> = {
   error: ApiError | null
 }
 
-export function usePublicArticles(limit = 20): QueryState<PublicArticle[]> {
+export function usePublicArticles(
+  limit = 20,
+  params: Omit<ArticleListParams, 'limit'> = {},
+): QueryState<PublicArticle[]> {
   const [state, setState] = useState<QueryState<PublicArticle[]>>({
     data: null,
     loading: true,
@@ -17,7 +20,7 @@ export function usePublicArticles(limit = 20): QueryState<PublicArticle[]> {
   useEffect(() => {
     let active = true
     setState({ data: null, loading: true, error: null })
-    listArticles({ limit })
+    listArticles({ ...params, limit })
       .then((response) => {
         if (active) setState({ data: response.items, loading: false, error: null })
       })
@@ -31,7 +34,7 @@ export function usePublicArticles(limit = 20): QueryState<PublicArticle[]> {
     return () => {
       active = false
     }
-  }, [limit])
+  }, [limit, params.entitySlug, params.entityType, params.offset, params.query, params.sort, params.storyId])
 
   return state
 }
@@ -66,5 +69,66 @@ export function usePublicArticle(slug: string | undefined): QueryState<PublicArt
     }
   }, [slug])
 
+  return state
+}
+
+export function usePublicEntities(entityType: string, query = ''): QueryState<PublicEntity[]> {
+  const [state, setState] = useState<QueryState<PublicEntity[]>>({ data: null, loading: true, error: null })
+  useEffect(() => {
+    let active = true
+    setState({ data: null, loading: true, error: null })
+    listEntities({ type: entityType, query: query || undefined, limit: 100 })
+      .then((response) => active && setState({ data: response.items, loading: false, error: null }))
+      .catch((error: unknown) => active && setState({ data: null, loading: false, error: toApiError(error) }))
+    return () => { active = false }
+  }, [entityType, query])
+  return state
+}
+
+export function usePublicEntity(entityType: string, slug: string): QueryState<PublicEntity> {
+  const [state, setState] = useState<QueryState<PublicEntity>>({ data: null, loading: true, error: null })
+  useEffect(() => {
+    let active = true
+    setState({ data: null, loading: true, error: null })
+    getEntity(entityType, slug)
+      .then((data) => active && setState({ data, loading: false, error: null }))
+      .catch((error: unknown) => active && setState({ data: null, loading: false, error: toApiError(error) }))
+    return () => { active = false }
+  }, [entityType, slug])
+  return state
+}
+
+function toApiError(error: unknown): ApiError {
+  return error instanceof ApiError
+    ? error
+    : new ApiError(0, 'NETWORK_ERROR', 'Không thể kết nối tới FootballPulse')
+}
+
+export function usePublicStory(storyId: string): QueryState<PublicStory> {
+  return useRemoteValue(storyId, getStory)
+}
+
+export function useArticleSources(slug: string): QueryState<PublicArticleSource[]> {
+  const [state, setState] = useState<QueryState<PublicArticleSource[]>>({ data: null, loading: true, error: null })
+  useEffect(() => {
+    let active = true
+    getArticleSources(slug)
+      .then((response) => active && setState({ data: response.items, loading: false, error: null }))
+      .catch((error: unknown) => active && setState({ data: null, loading: false, error: toApiError(error) }))
+    return () => { active = false }
+  }, [slug])
+  return state
+}
+
+function useRemoteValue<T>(id: string, loader: (id: string) => Promise<T>): QueryState<T> {
+  const [state, setState] = useState<QueryState<T>>({ data: null, loading: true, error: null })
+  useEffect(() => {
+    let active = true
+    setState({ data: null, loading: true, error: null })
+    loader(id)
+      .then((data) => active && setState({ data, loading: false, error: null }))
+      .catch((error: unknown) => active && setState({ data: null, loading: false, error: toApiError(error) }))
+    return () => { active = false }
+  }, [id, loader])
   return state
 }

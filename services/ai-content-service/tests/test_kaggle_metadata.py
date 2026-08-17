@@ -8,8 +8,8 @@ from footballpulse_ai_content_service.batch.metadata import KaggleMetadataBuilde
 
 
 def test_metadata_is_private_offline_and_contains_only_approved_sources(tmp_path: Path) -> None:
-    runner = tmp_path / "runner.py"
-    runner.write_text("print('runner')\n", encoding="utf-8")
+    runner = tmp_path / "footballpulse-ai-enrichment.ipynb"
+    runner.write_text('{"cells": []}\n', encoding="utf-8")
     target = tmp_path / "kernel"
 
     KaggleMetadataBuilder().prepare_kernel(
@@ -17,16 +17,21 @@ def test_metadata_is_private_offline_and_contains_only_approved_sources(tmp_path
         runner_source=runner,
         kernel_slug="owner/footballpulse-ai",
         dataset_slug="owner/footballpulse-batches",
-        model_source="qwen/qwen3/transformers/8b-awq/1",
+        model_source="qwen-lm/qwen-3/transformers/0.6b/1",
     )
 
     metadata = json.loads((target / "kernel-metadata.json").read_text(encoding="utf-8"))
     assert metadata["is_private"] is True
     assert metadata["enable_internet"] is False
     assert metadata["enable_gpu"] is True
+    assert metadata["machine_shape"] == "NvidiaTeslaT4"
     assert metadata["dataset_sources"] == ["owner/footballpulse-batches"]
-    assert metadata["model_sources"] == ["qwen/qwen3/transformers/8b-awq/1"]
-    assert (target / "runner.py").read_text(encoding="utf-8") == "print('runner')\n"
+    assert metadata["model_sources"] == ["qwen-lm/qwen-3/transformers/0.6b/1"]
+    assert metadata["code_file"] == "footballpulse-ai-enrichment.ipynb"
+    assert metadata["kernel_type"] == "notebook"
+    assert (target / "footballpulse-ai-enrichment.ipynb").read_text(
+        encoding="utf-8"
+    ) == '{"cells": []}\n'
 
 
 def test_metadata_rejects_public_kernel_or_invalid_slugs(tmp_path: Path) -> None:

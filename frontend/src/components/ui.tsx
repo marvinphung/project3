@@ -1,5 +1,5 @@
 import { Link } from 'react-router'
-import type { Article } from '../data/mock'
+import type { Article } from '../api/models'
 
 type Entity = { type: 'club' | 'player' | 'coach'; id: string; name: string }
 

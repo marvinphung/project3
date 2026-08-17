@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from pymongo import ASCENDING, IndexModel
@@ -55,6 +55,31 @@ class MongoBatchJobRepository:
             return AiBatchStatus(str(document["status"]))
         except (KeyError, ValueError) as error:
             raise EnrichmentPersistenceConflict("AI batch has an invalid durable status") from error
+
+    def find_resumable(self) -> AiBatchJob | None:
+        active = [
+            status.value
+            for status in AiBatchStatus
+            if status
+            not in {
+                AiBatchStatus.COMPLETED,
+                AiBatchStatus.PARTIAL,
+                AiBatchStatus.FAILED_RETRYABLE,
+                AiBatchStatus.FAILED_TERMINAL,
+            }
+        ]
+        document = self._jobs.find_one(
+            {"status": {"$in": active}},
+            sort=[("created_at", ASCENDING)],
+        )
+        if document is None:
+            return None
+        document.pop("_id", None)
+        for field in ("created_at", "updated_at"):
+            value = document.get(field)
+            if isinstance(value, datetime) and value.tzinfo is None:
+                document[field] = value.replace(tzinfo=UTC)
+        return AiBatchJob.model_validate(document)
 
     def acquire_lease(self, *, owner: str, now: datetime, lease_seconds: int) -> bool:
         if lease_seconds <= 0:

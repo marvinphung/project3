@@ -157,3 +157,35 @@ def test_importer_fails_terminally_when_report_is_bound_to_another_batch(tmp_pat
     assert outcome.successes == ()
     assert set(outcome.retry_article_ids) == {ARTICLE_ONE, ARTICLE_TWO}
     assert outcome.terminal_errors == ("job report batch_id does not match manifest",)
+
+
+def test_importer_accepts_bounded_notebook_observability_paths(tmp_path: Path) -> None:
+    results = tmp_path / "results.jsonl"
+    write_jsonl(results, [success_record(), error_record()])
+    report = tmp_path / "job-report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "contract_version": "ai-job-report.v1",
+                "batch_id": str(BATCH_ID),
+                "articles_sha256": "f" * 64,
+                "model_version": "model-v1",
+                "prompt_version": "prompt-v1",
+                "success_count": 1,
+                "error_count": 1,
+                "started_at": "2026-08-10T08:00:00Z",
+                "finished_at": "2026-08-10T08:01:00Z",
+                "results_path": "/kaggle/working/results.jsonl",
+                "log_path": "/kaggle/working/footballpulse-enrichment.log",
+                "progress_path": "/kaggle/working/progress.json",
+                "session_id": "20260817T162201Z-155d4164",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    outcome = BatchResultImporter().inspect(manifest(), results, report)
+
+    assert len(outcome.successes) == 1
+    assert outcome.retry_article_ids == (ARTICLE_TWO,)
+    assert outcome.terminal_errors == ()

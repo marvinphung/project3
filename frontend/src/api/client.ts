@@ -22,7 +22,40 @@ export type PublicEntityStories = {
   story_ids: string[]
 }
 
-type ListResponse<T> = { items: T[] }
+export type PublicEntity = {
+  id: string
+  entity_type: 'PLAYER' | 'CLUB' | 'COACH' | 'COMPETITION'
+  name: string
+  slug: string
+  story_count: number
+  article_count: number
+}
+
+export type PublicStory = {
+  id: string
+  event_type: string
+  status: string
+  confidence_score: number
+  version: number
+  first_seen_at: string
+  last_seen_at: string
+}
+
+export type PublicArticleSource = {
+  source_id: string
+  source_name: string
+  source_url: string
+  published_at: string
+  reliability_tier: number
+}
+
+type ListResponse<T> = {
+  items: T[]
+  total?: number
+  limit?: number
+  offset?: number
+  next_offset?: number | null
+}
 
 export class ApiError extends Error {
   readonly status: number
@@ -197,11 +230,25 @@ export function publishArticle(articleId: string, slug: string, idempotencyKey: 
   })
 }
 
-export function listArticles(params: { limit?: number; offset?: number; storyId?: string } = {}) {
+export type ArticleListParams = {
+  limit?: number
+  offset?: number
+  storyId?: string
+  query?: string
+  entityType?: string
+  entitySlug?: string
+  sort?: 'newest' | 'oldest'
+}
+
+export function listArticles(params: ArticleListParams = {}) {
   const query = new URLSearchParams()
   if (params.limit !== undefined) query.set('limit', String(params.limit))
   if (params.offset !== undefined) query.set('offset', String(params.offset))
   if (params.storyId) query.set('story_id', params.storyId)
+  if (params.query) query.set('q', params.query)
+  if (params.entityType) query.set('entity_type', params.entityType)
+  if (params.entitySlug) query.set('entity_slug', params.entitySlug)
+  if (params.sort) query.set('sort', params.sort)
   const suffix = query.toString() ? `?${query}` : ''
   return request<ListResponse<PublicArticle>>(`/api/v1/articles${suffix}`)
 }
@@ -227,6 +274,31 @@ export function getStoryTimeline(
 export function getEntityStories(entityType: string, entitySlug: string) {
   return request<PublicEntityStories>(
     `/api/v1/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entitySlug)}/stories`,
+  )
+}
+
+export function listEntities(params: { type?: string; query?: string; limit?: number; offset?: number } = {}) {
+  const query = new URLSearchParams()
+  if (params.type) query.set('type', params.type)
+  if (params.query) query.set('q', params.query)
+  if (params.limit !== undefined) query.set('limit', String(params.limit))
+  if (params.offset !== undefined) query.set('offset', String(params.offset))
+  return request<ListResponse<PublicEntity>>(`/api/v1/entities?${query}`)
+}
+
+export function getEntity(entityType: string, entitySlug: string) {
+  return request<PublicEntity>(
+    `/api/v1/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entitySlug)}`,
+  )
+}
+
+export function getStory(storyId: string) {
+  return request<PublicStory>(`/api/v1/stories/${encodeURIComponent(storyId)}`)
+}
+
+export function getArticleSources(slug: string) {
+  return request<ListResponse<PublicArticleSource>>(
+    `/api/v1/articles/${encodeURIComponent(slug)}/sources`,
   )
 }
 import { logUiEvent } from '../observability'

@@ -1,24 +1,19 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { articles } from '../data/mock'
 import { usePublicArticles } from '../api/hooks'
 import { toArticle } from '../api/adapters'
 import { EmptyState, LoadingSkeleton, NewsRow, SectionHeading, EntityChip } from '../components/ui'
-import type { Article } from '../data/mock'
+import type { Article } from '../api/models'
+import { entitiesFromArticles } from '../api/adapters'
 
 const filters = ['Tất cả', 'Mới nhất', 'Nhiều nguồn', 'Chính thức']
 
-const trendingEntities = [
-  { type: 'club' as const, id: 'arsenal', name: 'Arsenal' },
-  { type: 'player' as const, id: 'mbappe', name: 'Kylian Mbappé' },
-  { type: 'club' as const, id: 'real-madrid', name: 'Real Madrid' },
-  { type: 'coach' as const, id: 'arteta', name: 'Mikel Arteta' },
-]
-
 export default function LatestNewsPage() {
   const [active, setActive] = useState('Tất cả')
-  const remote = usePublicArticles()
-  const displayArticles: Article[] = remote.data ? remote.data.map(toArticle) : articles
+  const [limit, setLimit] = useState(20)
+  const remote = usePublicArticles(limit, { sort: active === 'Mới nhất' ? 'newest' : undefined })
+  const displayArticles: Article[] = remote.data?.map(toArticle) ?? []
+  const trendingEntities = entitiesFromArticles(remote.data ?? []).slice(0, 6)
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8">
@@ -56,7 +51,7 @@ export default function LatestNewsPage() {
             {!remote.loading && !remote.error && displayArticles.map(a => <NewsRow key={a.id} article={a} />)}
           </div>
           <div className="mt-8 text-center">
-            <button className="inline-flex items-center gap-2 px-6 py-2.5 border border-[#E5E7EB] rounded-lg text-sm font-medium text-[#374151] hover:border-[#78A83D] hover:text-[#78A83D] transition-colors">
+            <button onClick={() => setLimit((current) => current + 20)} disabled={remote.loading || displayArticles.length < limit} className="inline-flex items-center gap-2 px-6 py-2.5 border border-[#E5E7EB] rounded-lg text-sm font-medium text-[#374151] hover:border-[#78A83D] hover:text-[#78A83D] transition-colors disabled:cursor-not-allowed disabled:opacity-50">
               Xem thêm tin
             </button>
           </div>
@@ -71,6 +66,7 @@ export default function LatestNewsPage() {
                   <EntityChip entity={e} />
                 </div>
               ))}
+              {!trendingEntities.length && <p className="text-sm text-[#6B7280]">Chưa có dữ liệu.</p>}
             </div>
           </div>
         </aside>

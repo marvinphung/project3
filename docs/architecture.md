@@ -18,7 +18,7 @@ flowchart LR
     AR --> M[(MongoDB)]
     AR --> IN[Intelligence Service]
     IN --> AI[AI Content Service]
-    AI --> KG[Kaggle Qwen3-8B]
+    AI --> KG[Kaggle Qwen3-0.6B]
     KG --> AI
     AI --> IN
     IN --> PG[(PostgreSQL + pgvector)]
@@ -60,7 +60,7 @@ service riêng.
 | HTML extraction | Trafilatura; BeautifulSoup fallback theo source |
 | Entity extraction | `urchade/gliner_multi-v2.1` chạy local |
 | Embedding | `BAAI/bge-small-en-v1.5` chạy local, chỉ cho English |
-| AI chính | Qwen3-8B quantized 4-bit chạy batch trên Kaggle |
+| AI chính | Qwen3-0.6B Transformers chạy batch trên Kaggle |
 | AI fallback | Qwen3-4B GGUF `Q4_K_M` chạy local, concurrency 1 |
 | Web | React/Vite hiện có |
 
@@ -147,6 +147,6 @@ deployment nhiều node phải thay bằng object storage mà giữ nguyên port
 
 Compose được chia profile `core`, `airflow`, `demo`, `tools`. Kafka một broker,
 MongoDB một replica set local và PostgreSQL một node là đủ cho đồ án, không phải
-topology production chịu lỗi. Qwen3-8B chạy ngoài máy trên Kaggle; fallback 4B
+topology production chịu lỗi. Qwen3-0.6B chạy ngoài máy trên Kaggle; fallback 4B
 chỉ được nạp khi cần. Credential Kaggle nằm trong secret/environment, tuyệt đối
 không hard-code trong image hoặc repository.

@@ -69,6 +69,7 @@ class CatalogSource:
     url: str
     source_type: SourceType
     domains: tuple[str, ...]
+    enabled_by_default: bool = True
 
 
 CATALOG: tuple[CatalogSource, ...] = (
@@ -108,6 +109,7 @@ CATALOG: tuple[CatalogSource, ...] = (
         "https://www.reuters.com/sports/soccer/",
         SourceType.HTML,
         ("reuters.com",),
+        enabled_by_default=False,
     ),
     CatalogSource(
         "Associated Press Soccer", "https://apnews.com/hub/soccer", SourceType.HTML, ("apnews.com",)
@@ -133,6 +135,13 @@ BROWSER_LISTING_SOURCES = frozenset(
     {"ESPN Soccer", "Transfermarkt", "Reuters Soccer", "Premier League"}
 )
 BROWSER_ARTICLE_SOURCES = BROWSER_LISTING_SOURCES | frozenset({"FIFA News", "FIFA World Cup News"})
+
+
+def select_sources(source_names: list[str] | None) -> list[CatalogSource]:
+    """Return explicit sources, or only sources safe for the default production run."""
+    if source_names:
+        return [item for item in CATALOG if item.name in source_names]
+    return [item for item in CATALOG if item.enabled_by_default]
 
 
 @dataclass(frozen=True, slots=True)
@@ -535,7 +544,7 @@ async def crawl_source(
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    selected = [item for item in CATALOG if not args.source or item.name in args.source]
+    selected = select_sources(args.source)
     if not selected:
         raise SystemExit("No matching source. Use --list-sources to see catalog names.")
     engine = database_engine()
@@ -605,9 +614,7 @@ async def main_async(args: argparse.Namespace) -> int:
                             args.max_articles,
                         )
                         status = (
-                            CrawlBatchStatus.COMPLETED
-                            if failed == 0
-                            else CrawlBatchStatus.PARTIAL
+                            CrawlBatchStatus.COMPLETED if failed == 0 else CrawlBatchStatus.PARTIAL
                         )
                     except asyncio.CancelledError:
                         batch_service.complete(
@@ -667,7 +674,9 @@ def main() -> int:
     )
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--source", action="append", help="catalog source name; repeatable; default: all"
+        "--source",
+        action="append",
+        help="catalog source name; repeatable; default: enabled sources (Reuters is opt-in)",
     )
     parser.add_argument("--max-articles", type=int, default=10)
     parser.add_argument("--list-sources", action="store_true")

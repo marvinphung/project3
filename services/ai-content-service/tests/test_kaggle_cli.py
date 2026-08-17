@@ -35,7 +35,7 @@ def test_cli_uses_argument_arrays_for_dataset_kernel_and_output(tmp_path: Path) 
     cli = KaggleCli(runner=runner, command_timeout_seconds=120)
 
     cli.upload_dataset(tmp_path / "input", batch_id="batch-123")
-    cli.submit_kernel(tmp_path / "notebook", accelerator="NvidiaTeslaP100")
+    cli.submit_kernel(tmp_path / "notebook", accelerator="NvidiaTeslaT4")
     cli.download_output("owner/footballpulse-ai", tmp_path / "output")
 
     assert runner.calls == [
@@ -66,7 +66,7 @@ def test_cli_uses_argument_arrays_for_dataset_kernel_and_output(tmp_path: Path) 
                 "-p",
                 str(tmp_path / "notebook"),
                 "--accelerator",
-                "NvidiaTeslaP100",
+                "NvidiaTeslaT4",
                 "--timeout",
                 "5400",
             ],

@@ -1,24 +1,15 @@
 import { Link } from 'react-router'
-import { articles, players, clubs, coaches } from '../data/mock'
 import { usePublicArticles } from '../api/hooks'
 import { toArticle } from '../api/adapters'
 import { EmptyState, LargeNewsCard, LoadingSkeleton, MediumNewsCard, NewsRow, SectionHeading, EntityChip } from '../components/ui'
 
-const trendingEntities = [
-  { type: 'club' as const, id: 'arsenal', name: 'Arsenal' },
-  { type: 'player' as const, id: 'mbappe', name: 'Kylian Mbappé' },
-  { type: 'club' as const, id: 'real-madrid', name: 'Real Madrid' },
-  { type: 'coach' as const, id: 'arteta', name: 'Mikel Arteta' },
-  { type: 'player' as const, id: 'haaland', name: 'Erling Haaland' },
-  { type: 'club' as const, id: 'liverpool', name: 'Liverpool' },
-  { type: 'player' as const, id: 'saka', name: 'Bukayo Saka' },
-  { type: 'coach' as const, id: 'guardiola', name: 'Pep Guardiola' },
-]
+import { entitiesFromArticles } from '../api/adapters'
 
 export default function HomePage() {
   const remote = usePublicArticles(8)
   const liveArticles = remote.data?.map(toArticle) ?? []
-  const content = liveArticles.length > 0 ? liveArticles : articles
+  const content = liveArticles
+  const trendingEntities = entitiesFromArticles(remote.data ?? []).slice(0, 8)
   const hero = content[0]
   const secondary = content.slice(1, 4)
   const latest = content.slice(0, 8)
@@ -28,7 +19,7 @@ export default function HomePage() {
       {/* Hero */}
       <section className="mb-12">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-8">
-          {remote.loading ? <LoadingSkeleton /> : remote.error ? <EmptyState message="Chưa thể tải tin nổi bật" sub={remote.error.message} /> : <LargeNewsCard article={hero} />}
+          {remote.loading ? <LoadingSkeleton /> : remote.error ? <EmptyState message="Chưa thể tải tin nổi bật" sub={remote.error.message} /> : hero ? <LargeNewsCard article={hero} /> : <EmptyState message="Chưa có bài viết được xuất bản" sub="Dữ liệu sẽ xuất hiện sau khi Story được duyệt và publish." />}
           <div className="flex flex-col gap-5">
             {secondary.map(a => <MediumNewsCard key={a.id} article={a} />)}
           </div>
@@ -41,7 +32,7 @@ export default function HomePage() {
         <section>
           <SectionHeading>Tin mới nhất</SectionHeading>
           <div>
-            {latest.map(a => <NewsRow key={a.id} article={a} />)}
+            {latest.length ? latest.map(a => <NewsRow key={a.id} article={a} />) : <EmptyState message="Chưa có tin mới" />}
           </div>
           <div className="mt-8 text-center">
             <Link
@@ -64,6 +55,7 @@ export default function HomePage() {
                   <EntityChip entity={e} />
                 </div>
               ))}
+              {!trendingEntities.length && <p className="text-sm text-[#6B7280]">Chưa có entity từ bài đã xuất bản.</p>}
             </div>
           </div>
         </aside>

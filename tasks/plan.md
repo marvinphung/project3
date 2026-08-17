@@ -6,6 +6,9 @@ Canonical detailed plan:
 Completion execution plan (current):
 [`docs/plans/2026-08-17-project-completion.md`](../docs/plans/2026-08-17-project-completion.md).
 
+Frontend real-data/API gap plan:
+[`docs/plans/2026-08-17-frontend-real-data-api-plan.md`](../docs/plans/2026-08-17-frontend-real-data-api-plan.md).
+
 ## Execution contract
 
 For the historical canonical plan, the original Collaboration Gate rules remain
@@ -33,5 +36,5 @@ authorized autonomous implementation and verification on 2026-08-17:
 
 ## Current next action
 
-Thực thi completion plan từ Phase A. Ưu tiên đầu tiên là baseline verification,
-đóng checklist stale và nối AI provider/enrichment worker trước khi mở rộng UI.
+Hoàn tất Story/timeline runtime, sau đó thực thi public real-data Phase 1 và admin
+operational API Phase 2 trong frontend/API gap plan. Không thêm fixture fallback.

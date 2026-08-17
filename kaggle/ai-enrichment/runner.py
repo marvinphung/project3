@@ -20,11 +20,30 @@ from typing import Any
 INPUT_ROOT = Path("/kaggle/input")
 OUTPUT_ROOT = Path("/kaggle/working")
 PROMPT_VERSION = "article-enrichment-v1"
-MAX_NEW_TOKENS = 2_500
-MAX_INPUT_TOKENS = 24_576
+MAX_NEW_TOKENS = 512
+MAX_INPUT_TOKENS = 4_096
 MAX_CHUNK_WORDS = 1_200
 CHUNK_OVERLAP_WORDS = 150
 REQUIRED_RESULT_FIELDS = frozenset({"event_type", "summary_en", "claims"})
+ALLOWED_PREDICATES = frozenset(
+    {
+        "EXPRESSED_INTEREST",
+        "CONTACTED",
+        "SUBMITTED_BID",
+        "ACCEPTED_BID",
+        "REJECTED_BID",
+        "COMPLETED_TRANSFER",
+        "NEGOTIATING_CONTRACT",
+        "SIGNED_CONTRACT",
+        "SUFFERED_INJURY",
+        "EXPECTED_RETURN",
+        "MATCH_SCHEDULED",
+        "MATCH_RESULT",
+        "APPOINTED_COACH",
+        "DISMISSED_COACH",
+        "DENIED_REPORT",
+    }
+)
 LOGGER = logging.getLogger("footballpulse.kaggle.runner")
 
 
@@ -124,28 +143,42 @@ def content_chunks(
 
 
 def prompt_for(article: dict[str, Any], *, repair_text: str | None = None) -> str:
+    if not article.get("canonical_entities"):
+        return (
+            "Return only one concise grounded English summary of this football article. "
+            "Do not add facts, labels, JSON, markdown, or commentary.\nArticle:\n"
+            + json.dumps(
+                {
+                    "title": article.get("title"),
+                    "cleaned_content": article["cleaned_content"],
+                },
+                ensure_ascii=False,
+            )
+        )
+    claim_contract: list[dict[str, Any]] = []
+    claim_contract = [
+        {
+            "subject_entity_id": "UUID from canonical_entities",
+            "predicate": "|".join(sorted(ALLOWED_PREDICATES)),
+            "object_entity_id": "UUID or null",
+            "object_text": "text or null; exactly one object form",
+            "qualifiers": {
+                "amount": None,
+                "currency": None,
+                "date": None,
+                "injury": None,
+                "score": None,
+            },
+            "certainty": "RUMOR|REPORTED|CONFIRMED|DENIED",
+            "evidence_quote": "exact substring of cleaned_content",
+            "evidence_start": 0,
+            "evidence_end": 1,
+        }
+    ]
     contract = {
         "event_type": "TRANSFER|CONTRACT|INJURY|MATCH|MANAGERIAL|DISCIPLINARY|OTHER",
         "summary_en": "grounded English summary",
-        "claims": [
-            {
-                "subject_entity_id": "UUID from canonical_entities",
-                "predicate": "one allowed article-enrichment.v1 predicate",
-                "object_entity_id": "UUID or null",
-                "object_text": "text or null; exactly one object form",
-                "qualifiers": {
-                    "amount": None,
-                    "currency": None,
-                    "date": None,
-                    "injury": None,
-                    "score": None,
-                },
-                "certainty": "RUMOR|REPORTED|CONFIRMED|DENIED",
-                "evidence_quote": "exact substring of cleaned_content",
-                "evidence_start": 0,
-                "evidence_end": 1,
-            }
-        ],
+        "claims": claim_contract,
     }
     repair = (
         "\nYour previous output was invalid. Return one corrected JSON object only:\n"
@@ -164,18 +197,40 @@ def prompt_for(article: dict[str, Any], *, repair_text: str | None = None) -> st
     )
 
 
+def model_load_options(torch_module: Any) -> dict[str, Any]:
+    if torch_module.cuda.is_available():
+        major, minor = torch_module.cuda.get_device_capability(0)
+        if f"sm_{major}{minor}" in torch_module.cuda.get_arch_list():
+            return {"device_map": "auto", "torch_dtype": torch_module.float16}
+    return {"device_map": "cpu", "torch_dtype": torch_module.float32}
+
+
 def load_model(model_path: Path) -> tuple[Any, Any]:
+    import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     started = time.monotonic()
+    load_options = model_load_options(torch)
+    if torch.cuda.is_available():
+        log_progress(
+            "cuda_runtime_detected",
+            device_name=torch.cuda.get_device_name(0),
+            compute_capability=".".join(
+                str(value) for value in torch.cuda.get_device_capability(0)
+            ),
+            supported_architectures=",".join(torch.cuda.get_arch_list()),
+            selected_device=load_options["device_map"],
+            model_dtype=str(load_options["torch_dtype"]),
+        )
+    else:
+        log_progress("cuda_runtime_unavailable", model_dtype="float32")
     log_progress("tokenizer_loading", model_path=model_path)
     tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
     log_progress("model_loading", model_path=model_path)
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
-        device_map="auto",
-        torch_dtype="auto",
         local_files_only=True,
+        **load_options,
     )
     model.eval()
     log_progress("model_ready", duration_seconds=round(time.monotonic() - started, 2))
@@ -210,11 +265,42 @@ def generate(tokenizer: Any, model: Any, prompt: str) -> str:
 
 def extract_chunk(tokenizer: Any, model: Any, article: dict[str, Any]) -> dict[str, Any]:
     raw = generate(tokenizer, model, prompt_for(article))
+    if not article.get("canonical_entities"):
+        summary = raw.strip()[:4_000].strip()
+        if not summary:
+            raise ValueError("model summary_en must be non-empty")
+        return {"event_type": "OTHER", "summary_en": summary, "claims": []}
     try:
         return parse_model_json(raw)
     except (ValueError, json.JSONDecodeError):
         repaired = generate(tokenizer, model, prompt_for(article, repair_text=raw))
         return parse_model_json(repaired)
+
+
+def normalize_claim_evidence(claim: dict[str, Any], content: str) -> dict[str, Any]:
+    quote = claim.get("evidence_quote")
+    start = claim.get("evidence_start")
+    end = claim.get("evidence_end")
+    if not isinstance(quote, str) or not quote:
+        raise ValueError("claim evidence quote must be non-empty")
+    normalized = dict(claim)
+    if isinstance(start, int) and isinstance(end, int) and content[start:end] == quote:
+        return normalized
+    recovered_start = content.find(quote)
+    if recovered_start < 0 or recovered_start != content.rfind(quote):
+        raise ValueError("claim evidence quote must be a unique exact substring")
+    normalized["evidence_start"] = recovered_start
+    normalized["evidence_end"] = recovered_start + len(quote)
+    return normalized
+
+
+def claim_is_canonically_grounded(claim: dict[str, Any], canonical_ids: set[str]) -> bool:
+    if claim.get("predicate") not in ALLOWED_PREDICATES:
+        return False
+    if claim.get("subject_entity_id") not in canonical_ids:
+        return False
+    object_entity_id = claim.get("object_entity_id")
+    return object_entity_id is None or object_entity_id in canonical_ids
 
 
 def process_article(
@@ -227,6 +313,7 @@ def process_article(
 ) -> dict[str, Any]:
     extracted_chunks: list[dict[str, Any]] = []
     global_claims: list[dict[str, Any]] = []
+    canonical_ids = {str(entity["entity_id"]) for entity in article.get("canonical_entities", [])}
     chunks = content_chunks(article["cleaned_content"])
     log_progress(
         "article_chunking_completed",
@@ -268,14 +355,16 @@ def process_article(
         for claim_value in extracted["claims"]:
             if not isinstance(claim_value, dict):
                 raise ValueError("model claim must be an object")
-            claim = dict(claim_value)
-            local_start = claim.get("evidence_start")
-            local_end = claim.get("evidence_end")
-            quote = claim.get("evidence_quote")
-            if not isinstance(local_start, int) or not isinstance(local_end, int):
-                raise ValueError("claim evidence offsets must be integers")
-            if not isinstance(quote, str) or chunk_text[local_start:local_end] != quote:
-                raise ValueError("claim evidence does not match chunk offsets")
+            if not claim_is_canonically_grounded(claim_value, canonical_ids):
+                log_progress(
+                    "claim_dropped_not_canonically_grounded",
+                    article_version_id=article["article_version_id"],
+                    predicate=claim_value.get("predicate"),
+                )
+                continue
+            claim = normalize_claim_evidence(claim_value, chunk_text)
+            local_start = claim["evidence_start"]
+            local_end = claim["evidence_end"]
             claim["evidence_start"] = start + local_start
             claim["evidence_end"] = start + local_end
             global_claims.append(claim)

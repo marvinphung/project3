@@ -59,6 +59,10 @@ def test_job_transitions_single_flight_and_idempotent_enrichment(
         )
     )
     assert jobs.get_status(BATCH_ID) is AiBatchStatus.PREPARING
+    resumable = jobs.find_resumable()
+    assert resumable is not None
+    assert resumable.batch_id == BATCH_ID
+    assert resumable.created_at.tzinfo is not None
 
     assert jobs.acquire_lease(owner="worker-1", now=NOW, lease_seconds=60) is True
     assert jobs.acquire_lease(owner="worker-2", now=NOW, lease_seconds=60) is False

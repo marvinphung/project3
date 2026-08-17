@@ -1,8 +1,14 @@
 import { Link, useParams } from 'react-router'
 import StoryTimeline from '../components/StoryTimeline'
+import { usePublicStory } from '../api/hooks'
+import { EmptyState, LoadingSkeleton } from '../components/ui'
 
 export default function StoryPage() {
   const { id } = useParams()
+  const story = usePublicStory(id ?? '')
+
+  if (story.loading) return <div className="max-w-[900px] mx-auto px-4 py-8"><LoadingSkeleton /></div>
+  if (story.error || !story.data) return <div className="max-w-[900px] mx-auto px-4 py-8"><EmptyState message="Không thể tải Story" sub={story.error?.message} /></div>
 
   return (
     <div className="max-w-[900px] mx-auto px-4 sm:px-6 py-8">
@@ -13,8 +19,8 @@ export default function StoryPage() {
       </div>
       <div className="mb-8">
         <span className="text-xs font-semibold uppercase tracking-wider text-[#78A83D]">Story</span>
-        <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-[#111827]">Diễn biến sự kiện</h1>
-        <p className="mt-2 text-sm text-[#6B7280]">Theo dõi các cập nhật theo thời gian và mức độ xác thực.</p>
+        <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-[#111827]">{story.data.event_type}</h1>
+        <p className="mt-2 text-sm text-[#6B7280]">{story.data.status} · độ tin cậy {Math.round(story.data.confidence_score * 100)}% · phiên bản {story.data.version}</p>
       </div>
       <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 sm:p-7">
         <StoryTimeline storyId={id ?? null} />

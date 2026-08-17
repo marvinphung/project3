@@ -17,6 +17,18 @@ Current completion checklist:
 - [ ] D2 Public API completeness
 - [ ] D3 Admin operations UI
 - [ ] D4 Editorial/Story correction UI
+- [x] UI API 1.1 Public article search/filter/pagination
+- [x] UI API 1.2 Public entity directory/detail
+- [x] UI API 1.3 Story detail/article evidence
+- [ ] UI API 2.1 Admin operational summary/activity
+- [ ] UI API 2.2 Source Article list/detail
+- [ ] UI API 2.3 Failure list/retry/ignore
+- [ ] UI API 3.1 Admin Story list/detail/correction
+- [ ] UI API 3.2 Editorial list/edit/regenerate
+- [ ] UI API 3.3 Publication list/unpublish/new revision
+- [ ] UI API 4.1 Source create/update form wiring
+- [ ] UI API 4.2 Real crawl dispatch and batch polling
+- [ ] UI API 5 Browser interaction acceptance
 - [ ] E1 Airflow runtime orchestration
 - [ ] E2 Full Docker topology/readiness
 - [ ] E3 Structured operational logs

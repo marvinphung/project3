@@ -84,6 +84,26 @@ class AiJobReport(BaseModel):
     error_count: int = Field(strict=True, ge=0, le=10_000)
     started_at: AwareDatetime
     finished_at: AwareDatetime
+    results_path: str | None = Field(
+        default=None,
+        pattern=r"^/kaggle/working/[A-Za-z0-9._-]+$",
+        max_length=500,
+    )
+    log_path: str | None = Field(
+        default=None,
+        pattern=r"^/kaggle/working/[A-Za-z0-9._-]+$",
+        max_length=500,
+    )
+    progress_path: str | None = Field(
+        default=None,
+        pattern=r"^/kaggle/working/[A-Za-z0-9._-]+$",
+        max_length=500,
+    )
+    session_id: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z0-9._-]+$",
+        max_length=100,
+    )
 
     @model_validator(mode="after")
     def validate_timing(self) -> Self:

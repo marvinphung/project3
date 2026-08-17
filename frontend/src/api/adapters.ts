@@ -1,4 +1,4 @@
-import type { Article } from '../data/mock'
+import type { Article, EntityKind, PublicEntity } from './models'
 import type { PublicArticle } from './client'
 
 const fallbackImage =
@@ -12,10 +12,29 @@ export function toArticle(article: PublicArticle): Article {
     time: new Date(article.published_at).toLocaleString('vi-VN'),
     sources: 1,
     entities: article.entities.map((entity) => ({
-      type: entity.entity_type.toLowerCase() as 'club' | 'player' | 'coach',
+      type: entity.entity_type.toLowerCase() as EntityKind,
       id: entity.slug,
       name: entity.name,
     })),
     img: fallbackImage,
   }
+}
+
+export function entitiesFromArticles(articles: PublicArticle[], kind?: EntityKind): PublicEntity[] {
+  const entities = new Map<string, PublicEntity>()
+  for (const article of articles) {
+    for (const entity of article.entities) {
+      const type = entity.entity_type.toLowerCase() as EntityKind
+      if (kind && type !== kind) continue
+      const key = `${type}:${entity.slug}`
+      const current = entities.get(key)
+      entities.set(key, {
+        type,
+        id: entity.slug,
+        name: entity.name,
+        articleCount: (current?.articleCount ?? 0) + 1,
+      })
+    }
+  }
+  return [...entities.values()].sort((a, b) => b.articleCount - a.articleCount || a.name.localeCompare(b.name))
 }

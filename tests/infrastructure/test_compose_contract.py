@@ -125,3 +125,11 @@ def test_ai_content_has_production_provider_defaults_and_internal_database_urls(
     assert ai_environment["FOOTBALLPULSE_AI_ALLOW_MOCK"] == "false"
     assert ai_environment["FOOTBALLPULSE_AI_DETERMINISTIC_OFFLINE"] == "false"
     assert ai_environment["FOOTBALLPULSE_MONGODB_URL"].startswith("mongodb://mongodb:27017/")
+
+
+def test_intelligence_model_image_installs_all_internal_package_dependencies() -> None:
+    dockerfile = (ROOT / "services/intelligence-service/Dockerfile.models").read_text(
+        encoding="utf-8"
+    )
+
+    assert "/workspace/packages/runtime-config" in dockerfile

@@ -3,13 +3,9 @@ import { createBrowserRouter } from 'react-router'
 import PublicLayout from './layouts/PublicLayout'
 import HomePage from './pages/HomePage'
 import LatestNewsPage from './pages/LatestNewsPage'
-import PlayersPage from './pages/PlayersPage'
-import ClubsPage from './pages/ClubsPage'
-import CoachesPage from './pages/CoachesPage'
+import EntityDirectoryPage from './pages/EntityDirectoryPage'
 import ArticleDetailPage from './pages/ArticleDetailPage'
-import PlayerDetailPage from './pages/PlayerDetailPage'
-import ClubDetailPage from './pages/ClubDetailPage'
-import CoachDetailPage from './pages/CoachDetailPage'
+import EntityDetailPage from './pages/EntityDetailPage'
 import SearchPage from './pages/SearchPage'
 import NotFoundPage from './pages/NotFoundPage'
 import StoryPage from './pages/StoryPage'
@@ -31,12 +27,12 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: HomePage },
       { path: 'tin-moi', Component: LatestNewsPage },
-      { path: 'cau-thu', Component: PlayersPage },
-      { path: 'cau-thu/:id', Component: PlayerDetailPage },
-      { path: 'clb', Component: ClubsPage },
-      { path: 'clb/:id', Component: ClubDetailPage },
-      { path: 'hlv', Component: CoachesPage },
-      { path: 'hlv/:id', Component: CoachDetailPage },
+      { path: 'cau-thu', element: <EntityDirectoryPage kind="player" /> },
+      { path: 'cau-thu/:id', element: <EntityDetailPage kind="player" /> },
+      { path: 'clb', element: <EntityDirectoryPage kind="club" /> },
+      { path: 'clb/:id', element: <EntityDetailPage kind="club" /> },
+      { path: 'hlv', element: <EntityDirectoryPage kind="coach" /> },
+      { path: 'hlv/:id', element: <EntityDetailPage kind="coach" /> },
       { path: 'bai-viet/:id', Component: ArticleDetailPage },
       { path: 'story/:id', Component: StoryPage },
       { path: 'tim-kiem', Component: SearchPage },
