@@ -6,7 +6,7 @@ Current completion checklist:
 ## MVP completion execution
 
 - [x] A1 Baseline verification và checklist audit
-- [ ] A2 Runtime configuration
+- [x] A2 Runtime configuration
 - [ ] B1 AI provider runtime wiring
 - [ ] B2 Kaggle execution lifecycle
 - [ ] B3 Mongo article-to-enrichment worker

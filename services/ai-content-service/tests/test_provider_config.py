@@ -66,6 +66,41 @@ def test_mock_is_forbidden_outside_test_or_demo() -> None:
     assert settings.provider is ProviderName.MOCK
 
 
+def test_deterministic_offline_mock_needs_no_fixture_in_demo() -> None:
+    settings = ProviderSettings.from_environment(
+        {
+            "FOOTBALLPULSE_ENV": "demo",
+            "FOOTBALLPULSE_AI_PROVIDER": "mock",
+            "FOOTBALLPULSE_AI_ALLOW_MOCK": "true",
+            "FOOTBALLPULSE_AI_DETERMINISTIC_OFFLINE": "true",
+        }
+    )
+
+    assert settings.deterministic_offline is True
+    assert settings.mock_fixture_path is None
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {
+            "FOOTBALLPULSE_ENV": "local",
+            "FOOTBALLPULSE_AI_PROVIDER": "mock",
+            "FOOTBALLPULSE_AI_ALLOW_MOCK": "true",
+            "FOOTBALLPULSE_AI_DETERMINISTIC_OFFLINE": "true",
+        },
+        {
+            "FOOTBALLPULSE_ENV": "demo",
+            "FOOTBALLPULSE_AI_PROVIDER": "kaggle",
+            "FOOTBALLPULSE_AI_DETERMINISTIC_OFFLINE": "true",
+        },
+    ],
+)
+def test_deterministic_offline_mode_fails_closed(values: dict[str, str]) -> None:
+    with pytest.raises(ValueError, match="deterministic offline"):
+        ProviderSettings.from_environment(values)
+
+
 def test_boolean_and_numeric_config_fail_closed() -> None:
     with pytest.raises(ValueError, match="boolean"):
         ProviderSettings.from_environment(

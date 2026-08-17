@@ -95,3 +95,33 @@ def test_airflow_profile_contains_scheduler_and_api_server() -> None:
     assert {"airflow-init", "airflow-scheduler", "airflow-api-server"} <= set(services)
     assert services["ai-content"]["build"]["dockerfile"] == "services/runtime.Dockerfile"
     assert services["airflow-api-server"]["ports"][0]["host_ip"] == "127.0.0.1"
+
+
+def test_ai_content_has_safe_offline_defaults_and_internal_database_urls() -> None:
+    result = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            ".env.example",
+            "--profile",
+            "core",
+            "--profile",
+            "app",
+            "config",
+            "--format",
+            "json",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    services = JSON_OBJECT.validate_python(json.loads(result.stdout))["services"]
+    ai_environment = services["ai-content"]["environment"]
+    assert ai_environment["FOOTBALLPULSE_ENV"] == "demo"
+    assert ai_environment["FOOTBALLPULSE_AI_PROVIDER"] == "mock"
+    assert ai_environment["FOOTBALLPULSE_AI_ALLOW_MOCK"] == "true"
+    assert ai_environment["FOOTBALLPULSE_AI_DETERMINISTIC_OFFLINE"] == "true"
+    assert ai_environment["FOOTBALLPULSE_MONGODB_URL"].startswith("mongodb://mongodb:27017/")

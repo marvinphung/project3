@@ -36,6 +36,7 @@ class ProviderSettings:
     environment: str
     allow_local_fallback: bool
     allow_mock: bool
+    deterministic_offline: bool
     local_model: LocalModelSettings | None
     mock_fixture_path: Path | None
 
@@ -48,12 +49,19 @@ class ProviderSettings:
             raise ValueError("FOOTBALLPULSE_AI_PROVIDER must be kaggle, local, or mock") from None
         allow_local = _boolean(values, "FOOTBALLPULSE_AI_ALLOW_LOCAL_FALLBACK")
         allow_mock = _boolean(values, "FOOTBALLPULSE_AI_ALLOW_MOCK")
+        deterministic_offline = _boolean(values, "FOOTBALLPULSE_AI_DETERMINISTIC_OFFLINE")
+        if deterministic_offline and (
+            provider is not ProviderName.MOCK or environment not in {"test", "demo"}
+        ):
+            raise ValueError(
+                "deterministic offline provider requires provider=mock and environment=test or demo"
+            )
         if provider is ProviderName.MOCK and (
             not allow_mock or environment not in {"test", "demo"}
         ):
             raise ValueError("mock provider requires explicit permission in test or demo")
         mock_fixture = values.get("FOOTBALLPULSE_MOCK_FIXTURE_PATH", "").strip()
-        if provider is ProviderName.MOCK and not mock_fixture:
+        if provider is ProviderName.MOCK and not deterministic_offline and not mock_fixture:
             raise ValueError("FOOTBALLPULSE_MOCK_FIXTURE_PATH is required for mock provider")
 
         model_path = values.get("FOOTBALLPULSE_LOCAL_MODEL_PATH", "").strip()
@@ -77,6 +85,7 @@ class ProviderSettings:
             environment,
             allow_local,
             allow_mock,
+            deterministic_offline,
             local_model,
             Path(mock_fixture) if mock_fixture else None,
         )
