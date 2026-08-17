@@ -49,6 +49,4 @@ def test_trigger_crawler_batches_sends_stable_key() -> None:
 
     assert result == ["batch-1"]
     request = urlopen.call_args.args[0]
-    assert json.loads(request.data) == {
-        "idempotency_key": "source-1:2026-08-10T06:00:00+00:00"
-    }
+    assert json.loads(request.data) == {"idempotency_key": "source-1:2026-08-10T06:00:00+00:00"}

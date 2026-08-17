@@ -138,9 +138,7 @@ story_match_candidate_scores = sa.Table(
     sa.Column("vector_similarity_score", sa.Numeric(precision=6, scale=3), nullable=False),
     sa.Column("primary_entity_score", sa.Numeric(precision=6, scale=3), nullable=False),
     sa.Column("entity_overlap_score", sa.Numeric(precision=6, scale=3), nullable=False),
-    sa.Column(
-        "predicate_compatibility_score", sa.Numeric(precision=6, scale=3), nullable=False
-    ),
+    sa.Column("predicate_compatibility_score", sa.Numeric(precision=6, scale=3), nullable=False),
     sa.Column("time_distance_score", sa.Numeric(precision=6, scale=3), nullable=False),
     sa.Column("reason_codes", postgresql.JSONB(), nullable=False),
 )

@@ -84,12 +84,14 @@ def test_story_embedding_hash_changes_with_story_version_or_material_claim() -> 
         (bid_claim(amount=150_000_000),),
     )
 
-    assert build_story_embedding_text(baseline).input_hash != build_story_embedding_text(
-        next_version
-    ).input_hash
-    assert build_story_embedding_text(baseline).input_hash != build_story_embedding_text(
-        changed_claim
-    ).input_hash
+    assert (
+        build_story_embedding_text(baseline).input_hash
+        != build_story_embedding_text(next_version).input_hash
+    )
+    assert (
+        build_story_embedding_text(baseline).input_hash
+        != build_story_embedding_text(changed_claim).input_hash
+    )
 
 
 def test_story_embedding_record_binds_vector_to_story_version_and_model() -> None:

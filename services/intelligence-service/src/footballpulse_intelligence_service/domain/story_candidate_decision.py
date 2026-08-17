@@ -122,9 +122,7 @@ class StoryCandidateDecisionPolicy:
         if len({candidate.story_id for candidate in candidates}) != len(candidates):
             raise ValueError("candidate Story IDs must be unique")
 
-        ranked = tuple(
-            sorted(candidates, key=lambda item: (-item.score.total, str(item.story_id)))
-        )
+        ranked = tuple(sorted(candidates, key=lambda item: (-item.score.total, str(item.story_id))))
         if not ranked:
             return self._decision(
                 MatchAction.CREATE,

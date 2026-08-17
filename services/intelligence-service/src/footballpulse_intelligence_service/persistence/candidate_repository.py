@@ -132,9 +132,7 @@ class PostgresStoryCandidateRepository:
             story_embeddings.c.model_name == query.model_name,
             story_embeddings.c.model_version == query.model_version,
         )
-        distance = story_embeddings.c.embedding.cosine_distance(
-            list(query.query_vector.values)
-        )
+        distance = story_embeddings.c.embedding.cosine_distance(list(query.query_vector.values))
         candidate_statement = (
             sa.select(
                 stories.c.id,
@@ -148,9 +146,7 @@ class PostgresStoryCandidateRepository:
             .order_by(distance, stories.c.id)
             .limit(query.top_k)
         )
-        has_current_embedding = sa.exists(
-            sa.select(story_embeddings.c.id).where(embedding_match)
-        )
+        has_current_embedding = sa.exists(sa.select(story_embeddings.c.id).where(embedding_match))
         missing_statement = (
             sa.select(stories.c.id)
             .where(*hard_filters, ~has_current_embedding)

@@ -21,9 +21,7 @@ class PublishBatchResult:
 
 
 class PublicationOutboxRepository(Protocol):
-    def list_pending(
-        self, *, limit: int, now: datetime
-    ) -> list[PublicationPublishedEvent]: ...
+    def list_pending(self, *, limit: int, now: datetime) -> list[PublicationPublishedEvent]: ...
 
     def mark_published(self, event_id: UUID, *, published_at: datetime) -> None: ...
 
@@ -57,9 +55,7 @@ class PublicationOutboxWorker:
             try:
                 self._publisher.publish(event)
             except PublicationPublishError as error:
-                self._repository.record_failure(
-                    event.event_id, failed_at=now, error=str(error)
-                )
+                self._repository.record_failure(event.event_id, failed_at=now, error=str(error))
                 failed += 1
                 continue
             self._repository.mark_published(event.event_id, published_at=now)

@@ -25,9 +25,7 @@ def test_build_app_exposes_public_routes_without_connecting_until_request() -> N
 
 @pytest.mark.asyncio
 async def test_runtime_liveness_endpoint_does_not_require_database() -> None:
-    app = build_app(
-        {"FOOTBALLPULSE_DATABASE_URL": "postgresql+psycopg://user:pass@localhost/db"}
-    )
+    app = build_app({"FOOTBALLPULSE_DATABASE_URL": "postgresql+psycopg://user:pass@localhost/db"})
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/health")

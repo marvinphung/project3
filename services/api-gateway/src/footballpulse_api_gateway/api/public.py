@@ -123,9 +123,7 @@ def create_public_app(repository: PublicReadRepository) -> FastAPI:
         return ArticleListResponse(
             items=[
                 ArticleResponse.model_validate(item)
-                for item in repository.list_articles(
-                    limit=limit, offset=offset, story_id=story_id
-                )
+                for item in repository.list_articles(limit=limit, offset=offset, story_id=story_id)
             ]
         )
 

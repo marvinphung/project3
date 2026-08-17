@@ -241,9 +241,7 @@ class PostgresStoryRepository:
             if claim_story != story_id or source_story != story_id:
                 raise ValueError("evidence references members outside the Story")
             connection.execute(
-                insert(claim_evidence)
-                .values(**_evidence_values(evidence))
-                .on_conflict_do_nothing()
+                insert(claim_evidence).values(**_evidence_values(evidence)).on_conflict_do_nothing()
             )
             updated = connection.execute(
                 claims_table.update()
@@ -354,9 +352,7 @@ class PostgresStoryRepository:
         entity_ids = {entity.entity_id for entity in entities}
         required_entity_ids = {claim.subject_entity_id for claim in claim_records}
         required_entity_ids.update(
-            claim.object_entity_id
-            for claim in claim_records
-            if claim.object_entity_id is not None
+            claim.object_entity_id for claim in claim_records if claim.object_entity_id is not None
         )
         if not required_entity_ids <= entity_ids:
             raise ValueError("every claim entity must be linked to the Story aggregate")

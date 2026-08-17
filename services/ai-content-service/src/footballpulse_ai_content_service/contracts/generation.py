@@ -27,9 +27,7 @@ class StoryArticleGenerationInput(BaseModel):
     @model_validator(mode="after")
     def validate_claim_sources(self) -> Self:
         allowed_sources = set(self.source_article_ids)
-        if any(
-            not set(claim.source_article_ids) <= allowed_sources for claim in self.claims
-        ):
+        if any(not set(claim.source_article_ids) <= allowed_sources for claim in self.claims):
             raise ValueError("claim evidence source is outside generation input")
         return self
 

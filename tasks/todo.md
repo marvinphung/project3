@@ -1,5 +1,32 @@
 # FootballPulse Work Package Checklist
 
+Current completion checklist:
+[`docs/plans/2026-08-17-project-completion.md`](../docs/plans/2026-08-17-project-completion.md).
+
+## MVP completion execution
+
+- [x] A1 Baseline verification và checklist audit
+- [ ] A2 Runtime configuration
+- [ ] B1 AI provider runtime wiring
+- [ ] B2 Kaggle execution lifecycle
+- [ ] B3 Mongo article-to-enrichment worker
+- [ ] C1 Entity/embedding intelligence worker
+- [ ] C2 Enrichment-to-Story orchestration
+- [ ] C3 Material-change và bilingual timeline
+- [ ] D1 Operational read model/Admin API
+- [ ] D2 Public API completeness
+- [ ] D3 Admin operations UI
+- [ ] D4 Editorial/Story correction UI
+- [ ] E1 Airflow runtime orchestration
+- [ ] E2 Full Docker topology/readiness
+- [ ] E3 Structured operational logs
+- [ ] F1 Offline deterministic E2E
+- [ ] F2 Real-source smoke E2E
+- [ ] F3 Restart/concurrency/recovery
+- [ ] F4 Browser/load/final handoff
+
+---
+
 > A checkbox may be marked complete only after tests pass, the Collaboration
 > Gate report is delivered, and the user explicitly approves closure.
 > Every WP also requires a user-approved WP Kickoff before implementation starts.
@@ -35,7 +62,7 @@
 - [x] WP 3.3 English embedding adapter
 - [x] WP 3.4 AI contracts and grounding validator
 - [x] WP 3.5 Kaggle batch adapter
-- [ ] WP 3.6 Local Qwen/mock fallback
+- [x] WP 3.6 Local Qwen/mock fallback
 - [ ] Phase Gate 3 approved
 
 ## Phase 4 — Story and timeline

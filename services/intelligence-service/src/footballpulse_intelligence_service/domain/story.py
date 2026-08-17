@@ -232,9 +232,7 @@ class Claim:
             raise ValueError("occurred_at and occurred_at_bucket must be provided together")
         occurred = None if occurred_at is None else _aware(occurred_at, "occurred_at")
         bucket = (
-            None
-            if occurred_at_bucket is None
-            else _aware(occurred_at_bucket, "occurred_at_bucket")
+            None if occurred_at_bucket is None else _aware(occurred_at_bucket, "occurred_at_bucket")
         )
         if occurred is not None and bucket is not None and bucket > occurred:
             raise ValueError("occurred_at_bucket cannot be after occurred_at")

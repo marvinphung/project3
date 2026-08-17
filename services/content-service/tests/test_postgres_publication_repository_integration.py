@@ -63,9 +63,12 @@ def test_postgres_repository_creates_publication_and_outbox_together() -> None:
         published_at=NOW,
     )
 
-    assert repository.create_with_outbox(
-        publication, PublicationPublishedEvent.from_publication(publication)
-    ) == publication
+    assert (
+        repository.create_with_outbox(
+            publication, PublicationPublishedEvent.from_publication(publication)
+        )
+        == publication
+    )
     with engine.connect() as connection:
         row = (
             connection.execute(

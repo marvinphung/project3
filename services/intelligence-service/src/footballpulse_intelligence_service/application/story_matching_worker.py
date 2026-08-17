@@ -82,9 +82,8 @@ class StoryMatchingWorker:
 
     async def run(self, request: StoryMatchWorkRequest) -> StoryWorkResult:
         async with self._semaphore:
-            if (
-                self._processed_store is not None
-                and self._processed_store.is_processed(self._consumer_name, request.event_id)
+            if self._processed_store is not None and self._processed_store.is_processed(
+                self._consumer_name, request.event_id
             ):
                 return StoryWorkResult(
                     request.event_id,

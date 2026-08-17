@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
+
 from footballpulse_ai_content_service.contracts.batch import BatchRecord
 from footballpulse_ai_content_service.contracts.enrichment import ArticleEnrichmentInput
 from footballpulse_ai_content_service.providers.base import EnrichmentProvider
@@ -54,7 +55,7 @@ class EnrichmentBatchRegistry:
     def get(self, batch_id: UUID) -> EnrichmentBatchResponse | None:
         return self._batches.get(batch_id)
 
-    def list(self, *, limit: int = 100) -> list[EnrichmentBatchResponse]:
+    def list_batches(self, *, limit: int = 100) -> list[EnrichmentBatchResponse]:
         return list(self._batches.values())[-limit:][::-1]
 
     def retry(self, batch_id: UUID) -> EnrichmentBatchResponse | None:
@@ -140,8 +141,10 @@ def create_app(
     async def create_enrichment_batch(
         request: EnrichmentBatchRequest, authorization: str | None = Header(default=None)
     ) -> EnrichmentBatchResponse:
-        if authorization is None or not authorization.startswith("Bearer ") or not compare_digest(
-            authorization[7:], internal_token
+        if (
+            authorization is None
+            or not authorization.startswith("Bearer ")
+            or not compare_digest(authorization[7:], internal_token)
         ):
             raise HTTPException(status_code=401, detail="invalid bearer token")
         return batches.create(request)
@@ -153,8 +156,10 @@ def create_app(
     async def get_enrichment_batch(
         batch_id: UUID, authorization: str | None = Header(default=None)
     ) -> EnrichmentBatchResponse:
-        if authorization is None or not authorization.startswith("Bearer ") or not compare_digest(
-            authorization[7:], internal_token
+        if (
+            authorization is None
+            or not authorization.startswith("Bearer ")
+            or not compare_digest(authorization[7:], internal_token)
         ):
             raise HTTPException(status_code=401, detail="invalid bearer token")
         batch = batches.get(batch_id)
@@ -169,13 +174,15 @@ def create_app(
     async def list_enrichment_batches(
         limit: int = 100, authorization: str | None = Header(default=None)
     ) -> list[EnrichmentBatchResponse]:
-        if authorization is None or not authorization.startswith("Bearer ") or not compare_digest(
-            authorization[7:], internal_token
+        if (
+            authorization is None
+            or not authorization.startswith("Bearer ")
+            or not compare_digest(authorization[7:], internal_token)
         ):
             raise HTTPException(status_code=401, detail="invalid bearer token")
         if not 1 <= limit <= 100:
             raise HTTPException(status_code=422, detail="limit must be between 1 and 100")
-        return batches.list(limit=limit)
+        return batches.list_batches(limit=limit)
 
     @app.post(
         "/internal/v1/enrichment-batches/{batch_id}/start",
@@ -186,8 +193,10 @@ def create_app(
         request: EnrichmentBatchStartRequest | None = None,
         authorization: str | None = Header(default=None),
     ) -> EnrichmentBatchResponse:
-        if authorization is None or not authorization.startswith("Bearer ") or not compare_digest(
-            authorization[7:], internal_token
+        if (
+            authorization is None
+            or not authorization.startswith("Bearer ")
+            or not compare_digest(authorization[7:], internal_token)
         ):
             raise HTTPException(status_code=401, detail="invalid bearer token")
         batch = batches.start(batch_id, request.articles if request else None)
@@ -202,8 +211,10 @@ def create_app(
     async def retry_enrichment_batch(
         batch_id: UUID, authorization: str | None = Header(default=None)
     ) -> EnrichmentBatchResponse:
-        if authorization is None or not authorization.startswith("Bearer ") or not compare_digest(
-            authorization[7:], internal_token
+        if (
+            authorization is None
+            or not authorization.startswith("Bearer ")
+            or not compare_digest(authorization[7:], internal_token)
         ):
             raise HTTPException(status_code=401, detail="invalid bearer token")
         batch = batches.retry(batch_id)
@@ -220,8 +231,10 @@ def create_app(
         request: EnrichmentBatchCompleteRequest,
         authorization: str | None = Header(default=None),
     ) -> EnrichmentBatchResponse:
-        if authorization is None or not authorization.startswith("Bearer ") or not compare_digest(
-            authorization[7:], internal_token
+        if (
+            authorization is None
+            or not authorization.startswith("Bearer ")
+            or not compare_digest(authorization[7:], internal_token)
         ):
             raise HTTPException(status_code=401, detail="invalid bearer token")
         batch = batches.complete(

@@ -93,9 +93,7 @@ def _unique(values: tuple[UUID, ...], field: str) -> frozenset[UUID]:
     return result
 
 
-def _primary_score(
-    query: frozenset[UUID], candidate: frozenset[UUID]
-) -> tuple[float, str]:
+def _primary_score(query: frozenset[UUID], candidate: frozenset[UUID]) -> tuple[float, str]:
     if not query:
         return 0.0, "QUERY_PRIMARY_ENTITY_MISSING"
     if not candidate:
@@ -156,15 +154,11 @@ def score_story_candidate(source: StoryCandidateScoreInput) -> StoryCandidateSco
         raise ValueError("observed_at cannot be before candidate_last_seen_at")
 
     query_primary = _unique(source.query_primary_entity_ids, "query_primary_entity_ids")
-    candidate_primary = _unique(
-        source.candidate_primary_entity_ids, "candidate_primary_entity_ids"
-    )
+    candidate_primary = _unique(source.candidate_primary_entity_ids, "candidate_primary_entity_ids")
     query_entities = _unique(source.query_entity_ids, "query_entity_ids")
     candidate_entities = _unique(source.candidate_entity_ids, "candidate_entity_ids")
     query_predicates = frozenset(ClaimPredicate(value) for value in source.query_predicates)
-    candidate_predicates = frozenset(
-        ClaimPredicate(value) for value in source.candidate_predicates
-    )
+    candidate_predicates = frozenset(ClaimPredicate(value) for value in source.candidate_predicates)
     if not query_predicates or not candidate_predicates:
         raise ValueError("candidate scoring requires query and candidate predicates")
 
@@ -176,9 +170,7 @@ def score_story_candidate(source: StoryCandidateScoreInput) -> StoryCandidateSco
         query_primary,
         candidate_primary,
     )
-    predicate_score, predicate_reason = _predicate_score(
-        query_predicates, candidate_predicates
-    )
+    predicate_score, predicate_reason = _predicate_score(query_predicates, candidate_predicates)
     elapsed = source.observed_at - source.candidate_last_seen_at
     time_score = 10.0 * max(0.0, 1.0 - elapsed / story_event_window(event_type))
     components = StoryCandidateScoreComponents(

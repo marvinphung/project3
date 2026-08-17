@@ -67,9 +67,7 @@ class FakeCommitRepository:
     def __init__(self) -> None:
         self.calls: list[tuple[StoryMatchAuditRecord, ProcessedEvent]] = []
 
-    def commit(
-        self, record: StoryMatchAuditRecord, event: ProcessedEvent
-    ) -> StoryMatchAuditRecord:
+    def commit(self, record: StoryMatchAuditRecord, event: ProcessedEvent) -> StoryMatchAuditRecord:
         self.calls.append((record, event))
         return record
 
@@ -114,9 +112,7 @@ def candidate_query() -> CandidateQuery:
 
 def test_orchestrator_retrieves_scores_decides_and_persists_audit() -> None:
     query = candidate_query()
-    candidate = StoryVectorCandidate(
-        STORY_ID, 3, StoryStatus.DEVELOPING, NOW, 1.0
-    )
+    candidate = StoryVectorCandidate(STORY_ID, 3, StoryStatus.DEVELOPING, NOW, 1.0)
     retrieval = CandidateRetrievalResult(query, (candidate,), ())
     candidates = FakeCandidateRepository(retrieval)
     audit = FakeAuditRepository()

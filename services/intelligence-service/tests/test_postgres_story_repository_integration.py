@@ -269,24 +269,30 @@ def test_create_aggregate_and_replay_are_atomic_and_idempotent(
     repository = PostgresStoryRepository(engine)
     story, source, entity_links, claim, evidence, processed, outbox = aggregate()
 
-    assert repository.create_from_event(
-        story=story,
-        sources=(source,),
-        entities=entity_links,
-        claims=(claim,),
-        evidence=(evidence,),
-        processed_event=processed,
-        outbox_events=(outbox,),
-    ) is True
-    assert repository.create_from_event(
-        story=story,
-        sources=(source,),
-        entities=entity_links,
-        claims=(claim,),
-        evidence=(evidence,),
-        processed_event=processed,
-        outbox_events=(outbox,),
-    ) is False
+    assert (
+        repository.create_from_event(
+            story=story,
+            sources=(source,),
+            entities=entity_links,
+            claims=(claim,),
+            evidence=(evidence,),
+            processed_event=processed,
+            outbox_events=(outbox,),
+        )
+        is True
+    )
+    assert (
+        repository.create_from_event(
+            story=story,
+            sources=(source,),
+            entities=entity_links,
+            claims=(claim,),
+            evidence=(evidence,),
+            processed_event=processed,
+            outbox_events=(outbox,),
+        )
+        is False
+    )
 
     with engine.connect() as connection:
         counts = connection.execute(
@@ -334,11 +340,14 @@ def test_claim_confirmation_update_is_scoped_to_story_and_preserves_fingerprint(
         outbox_events=(outbox,),
     )
 
-    assert repository.update_claim_confirmation(
-        story_id=story.id,
-        claim_id=claim.id,
-        confirmation=ClaimConfirmation.MULTI_SOURCE,
-    ) is True
+    assert (
+        repository.update_claim_confirmation(
+            story_id=story.id,
+            claim_id=claim.id,
+            confirmation=ClaimConfirmation.MULTI_SOURCE,
+        )
+        is True
+    )
     with engine.connect() as connection:
         row = connection.execute(
             sa.text(
@@ -348,11 +357,14 @@ def test_claim_confirmation_update_is_scoped_to_story_and_preserves_fingerprint(
             {"claim_id": claim.id},
         ).one()
     assert row == ("MULTI_SOURCE", claim.fingerprint)
-    assert repository.update_claim_confirmation(
-        story_id=UUID(int=999),
-        claim_id=claim.id,
-        confirmation=ClaimConfirmation.OFFICIAL,
-    ) is False
+    assert (
+        repository.update_claim_confirmation(
+            story_id=UUID(int=999),
+            claim_id=claim.id,
+            confirmation=ClaimConfirmation.OFFICIAL,
+        )
+        is False
+    )
     engine.dispose()
 
 
@@ -386,11 +398,14 @@ def test_evidence_append_and_confirmation_update_are_atomic(
         now=NOW,
     )
 
-    assert repository.append_evidence_and_update_confirmation(
-        story_id=story.id,
-        evidence=additional,
-        confirmation=ClaimConfirmation.MULTI_SOURCE,
-    ) is True
+    assert (
+        repository.append_evidence_and_update_confirmation(
+            story_id=story.id,
+            evidence=additional,
+            confirmation=ClaimConfirmation.MULTI_SOURCE,
+        )
+        is True
+    )
     with engine.connect() as connection:
         row = connection.execute(
             sa.text(
@@ -472,16 +487,19 @@ def test_optimistic_update_commits_atomically_and_stale_update_rolls_back_marker
         now=NOW + timedelta(hours=6),
     )
 
-    assert repository.update_from_event(
-        story=updated,
-        expected_version=1,
-        sources=(),
-        entities=(),
-        claims=(),
-        evidence=(),
-        processed_event=update_marker,
-        outbox_events=(update_outbox,),
-    ) is True
+    assert (
+        repository.update_from_event(
+            story=updated,
+            expected_version=1,
+            sources=(),
+            entities=(),
+            claims=(),
+            evidence=(),
+            processed_event=update_marker,
+            outbox_events=(update_outbox,),
+        )
+        is True
+    )
     assert repository.get(story.id) == updated
 
     stale = replace(
@@ -759,8 +777,7 @@ def test_match_audit_repository_persists_ranked_decision_idempotently(
     with engine.connect() as connection:
         decision_count = connection.execute(
             sa.text(
-                "SELECT count(*) FROM intelligence_schema.story_match_decisions "
-                "WHERE id = :id"
+                "SELECT count(*) FROM intelligence_schema.story_match_decisions WHERE id = :id"
             ),
             {"id": audit.id},
         ).scalar_one()
@@ -792,8 +809,7 @@ def test_match_audit_repository_persists_ranked_decision_idempotently(
     with engine.connect() as connection:
         rolled_back = connection.execute(
             sa.text(
-                "SELECT count(*) FROM intelligence_schema.story_match_decisions "
-                "WHERE id = :id"
+                "SELECT count(*) FROM intelligence_schema.story_match_decisions WHERE id = :id"
             ),
             {"id": broken_id},
         ).scalar_one()
@@ -858,10 +874,10 @@ def test_context_repository_loads_current_story_entities_and_predicates(
                 "object_value": None,
                 "statement_en": "Arsenal contacted Vinicius",
                 "certainty": Decimal("0.5000"),
-                    "occurred_at": NOW,
-                    "occurred_at_bucket": NOW,
-                    "created_at": NOW,
-                    "confirmation": "RUMOUR",
+                "occurred_at": NOW,
+                "occurred_at_bucket": NOW,
+                "created_at": NOW,
+                "confirmation": "RUMOUR",
             },
         )
 
@@ -935,10 +951,10 @@ def test_story_matching_orchestration_runs_end_to_end_with_postgres(
                 "object_value": None,
                 "statement_en": "Arsenal contacted Vinicius",
                 "certainty": Decimal("0.5000"),
-                    "occurred_at": NOW,
-                    "occurred_at_bucket": NOW,
-                    "created_at": NOW,
-                    "confirmation": "RUMOUR",
+                "occurred_at": NOW,
+                "occurred_at_bucket": NOW,
+                "created_at": NOW,
+                "confirmation": "RUMOUR",
             },
         )
     vector = EmbeddingVector.create([1.0] + [0.0] * (EMBEDDING_DIMENSIONS - 1))
@@ -988,8 +1004,7 @@ def test_story_matching_orchestration_runs_end_to_end_with_postgres(
     with engine.connect() as connection:
         count = connection.execute(
             sa.text(
-                "SELECT count(*) FROM intelligence_schema.story_match_decisions "
-                "WHERE id = :id"
+                "SELECT count(*) FROM intelligence_schema.story_match_decisions WHERE id = :id"
             ),
             {"id": result.audit.id},
         ).scalar_one()

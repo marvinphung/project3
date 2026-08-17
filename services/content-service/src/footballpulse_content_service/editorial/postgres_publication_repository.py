@@ -112,9 +112,7 @@ class PostgresPublicationRepository:
             ) from error
         return publication
 
-    def list_pending(
-        self, *, limit: int, now: datetime
-    ) -> list[PublicationPublishedEvent]:
+    def list_pending(self, *, limit: int, now: datetime) -> list[PublicationPublishedEvent]:
         with self._engine.connect() as connection:
             rows = (
                 connection.execute(

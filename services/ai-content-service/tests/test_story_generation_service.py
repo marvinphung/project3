@@ -76,9 +76,7 @@ def test_service_rejects_output_from_wrong_story_version() -> None:
 
 
 def test_service_rejects_output_claim_not_in_input() -> None:
-    service = GroundedArticleGenerationService(
-        FakeProvider(output(used_claim_ids=(UUID(int=99),)))
-    )
+    service = GroundedArticleGenerationService(FakeProvider(output(used_claim_ids=(UUID(int=99),))))
 
     with pytest.raises(ProviderFailure, match="claim"):
         service.generate(request())

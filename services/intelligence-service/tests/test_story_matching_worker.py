@@ -200,9 +200,9 @@ async def test_worker_marks_story_conflict_retryable_and_unexpected_error_failed
     conflict = await StoryMatchingWorker(
         FakeMatcher(StoryConflictError("version changed")), clock=lambda: NOW
     ).run(work_request())
-    failed = await StoryMatchingWorker(
-        FakeMatcher(RuntimeError("broken")), clock=lambda: NOW
-    ).run(work_request())
+    failed = await StoryMatchingWorker(FakeMatcher(RuntimeError("broken")), clock=lambda: NOW).run(
+        work_request()
+    )
 
     assert conflict.status is StoryWorkStatus.RETRYABLE_FAILURE
     assert failed.status is StoryWorkStatus.FAILED

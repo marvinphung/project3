@@ -47,4 +47,3 @@ def test_story_change_marks_revision_stale() -> None:
 
     assert stale.state is RevisionState.STALE
     assert stale.story_version == 5
-

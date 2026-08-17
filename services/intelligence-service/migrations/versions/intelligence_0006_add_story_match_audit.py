@@ -103,9 +103,7 @@ def upgrade() -> None:
         sa.Column("story_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("story_version", sa.Integer(), nullable=False),
         sa.Column("total_score", sa.Numeric(precision=6, scale=3), nullable=False),
-        sa.Column(
-            "vector_similarity_score", sa.Numeric(precision=6, scale=3), nullable=False
-        ),
+        sa.Column("vector_similarity_score", sa.Numeric(precision=6, scale=3), nullable=False),
         sa.Column("primary_entity_score", sa.Numeric(precision=6, scale=3), nullable=False),
         sa.Column("entity_overlap_score", sa.Numeric(precision=6, scale=3), nullable=False),
         sa.Column(

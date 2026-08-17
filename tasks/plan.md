@@ -3,15 +3,21 @@
 Canonical detailed plan:
 [`docs/plans/2026-08-06-footballpulse-implementation.md`](../docs/plans/2026-08-06-footballpulse-implementation.md).
 
+Completion execution plan (current):
+[`docs/plans/2026-08-17-project-completion.md`](../docs/plans/2026-08-17-project-completion.md).
+
 ## Execution contract
 
-1. Execute exactly one Work Package at a time.
-2. Before coding, present a WP Kickoff and wait for explicit permission.
-3. Run focused tests and proportional broader verification.
-4. Present the Collaboration Gate report.
-5. Wait for explicit user approval.
-6. Only then mark the WP complete and propose the next WP.
-7. Repeat with an additional Phase Gate after each phase.
+For the historical canonical plan, the original Collaboration Gate rules remain
+recorded in that document. For the current completion plan, the user explicitly
+authorized autonomous implementation and verification on 2026-08-17:
+
+1. Execute one completion task at a time in dependency order.
+2. Run focused tests, Docker smoke and proportional broader verification.
+3. Report concise checkpoints, but continue without waiting for approval.
+4. Stop only for missing credentials/artifacts, an irreversible action, or a
+   decision that materially changes the approved MVP scope.
+5. Do not mark the MVP complete until the final Docker/E2E verification passes.
 
 ## Phase order
 
@@ -27,27 +33,5 @@ Canonical detailed plan:
 
 ## Current next action
 
-Phase Gate 4 is approved. Phase 5.1 grounded generation, 5.2 editorial revisions,
-5.3 idempotent publication, and the first 5.5 public/admin API façade are implemented.
-The credential model, JWT/Argon2 token endpoint, PostgreSQL user repository,
-local bootstrap, and JWT role enforcement are implemented. Static admin/editor
-tokens remain supported for backward-compatible local development. Phase 6.1
-now has a typed public API client and loading/error state hook. Phase 6.2 has a
-reusable Vietnamese Story timeline component and hook, plus a public
-entity-to-Story mapping endpoint so player timelines resolve canonical slugs.
-The article detail route now consumes the public article endpoint and its
-persisted Story timeline. Homepage and latest-news cards now use the same
-public API adapter; entity chips and richer source metadata remain future API
-fields. Entity tags are now included in public article responses and mapped to
-frontend chips. Admin login now obtains and stores a real JWT. Draft review actions now
-have bearer-authenticated API clients; published-article listing now reads the
-public API, and source listing now consumes the crawler admin API when
-`VITE_CRAWLER_API_BASE_URL` is configured. Source enable/disable now uses the
-crawler versioned toggle endpoint. Admin crawl triggering now opens an
-idempotent batch through the crawler service. The first collection DAG now
-orchestrates those batches every six hours and queries crawler `sources/due`
-for source selection. Mock HTTP coverage now verifies due-source auth,
-idempotency, and batch payloads.
-AI enrichment orchestration contract is also covered by a 30-minute follow-up
-DAG, and the AI service now exposes the minimal authenticated `PREPARING`
-batch endpoint. Provider/Kaggle execution lifecycle remains next.
+Thực thi completion plan từ Phase A. Ưu tiên đầu tiên là baseline verification,
+đóng checklist stale và nối AI provider/enrichment worker trước khi mở rộng UI.

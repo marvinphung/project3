@@ -23,9 +23,7 @@ class MockStoryArticleGenerationProvider:
             used_claim_ids=tuple(claim.claim_id for claim in source.claims),
             used_source_article_ids=tuple(
                 dict.fromkeys(
-                    source_id
-                    for claim in source.claims
-                    for source_id in claim.source_article_ids
+                    source_id for claim in source.claims for source_id in claim.source_article_ids
                 )
             ),
             model_version="mock-story-generator-v1",

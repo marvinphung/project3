@@ -35,6 +35,7 @@ TIMELINE = PublicTimelineEntry(
 class MemoryPublicRepository:
     def list_entity_stories(self, entity_type: str, entity_slug: str) -> PublicEntityStories:
         return PublicEntityStories(entity_type, entity_slug, (ARTICLE.story_id,))
+
     def get_article_by_slug(self, slug: str) -> PublicArticle | None:
         return ARTICLE if slug == ARTICLE.slug else None
 

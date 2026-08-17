@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import re
+
 from footballpulse_ai_content_service.contracts.batch import BatchRecord, SuccessfulBatchRecord
-from footballpulse_ai_content_service.contracts.enrichment import ArticleEnrichmentInput, ArticleEnrichmentOutput, EventType
+from footballpulse_ai_content_service.contracts.enrichment import (
+    ArticleEnrichmentInput,
+    ArticleEnrichmentOutput,
+    EventType,
+)
 from footballpulse_ai_content_service.providers.base import ProviderName
 
 

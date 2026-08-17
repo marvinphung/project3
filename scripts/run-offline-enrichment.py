@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import httpx
-
 from footballpulse_ai_content_service.api.app import create_app
 from footballpulse_ai_content_service.providers.offline import DeterministicOfflineProvider
 

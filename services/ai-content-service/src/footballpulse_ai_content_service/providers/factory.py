@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+
 from footballpulse_ai_content_service.providers.base import EnrichmentProvider, ProviderName
 from footballpulse_ai_content_service.providers.config import ProviderSettings
 from footballpulse_ai_content_service.providers.llama_cpp_runtime import LlamaCppRuntimeFactory

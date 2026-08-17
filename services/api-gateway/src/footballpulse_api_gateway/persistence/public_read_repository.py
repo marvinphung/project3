@@ -42,17 +42,21 @@ def _timeline_from_row(row: RowMapping) -> PublicTimelineEntry:
 
 
 def _with_entities(connection: Connection, article: PublicArticle) -> PublicArticle:
-    rows = connection.execute(
-        sa.select(
-            entities.c.id,
-            entities.c.entity_type,
-            entities.c.canonical_name,
-            entities.c.slug,
+    rows = (
+        connection.execute(
+            sa.select(
+                entities.c.id,
+                entities.c.entity_type,
+                entities.c.canonical_name,
+                entities.c.slug,
+            )
+            .join(story_entities, story_entities.c.entity_id == entities.c.id)
+            .where(story_entities.c.story_id == article.story_id)
+            .order_by(entities.c.canonical_name)
         )
-        .join(story_entities, story_entities.c.entity_id == entities.c.id)
-        .where(story_entities.c.story_id == article.story_id)
-        .order_by(entities.c.canonical_name)
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return replace(
         article,
         entities=tuple(

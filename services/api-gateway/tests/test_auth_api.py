@@ -21,7 +21,9 @@ def _client() -> httpx.AsyncClient:
     users = InMemoryUserRepository()
     users.add(User.create("editor", "correct horse", Role.EDITOR, created_at=NOW))
     service = AuthService(users, TokenService(SECRET, clock=lambda: NOW))
-    return httpx.AsyncClient(transport=httpx.ASGITransport(app=create_auth_app(service)), base_url="http://test")
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=create_auth_app(service)), base_url="http://test"
+    )
 
 
 @pytest.mark.anyio

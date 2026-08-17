@@ -11,10 +11,13 @@ timeline có mức xác thực và bài tổng hợp qua editorial review.
 
 ## Trạng thái
 
-Phase 0 đã hoàn tất và được duyệt. Phase 1 đang triển khai; bộ dependency local
-Kafka, MongoDB replica set, PostgreSQL+pgvector và Redis đã có Docker Compose và
-smoke test. Chưa có business service, Kaggle integration hoặc Airflow hoạt động.
-Frontend React/Vite hiện có vẫn là mock.
+Các domain/service nền, crawler thật, AI contracts/adapters, Story/timeline,
+editorial/publication, API Gateway, React UI và Airflow DAG đã được triển khai ở
+mức module. Baseline ngày 2026-08-17 có 381 test pass, Ruff/mypy sạch và frontend
+production build thành công. Công việc còn lại tập trung vào runtime wiring:
+article → AI enrichment → entity/embedding → Story/timeline, operational Admin
+UI và full-stack Docker E2E. Xem
+[`completion plan`](docs/plans/2026-08-17-project-completion.md) để theo dõi.
 
 ## Python workspace
 
@@ -62,9 +65,8 @@ uv run footballpulse-crawler-service
 Service mặc định nghe tại `127.0.0.1:8011`; OpenAPI ở `/openapi.json`. Admin và
 internal routes dùng hai bearer token riêng trong `.env`.
 
-Root project chỉ quản lý workspace và công cụ phát triển, không chứa business
-package. Sáu service hiện chỉ có importable package và liveness entrypoint; chưa
-có API hoặc domain logic.
+Root project quản lý workspace và công cụ phát triển; business logic vẫn thuộc
+đúng service owner. Không đặt domain logic dùng chung ở root package.
 
 Deterministic test data nằm tại `tests/fixtures/`, gồm RSS/HTML, transport
 failures, Kaggle-like JSONL và oracle timeline `00/06/12/18`. Test mặc định chạy
