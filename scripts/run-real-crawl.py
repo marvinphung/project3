@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import logging
 import os
 import re
 import sys
+import time
 import uuid
 from contextlib import suppress
 from dataclasses import dataclass, replace
@@ -34,6 +34,7 @@ sys.path.insert(0, str(ROOT / "services" / "crawler-service" / "src"))
 sys.path.insert(0, str(ROOT / "services" / "article-service" / "src"))
 sys.path.insert(0, str(ROOT / "packages" / "fetch-artifacts" / "src"))
 sys.path.insert(0, str(ROOT / "packages" / "event-contracts" / "src"))
+sys.path.insert(0, str(ROOT / "packages" / "runtime-config" / "src"))
 
 from footballpulse_article_service.application.ingest_article import ArticleIngestionService
 from footballpulse_article_service.persistence.mongo_article_store import MongoArticleStore
@@ -58,6 +59,8 @@ from footballpulse_crawler_service.persistence.postgres_repositories import (
 )
 from footballpulse_event_contracts.article import ArticleDiscoveredEvent, ArticleDiscoveredPayload
 from footballpulse_fetch_artifacts.filesystem import FilesystemArtifactStore
+from footballpulse_runtime_config import bind_log_context, configure_logging
+from footballpulse_runtime_config import log_event as structured_log_event
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,7 +234,7 @@ class BrowserRenderer:
 
 
 def log_event(event: str, **fields: object) -> None:
-    LOGGER.info(json.dumps({"event": event, **fields}, ensure_ascii=False, default=str))
+    structured_log_event(LOGGER, event, **fields)
 
 
 def database_engine() -> object:
@@ -418,8 +421,17 @@ async def crawl_source(
     fetched = failed = 0
     log_event("source_discovered", source=item.name, batch_id=batch.id, count=len(links))
     extractor = HtmlExtractionService(fetcher=HtmlFetcher(client=client, safety_policy=safety))
-    for url, rss_title, guid, published_at in links:
+    for article_number, (url, rss_title, guid, published_at) in enumerate(links, start=1):
         artifact_id = uuid.uuid4()
+        article_started = time.monotonic()
+        log_event(
+            "article_fetch_started",
+            source=item.name,
+            batch_id=batch.id,
+            article_number=article_number,
+            article_total=len(links),
+            url=url,
+        )
         try:
             try:
                 article = await extractor.fetch_and_extract(
@@ -463,6 +475,15 @@ async def crawl_source(
             if article.extraction.title is None:
                 article = replace(article, extraction=replace(article.extraction, title=rss_title))
             handoff.persist(artifact_id, article)
+            log_event(
+                "article_extraction_completed",
+                source=item.name,
+                batch_id=batch.id,
+                url=url,
+                extractor=article.extraction.extractor,
+                html_bytes=len(article.raw_html),
+                text_chars=len(article.extraction.text or ""),
+            )
             now = datetime.now(UTC)
             event = ArticleDiscoveredEvent(
                 event_id=uuid.uuid4(),
@@ -492,7 +513,12 @@ async def crawl_source(
             ingestion.handle(event)
             fetched += 1
             log_event(
-                "article_processed", source=item.name, batch_id=batch.id, url=url, status="SUCCESS"
+                "article_processed",
+                source=item.name,
+                batch_id=batch.id,
+                url=url,
+                status="SUCCESS",
+                duration_ms=round((time.monotonic() - article_started) * 1000),
             )
         except Exception as exc:
             failed += 1
@@ -503,6 +529,7 @@ async def crawl_source(
                 url=url,
                 error_type=type(exc).__name__,
                 error=str(exc),
+                duration_ms=round((time.monotonic() - article_started) * 1000),
             )
     return len(links), fetched, failed
 
@@ -539,6 +566,13 @@ async def main_async(args: argparse.Namespace) -> int:
     )
     if renderer is not None:
         await renderer.start()
+    started = time.monotonic()
+    log_event(
+        "crawl_run_started",
+        source_count=len(selected),
+        max_articles_per_source=args.max_articles,
+        browser_fallback=renderer is not None,
+    )
     try:
         async with create_http_client(max_connections=20) as client:
             for item in selected:
@@ -556,40 +590,46 @@ async def main_async(args: argparse.Namespace) -> int:
                     batch_id=batch.id,
                 )
                 discovered = fetched = failed = 0
-                try:
-                    discovered, fetched, failed = await crawl_source(
-                        item,
-                        source,
-                        batch,
-                        ingestion,
-                        handoff,
-                        client,
-                        safety,
-                        renderer,
-                        args.max_articles,
-                    )
-                    status = CrawlBatchStatus.COMPLETED if failed == 0 else CrawlBatchStatus.PARTIAL
-                except asyncio.CancelledError:
-                    batch_service.complete(
-                        batch.id,
-                        status=CrawlBatchStatus.PARTIAL,
-                        discovered_count=discovered,
-                        fetched_count=fetched,
-                        failed_count=failed,
-                    )
-                    log_event("source_aborted", source=item.name, batch_id=batch.id)
-                    raise
-                except Exception as exc:
-                    discovered = 1
-                    failed = 1
-                    log_event(
-                        "source_failed",
-                        source=item.name,
-                        batch_id=batch.id,
-                        error_type=type(exc).__name__,
-                        error=str(exc),
-                    )
-                    status = CrawlBatchStatus.FAILED
+                source_started = time.monotonic()
+                with bind_log_context(correlation_id=str(batch.id), batch_id=str(batch.id)):
+                    try:
+                        discovered, fetched, failed = await crawl_source(
+                            item,
+                            source,
+                            batch,
+                            ingestion,
+                            handoff,
+                            client,
+                            safety,
+                            renderer,
+                            args.max_articles,
+                        )
+                        status = (
+                            CrawlBatchStatus.COMPLETED
+                            if failed == 0
+                            else CrawlBatchStatus.PARTIAL
+                        )
+                    except asyncio.CancelledError:
+                        batch_service.complete(
+                            batch.id,
+                            status=CrawlBatchStatus.PARTIAL,
+                            discovered_count=discovered,
+                            fetched_count=fetched,
+                            failed_count=failed,
+                        )
+                        log_event("source_aborted", source=item.name, batch_id=batch.id)
+                        raise
+                    except Exception as exc:
+                        discovered = 1
+                        failed = 1
+                        log_event(
+                            "source_failed",
+                            source=item.name,
+                            batch_id=batch.id,
+                            error_type=type(exc).__name__,
+                            error=str(exc),
+                        )
+                        status = CrawlBatchStatus.FAILED
                 batch_service.complete(
                     batch.id,
                     status=status,
@@ -605,18 +645,25 @@ async def main_async(args: argparse.Namespace) -> int:
                     discovered=discovered,
                     fetched=fetched,
                     failed=failed,
+                    duration_ms=round((time.monotonic() - source_started) * 1000),
                 )
     finally:
         if renderer is not None:
             await renderer.close()
         mongo_client.close()
+        log_event(
+            "crawl_run_completed",
+            source_count=len(selected),
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
     return 0
 
 
 def main() -> int:
-    logging.basicConfig(
+    configure_logging(
+        service="crawler-worker",
         level=os.getenv("FOOTBALLPULSE_LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(message)s",
+        force=True,
     )
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(

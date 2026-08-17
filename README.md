@@ -140,6 +140,7 @@ timeline, editorial và public read model.
 | [Biên tập](docs/editorial-flow.md) | Timeline automation và long-form review/publish |
 | [Triển khai](docs/deployment.md) | Local topology, profiles, resources và offline mode |
 | [Kiểm thử](docs/testing.md) | Deterministic acceptance, failure và recovery |
+| [Logging vận hành](docs/operations-logging.md) | Event, correlation ID, Docker logs và Kaggle progress |
 | [Open Questions](docs/open-questions.md) | Các quyết định còn cần benchmark/contract |
 | [ADR local-first AI pipeline](docs/decisions/0001-local-first-ai-pipeline.md) | Lý do và hệ quả của thiết kế đã chốt |
 | [Implementation plan](docs/plans/2026-08-06-footballpulse-implementation.md) | 9 phase, Work Packages và Collaboration Gates |

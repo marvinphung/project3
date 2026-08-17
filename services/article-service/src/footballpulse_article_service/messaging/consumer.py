@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Sequence
 from typing import Protocol
 
 from confluent_kafka import Consumer
 from footballpulse_event_contracts.article import ArticleDiscoveredEvent
+from footballpulse_runtime_config import bind_log_context, log_event
 
 ARTICLE_DISCOVERED_TOPIC = "article.discovered.v1"
+LOGGER = logging.getLogger("footballpulse.article.consumer")
 
 
 class ArticleHandler(Protocol):
@@ -58,7 +62,14 @@ class ArticleDiscoveredRecordHandler:
 
     def handle(self, payload: bytes) -> object:
         event = ArticleDiscoveredEvent.model_validate_json(payload)
-        return self._service.handle(event)
+        with bind_log_context(correlation_id=str(event.correlation_id)):
+            log_event(
+                LOGGER,
+                "article_event_received",
+                event_id=str(event.event_id),
+                payload_bytes=len(payload),
+            )
+            return self._service.handle(event)
 
 
 class ConfluentArticleWorker:
@@ -84,10 +95,28 @@ class ConfluentArticleWorker:
         payload = message.value()
         if payload is None:
             raise ValueError("Kafka article event payload must not be null")
-        result = self._handler.handle(payload)
+        started = time.monotonic()
+        try:
+            result = self._handler.handle(payload)
+        except Exception as error:
+            log_event(
+                LOGGER,
+                "article_event_failed",
+                level=logging.ERROR,
+                error=error,
+                payload_bytes=len(payload),
+                duration_ms=round((time.monotonic() - started) * 1000),
+            )
+            raise
         # The documented message commit stores offset + 1. Synchronous mode makes
         # commit failure observable instead of reporting success early.
         self._consumer.commit(message=message, asynchronous=False)
+        log_event(
+            LOGGER,
+            "article_event_committed",
+            payload_bytes=len(payload),
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
         return result
 
     def close(self) -> None:

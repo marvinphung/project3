@@ -6,12 +6,16 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
 import httpx
 from footballpulse_ai_content_service.api.app import create_app
 from footballpulse_ai_content_service.providers.offline import DeterministicOfflineProvider
+from footballpulse_runtime_config import configure_logging, log_event
+
+LOGGER = logging.getLogger("footballpulse.offline_enrichment")
 
 
 def article(article_id: UUID, source_id: UUID, content: str) -> dict[str, object]:
@@ -30,6 +34,8 @@ def article(article_id: UUID, source_id: UUID, content: str) -> dict[str, object
 
 
 async def main() -> None:
+    configure_logging(service="offline-enrichment", level="INFO", force=True)
+    log_event(LOGGER, "offline_enrichment_started")
     token = "offline-token"
     transport = httpx.ASGITransport(
         app=create_app(internal_token=token, provider=DeterministicOfflineProvider())
@@ -46,6 +52,7 @@ async def main() -> None:
         )
         created.raise_for_status()
         batch_id = created.json()["id"]
+        log_event(LOGGER, "offline_batch_created", batch_id=batch_id)
         content = "Real Madrid are negotiating a contract extension with Vinicius Junior."
         started = await client.post(
             f"/internal/v1/enrichment-batches/{batch_id}/start",
@@ -61,6 +68,14 @@ async def main() -> None:
             },
         )
         started.raise_for_status()
+        log_event(
+            LOGGER,
+            "offline_enrichment_completed",
+            batch_id=batch_id,
+            status=started.json()["status"],
+            success_count=started.json()["success_count"],
+            error_count=started.json()["error_count"],
+        )
         print(json.dumps(started.json(), indent=2, ensure_ascii=False))
 
 

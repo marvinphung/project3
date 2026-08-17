@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 import subprocess
+import time
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
+
+from footballpulse_runtime_config import log_event
+
+LOGGER = logging.getLogger("footballpulse.ai.kaggle_cli")
 
 
 class KaggleCliError(RuntimeError):
@@ -145,6 +151,9 @@ class KaggleCli:
         )
 
     def _execute(self, command: list[str]) -> subprocess.CompletedProcess[str]:
+        started = time.monotonic()
+        operation = " ".join(command[:3])
+        log_event(LOGGER, "kaggle_cli_started", operation=operation)
         try:
             result = self._runner.run(command, timeout_seconds=self._command_timeout_seconds)
         except FileNotFoundError as error:
@@ -164,10 +173,26 @@ class KaggleCli:
             ) from error
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
+            log_event(
+                LOGGER,
+                "kaggle_cli_failed",
+                level=logging.ERROR,
+                operation=operation,
+                exit_code=result.returncode,
+                failure_kind=self._classify_failure(detail).value,
+                duration_ms=round((time.monotonic() - started) * 1000),
+            )
             raise KaggleCliError(
                 self._redact(f"Kaggle CLI failed: {detail}"),
                 kind=self._classify_failure(detail),
             )
+        log_event(
+            LOGGER,
+            "kaggle_cli_completed",
+            operation=operation,
+            exit_code=result.returncode,
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
         return result
 
     @classmethod

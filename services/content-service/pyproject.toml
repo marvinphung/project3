@@ -4,9 +4,13 @@ version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.18,<2",
+    "footballpulse-runtime-config",
     "psycopg[binary]>=3.3,<4",
     "sqlalchemy>=2.0,<3",
 ]
+
+[tool.uv.sources]
+footballpulse-runtime-config = { workspace = true }
 
 [project.scripts]
 footballpulse-content-service-health = "footballpulse_content_service.health:main"

@@ -76,7 +76,7 @@ class ConcurrencyPipeline:
         return ()
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_worker_bounds_cpu_concurrency_and_reports_failure() -> None:
     pipeline = ConcurrencyPipeline()
     worker = EmbeddingWorker(pipeline, max_concurrency=1)

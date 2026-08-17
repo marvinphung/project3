@@ -1,5 +1,11 @@
 name: footballpulse
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   kafka:
     image: apache/kafka:4.3.1
@@ -149,6 +155,7 @@ services:
 
   crawler-api:
     image: footballpulse-runtime:local
+    logging: *default-logging
     build:
       context: .
       dockerfile: services/runtime.Dockerfile
@@ -163,6 +170,7 @@ services:
       FOOTBALLPULSE_CRAWLER_PORT: "8011"
       FOOTBALLPULSE_CRAWLER_ADMIN_TOKEN: ${FOOTBALLPULSE_CRAWLER_ADMIN_TOKEN}
       FOOTBALLPULSE_CRAWLER_INTERNAL_TOKEN: ${FOOTBALLPULSE_CRAWLER_INTERNAL_TOKEN}
+      FOOTBALLPULSE_LOG_LEVEL: ${FOOTBALLPULSE_LOG_LEVEL:-INFO}
     command: ["footballpulse-crawler-service"]
     ports:
       - "127.0.0.1:${FOOTBALLPULSE_CRAWLER_PORT:-8011}:8011"
@@ -174,6 +182,7 @@ services:
 
   crawler-worker:
     image: footballpulse-crawler-worker:local
+    logging: *default-logging
     build:
       context: .
       dockerfile: services/crawler-service/Dockerfile.worker
@@ -197,6 +206,7 @@ services:
 
   api-gateway:
     image: footballpulse-runtime:local
+    logging: *default-logging
     build:
       context: .
       dockerfile: services/runtime.Dockerfile
@@ -213,6 +223,7 @@ services:
       FOOTBALLPULSE_API_JWT_SECRET: ${FOOTBALLPULSE_API_JWT_SECRET:-local-jwt-secret-change-me-0123456789}
       FOOTBALLPULSE_API_ADMIN_USERNAME: ${FOOTBALLPULSE_API_ADMIN_USERNAME:-admin}
       FOOTBALLPULSE_API_ADMIN_PASSWORD: ${FOOTBALLPULSE_API_ADMIN_PASSWORD:-footballpulse-admin}
+      FOOTBALLPULSE_LOG_LEVEL: ${FOOTBALLPULSE_LOG_LEVEL:-INFO}
     command: ["footballpulse-api-gateway"]
     ports:
       - "127.0.0.1:${FOOTBALLPULSE_API_PORT:-8000}:8000"
@@ -226,6 +237,7 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    logging: *default-logging
     profiles: ["app"]
     restart: unless-stopped
     depends_on:
@@ -287,6 +299,7 @@ services:
 
   ai-content:
     image: footballpulse-runtime:local
+    logging: *default-logging
     build:
       context: .
       dockerfile: services/runtime.Dockerfile
@@ -296,10 +309,10 @@ services:
       FOOTBALLPULSE_ENV: ${FOOTBALLPULSE_ENV:-demo}
       FOOTBALLPULSE_LOG_LEVEL: ${FOOTBALLPULSE_LOG_LEVEL:-INFO}
       FOOTBALLPULSE_AI_INTERNAL_TOKEN: ${FOOTBALLPULSE_AI_INTERNAL_TOKEN:-local-ai-internal-token}
-      FOOTBALLPULSE_AI_PROVIDER: ${FOOTBALLPULSE_AI_PROVIDER:-mock}
-      FOOTBALLPULSE_AI_DETERMINISTIC_OFFLINE: ${FOOTBALLPULSE_AI_DETERMINISTIC_OFFLINE:-true}
+      FOOTBALLPULSE_AI_PROVIDER: ${FOOTBALLPULSE_AI_PROVIDER:-kaggle}
+      FOOTBALLPULSE_AI_DETERMINISTIC_OFFLINE: ${FOOTBALLPULSE_AI_DETERMINISTIC_OFFLINE:-false}
       FOOTBALLPULSE_AI_ALLOW_LOCAL_FALLBACK: ${FOOTBALLPULSE_AI_ALLOW_LOCAL_FALLBACK:-false}
-      FOOTBALLPULSE_AI_ALLOW_MOCK: ${FOOTBALLPULSE_AI_ALLOW_MOCK:-true}
+      FOOTBALLPULSE_AI_ALLOW_MOCK: ${FOOTBALLPULSE_AI_ALLOW_MOCK:-false}
       FOOTBALLPULSE_MOCK_FIXTURE_PATH: ${FOOTBALLPULSE_MOCK_FIXTURE_PATH:-}
       FOOTBALLPULSE_LOCAL_MODEL_PATH: ${FOOTBALLPULSE_LOCAL_MODEL_PATH:-}
       FOOTBALLPULSE_LOCAL_MODEL_SHA256: ${FOOTBALLPULSE_LOCAL_MODEL_SHA256:-}
@@ -325,10 +338,11 @@ services:
     cpus: 0.75
 
   intelligence-worker:
-    image: footballpulse-runtime:local
+    image: footballpulse-intelligence-models:local
     build:
       context: .
-      dockerfile: services/runtime.Dockerfile
+      dockerfile: services/intelligence-service/Dockerfile.models
+    logging: *default-logging
     profiles: ["app"]
     restart: unless-stopped
     depends_on:
@@ -341,15 +355,61 @@ services:
       FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0
       FOOTBALLPULSE_MONGODB_DB: ${FOOTBALLPULSE_MONGODB_DB:-footballpulse}
       FOOTBALLPULSE_LOG_LEVEL: ${FOOTBALLPULSE_LOG_LEVEL:-INFO}
-      FOOTBALLPULSE_ENTITY_PROVIDER: ${FOOTBALLPULSE_ENTITY_PROVIDER:-catalog}
+      FOOTBALLPULSE_ENTITY_PROVIDER: ${FOOTBALLPULSE_ENTITY_PROVIDER:-gliner}
       FOOTBALLPULSE_GLINER_MODEL: ${FOOTBALLPULSE_GLINER_MODEL:-urchade/gliner_small-v2.1}
-      FOOTBALLPULSE_EMBEDDING_PROVIDER: ${FOOTBALLPULSE_EMBEDDING_PROVIDER:-mock}
+      FOOTBALLPULSE_EMBEDDING_PROVIDER: ${FOOTBALLPULSE_EMBEDDING_PROVIDER:-bge}
       FOOTBALLPULSE_BGE_MODEL: ${FOOTBALLPULSE_BGE_MODEL:-BAAI/bge-small-en-v1.5}
       FOOTBALLPULSE_INTELLIGENCE_BATCH_SIZE: ${FOOTBALLPULSE_INTELLIGENCE_BATCH_SIZE:-50}
       FOOTBALLPULSE_INTELLIGENCE_POLL_SECONDS: ${FOOTBALLPULSE_INTELLIGENCE_POLL_SECONDS:-30}
     command: ["footballpulse-intelligence-worker"]
-    mem_limit: 768m
-    cpus: 0.75
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    mem_limit: 4g
+    cpus: 4.0
+
+  ai-enrichment-worker:
+    image: footballpulse-runtime:local
+    logging: *default-logging
+    build:
+      context: .
+      dockerfile: services/runtime.Dockerfile
+    profiles: ["app"]
+    restart: unless-stopped
+    depends_on:
+      database-migrations:
+        condition: service_completed_successfully
+      mongodb-init:
+        condition: service_completed_successfully
+      intelligence-worker:
+        condition: service_started
+    environment:
+      <<: *app-database-env
+      FOOTBALLPULSE_ENV: ${FOOTBALLPULSE_ENV:-demo}
+      FOOTBALLPULSE_LOG_LEVEL: ${FOOTBALLPULSE_LOG_LEVEL:-INFO}
+      FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0
+      FOOTBALLPULSE_MONGODB_DB: ${FOOTBALLPULSE_MONGODB_DB:-footballpulse}
+      FOOTBALLPULSE_AI_PROVIDER: ${FOOTBALLPULSE_AI_PROVIDER:-kaggle}
+      FOOTBALLPULSE_AI_DETERMINISTIC_OFFLINE: ${FOOTBALLPULSE_AI_DETERMINISTIC_OFFLINE:-false}
+      FOOTBALLPULSE_AI_ALLOW_LOCAL_FALLBACK: ${FOOTBALLPULSE_AI_ALLOW_LOCAL_FALLBACK:-false}
+      FOOTBALLPULSE_AI_ALLOW_MOCK: ${FOOTBALLPULSE_AI_ALLOW_MOCK:-false}
+      FOOTBALLPULSE_MOCK_FIXTURE_PATH: ${FOOTBALLPULSE_MOCK_FIXTURE_PATH:-}
+      FOOTBALLPULSE_LOCAL_MODEL_PATH: ${FOOTBALLPULSE_LOCAL_MODEL_PATH:-}
+      FOOTBALLPULSE_LOCAL_MODEL_SHA256: ${FOOTBALLPULSE_LOCAL_MODEL_SHA256:-}
+      FOOTBALLPULSE_LOCAL_MODEL_VERSION: ${FOOTBALLPULSE_LOCAL_MODEL_VERSION:-Qwen3-4B-Instruct-GGUF-Q4_K_M}
+      FOOTBALLPULSE_LOCAL_MODEL_N_CTX: ${FOOTBALLPULSE_LOCAL_MODEL_N_CTX:-8192}
+      FOOTBALLPULSE_LOCAL_MODEL_N_THREADS: ${FOOTBALLPULSE_LOCAL_MODEL_N_THREADS:-8}
+      FOOTBALLPULSE_ENRICHMENT_BATCH_SIZE: ${FOOTBALLPULSE_ENRICHMENT_BATCH_SIZE:-10}
+      FOOTBALLPULSE_ENRICHMENT_POLL_SECONDS: ${FOOTBALLPULSE_ENRICHMENT_POLL_SECONDS:-30}
+      FOOTBALLPULSE_KAGGLE_DATASET_SLUG: ${FOOTBALLPULSE_KAGGLE_DATASET_SLUG}
+      FOOTBALLPULSE_KAGGLE_KERNEL_SLUG: ${FOOTBALLPULSE_KAGGLE_KERNEL_SLUG}
+      FOOTBALLPULSE_KAGGLE_MODEL_SOURCE: ${FOOTBALLPULSE_KAGGLE_MODEL_SOURCE}
+      KAGGLE_USERNAME: ${KAGGLE_USERNAME}
+      KAGGLE_API_TOKEN: ${KAGGLE_API_TOKEN}
+    command: ["footballpulse-ai-enrichment-worker"]
+    volumes:
+      - ai_batch_artifacts:/workspace/.footballpulse/ai-batches
+    mem_limit: 1g
+    cpus: 1.0
 
 volumes:
   kafka_data:
@@ -357,3 +417,5 @@ volumes:
   postgres_data:
   redis_data:
   fetch_artifacts:
+  huggingface_cache:
+  ai_batch_artifacts:

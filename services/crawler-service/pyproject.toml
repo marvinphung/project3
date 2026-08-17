@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.116,<1",
     "feedparser>=6.0,<7",
     "footballpulse-fetch-artifacts",
+    "footballpulse-runtime-config",
     "httpx>=0.28,<1",
     "pymongo>=4.16,<5",
     "psycopg[binary]>=3.3,<4",
@@ -18,6 +19,7 @@ dependencies = [
 
 [tool.uv.sources]
 footballpulse-fetch-artifacts = { workspace = true }
+footballpulse-runtime-config = { workspace = true }
 
 [project.scripts]
 footballpulse-crawler-service-health = "footballpulse_crawler_service.health:main"

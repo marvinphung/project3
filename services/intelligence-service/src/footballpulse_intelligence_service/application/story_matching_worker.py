@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
+
+from footballpulse_runtime_config import bind_log_context, log_event
 
 from footballpulse_intelligence_service.application.story_matching import (
     StoryMatchContextRetryableError,
@@ -19,6 +23,8 @@ from footballpulse_intelligence_service.domain.story_candidate_decision import (
     MatchAction,
     StoryCandidateRetryableError,
 )
+
+LOGGER = logging.getLogger("footballpulse.intelligence.story_matching")
 
 
 class StoryMatcher(Protocol):
@@ -81,17 +87,29 @@ class StoryMatchingWorker:
         self._clock = clock
 
     async def run(self, request: StoryMatchWorkRequest) -> StoryWorkResult:
+        started = time.monotonic()
         async with self._semaphore:
-            if self._processed_store is not None and self._processed_store.is_processed(
-                self._consumer_name, request.event_id
-            ):
-                return StoryWorkResult(
-                    request.event_id,
-                    StoryWorkStatus.SKIPPED_DUPLICATE,
-                    None,
-                    None,
-                    None,
+            with bind_log_context(correlation_id=str(request.event_id)):
+                log_event(
+                    LOGGER,
+                    "story_matching_started",
+                    event_id=str(request.event_id),
                 )
+                if self._processed_store is not None and self._processed_store.is_processed(
+                    self._consumer_name, request.event_id
+                ):
+                    log_event(
+                        LOGGER,
+                        "story_matching_duplicate_skipped",
+                        event_id=str(request.event_id),
+                    )
+                    return StoryWorkResult(
+                        request.event_id,
+                        StoryWorkStatus.SKIPPED_DUPLICATE,
+                        None,
+                        None,
+                        None,
+                    )
             try:
                 processed_event = (
                     ProcessedEvent.create(
@@ -105,15 +123,13 @@ class StoryMatchingWorker:
                     else None
                 )
                 if getattr(self._matcher, "handles_processed_events", False):
-                    result = await asyncio.to_thread(
-                        self._matcher.match,
+                    result = self._matcher.match(
                         request.request,
                         now=self._clock(),
                         processed_event=processed_event,
                     )
                 else:
-                    result = await asyncio.to_thread(
-                        self._matcher.match,
+                    result = self._matcher.match(
                         request.request,
                         now=self._clock(),
                     )
@@ -122,6 +138,13 @@ class StoryMatchingWorker:
                 StoryMatchContextRetryableError,
                 StoryConflictError,
             ) as error:
+                log_event(
+                    LOGGER,
+                    "story_matching_retryable",
+                    level=logging.WARNING,
+                    error=error,
+                    event_id=str(request.event_id),
+                )
                 return StoryWorkResult(
                     request.event_id,
                     StoryWorkStatus.RETRYABLE_FAILURE,
@@ -130,6 +153,13 @@ class StoryMatchingWorker:
                     self._clock(),
                 )
             except Exception as error:
+                log_event(
+                    LOGGER,
+                    "story_matching_failed",
+                    level=logging.ERROR,
+                    error=error,
+                    event_id=str(request.event_id),
+                )
                 return StoryWorkResult(
                     request.event_id,
                     StoryWorkStatus.FAILED,
@@ -157,4 +187,12 @@ class StoryMatchingWorker:
             MatchAction.CREATE: StoryWorkStatus.COMPLETED_CREATED,
             MatchAction.REVIEW: StoryWorkStatus.COMPLETED_REVIEW,
         }[result.decision.action]
+        log_event(
+            LOGGER,
+            "story_matching_completed",
+            event_id=str(request.event_id),
+            status=status.value,
+            action=result.decision.action.value,
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
         return StoryWorkResult(request.event_id, status, result, None, None)

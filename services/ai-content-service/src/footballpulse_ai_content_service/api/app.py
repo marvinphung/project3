@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from secrets import compare_digest
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, Header, HTTPException
+from footballpulse_runtime_config import RequestLoggingMiddleware
 from pydantic import BaseModel, Field
 
 from footballpulse_ai_content_service.contracts.batch import BatchRecord
 from footballpulse_ai_content_service.contracts.enrichment import ArticleEnrichmentInput
 from footballpulse_ai_content_service.providers.base import EnrichmentProvider
+
+LOGGER = logging.getLogger("footballpulse.ai.http")
 
 
 class EnrichmentBatchRequest(BaseModel):
@@ -128,6 +132,8 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="FootballPulse AI Content Service", version="0.1.0")
     batches = registry or EnrichmentBatchRegistry(provider=provider)
+
+    app.add_middleware(RequestLoggingMiddleware, logger=LOGGER)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

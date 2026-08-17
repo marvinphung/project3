@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -13,6 +14,7 @@ from footballpulse_content_service.editorial.postgres_repository import (
     PostgresEditorialRevisionRepository,
 )
 from footballpulse_content_service.editorial.publication import PublicationService
+from footballpulse_runtime_config import configure_logging, log_event
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
@@ -29,6 +31,8 @@ from footballpulse_api_gateway.persistence.identity_repository import PostgresUs
 from footballpulse_api_gateway.persistence.public_read_repository import (
     PostgresPublicReadRepository,
 )
+
+LOGGER = logging.getLogger("footballpulse.api_gateway")
 
 
 def database_url(environment: Mapping[str, str]) -> str:
@@ -100,6 +104,12 @@ def _bootstrap_user(
 
 
 def main() -> None:
+    configure_logging(
+        service="api-gateway",
+        level=os.getenv("FOOTBALLPULSE_LOG_LEVEL", "INFO"),
+        force=True,
+    )
+    log_event(LOGGER, "service_started", host=os.getenv("FOOTBALLPULSE_API_HOST", "127.0.0.1"))
     uvicorn.run(
         "footballpulse_api_gateway.runtime:app",
         host=os.getenv("FOOTBALLPULSE_API_HOST", "127.0.0.1"),

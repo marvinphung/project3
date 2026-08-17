@@ -1,1 +1,1 @@
-"""Application workflows for AI content."""
+"""Application orchestration for AI content processing."""

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 from uuid import UUID
+
+from footballpulse_runtime_config import bind_log_context, log_event
 
 from footballpulse_intelligence_service.application.entity_extraction import (
     EntityExtractionResult,
@@ -13,6 +17,8 @@ from footballpulse_intelligence_service.application.entity_extraction import (
 )
 from footballpulse_intelligence_service.domain.embedding import EmbeddingInput, EmbeddingRecord
 from footballpulse_intelligence_service.domain.entity import Entity, EntityType
+
+LOGGER = logging.getLogger("footballpulse.intelligence.preprocessing")
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,9 +105,23 @@ class ArticlePreprocessingWorker:
         if not 1 <= limit <= 256:
             raise ValueError("preprocessing limit must be between 1 and 256")
         articles = self._source_repository.claim_pending(limit=limit)
+        log_event(
+            LOGGER,
+            "intelligence_batch_claimed" if articles else "intelligence_batch_empty",
+            claimed=len(articles),
+            limit=limit,
+        )
         completed = 0
         failed = 0
         for article in articles:
+            started = time.monotonic()
+            with bind_log_context(correlation_id=str(article.article_version_id)):
+                log_event(
+                    LOGGER,
+                    "article_intelligence_started",
+                    article_version_id=str(article.article_version_id),
+                    content_chars=len(article.cleaned_content),
+                )
             try:
                 self._process_article(article)
                 completed += 1
@@ -114,6 +134,21 @@ class ArticlePreprocessingWorker:
                     )
                 )
                 failed += 1
+                log_event(
+                    LOGGER,
+                    "article_intelligence_failed",
+                    level=logging.ERROR,
+                    error=error,
+                    article_version_id=str(article.article_version_id),
+                    duration_ms=round((time.monotonic() - started) * 1000),
+                )
+            else:
+                log_event(
+                    LOGGER,
+                    "article_intelligence_completed",
+                    article_version_id=str(article.article_version_id),
+                    duration_ms=round((time.monotonic() - started) * 1000),
+                )
         return PreprocessingReport(len(articles), completed, failed)
 
     def _process_article(self, article: SourceArticle) -> None:
@@ -123,6 +158,17 @@ class ArticlePreprocessingWorker:
                 article.title,
                 article.cleaned_content,
             )
+        )
+        log_event(
+            LOGGER,
+            "entity_extraction_completed",
+            article_version_id=str(article.article_version_id),
+            model_name=extraction.model_name,
+            model_version=extraction.model_version,
+            mention_count=len(extraction.mentions),
+            resolved_count=sum(
+                mention.status is ResolutionStatus.RESOLVED for mention in extraction.mentions
+            ),
         )
         entities_by_id: dict[UUID, Entity] = {}
         for mention in extraction.mentions:
@@ -151,6 +197,13 @@ class ArticlePreprocessingWorker:
         if len(embeddings) != 1:
             raise ValueError("embedding pipeline returned an unexpected result count")
         embedding = embeddings[0]
+        log_event(
+            LOGGER,
+            "embedding_completed",
+            article_version_id=str(article.article_version_id),
+            embedding_id=str(embedding.id),
+            entity_count=len(entities),
+        )
         self._source_repository.save_result(
             ArticleIntelligenceResult(
                 article.article_version_id,

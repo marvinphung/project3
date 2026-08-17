@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import logging
 import re
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from importlib import import_module
 from typing import Protocol, cast
+
+from footballpulse_runtime_config import log_event
 
 from footballpulse_intelligence_service.application.entity_extraction import ModelSpan
 from footballpulse_intelligence_service.domain.entity import EntityType
 from footballpulse_intelligence_service.domain.extraction import EntityLabel
 
 DEFAULT_GLINER_MODEL = "urchade/gliner_small-v2.1"
+LOGGER = logging.getLogger("footballpulse.intelligence.entity_model")
 
 _ENTITY_LABELS = {
     EntityType.PLAYER: EntityLabel.PLAYER,
@@ -65,8 +70,16 @@ class GlinerEntityExtractor:
             raise ValueError("GLiNER threshold must be between 0 and 1")
         model = self._model
         if model is None:
+            started = time.monotonic()
+            log_event(LOGGER, "entity_model_loading", model=self._model_id)
             model = self._model_loader(self._model_id)
             self._model = model
+            log_event(
+                LOGGER,
+                "entity_model_loaded",
+                model=self._model_id,
+                duration_ms=round((time.monotonic() - started) * 1000),
+            )
         raw_predictions = model.predict_entities(
             text,
             [label.value for label in labels],

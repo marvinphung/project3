@@ -47,7 +47,7 @@ class EntityExtractionWorker:
     async def run(self, request: ExtractionRequest) -> EntityWorkResult:
         async with self._semaphore:
             try:
-                result = await asyncio.to_thread(self._pipeline.process, request)
+                result = self._pipeline.process(request)
             except Exception as error:
                 return EntityWorkResult(
                     EntityWorkStatus.ENTITY_EXTRACTION_FAILED,

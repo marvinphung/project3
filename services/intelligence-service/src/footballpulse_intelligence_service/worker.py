@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 import time
 from datetime import UTC, datetime
 
+from footballpulse_runtime_config import configure_logging
 from pymongo import MongoClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
@@ -55,10 +55,11 @@ def _database_url() -> URL:
 
 
 def _log(event: str, **fields: object) -> None:
-    LOGGER.info(json.dumps({"event": event, **fields}, default=str, ensure_ascii=False))
+    LOGGER.info(event, extra={"event_name": event, "event_fields": fields})
 
 
 def create_worker() -> tuple[ArticlePreprocessingWorker, MongoClient[dict[str, object]]]:
+    _log("intelligence_dependencies_initializing")
     engine = create_engine(_database_url(), pool_pre_ping=True)
     mongo_client: MongoClient[dict[str, object]] = MongoClient(
         os.getenv(
@@ -77,6 +78,11 @@ def create_worker() -> tuple[ArticlePreprocessingWorker, MongoClient[dict[str, o
     entity_mode = os.getenv("FOOTBALLPULSE_ENTITY_PROVIDER", "catalog").casefold()
     extractor: EntityExtractor
     if entity_mode == "gliner":
+        _log(
+            "entity_provider_configured",
+            provider=entity_mode,
+            model=os.getenv("FOOTBALLPULSE_GLINER_MODEL", "urchade/gliner_small-v2.1"),
+        )
         extractor = GlinerEntityExtractor(
             model_id=os.getenv("FOOTBALLPULSE_GLINER_MODEL", "urchade/gliner_small-v2.1")
         )
@@ -92,6 +98,11 @@ def create_worker() -> tuple[ArticlePreprocessingWorker, MongoClient[dict[str, o
     embedding_mode = os.getenv("FOOTBALLPULSE_EMBEDDING_PROVIDER", "mock").casefold()
     embedder: EmbeddingAdapter
     if embedding_mode == "bge":
+        _log(
+            "embedding_provider_configured",
+            provider=embedding_mode,
+            model=os.getenv("FOOTBALLPULSE_BGE_MODEL", "BAAI/bge-small-en-v1.5"),
+        )
         embedder = BgeEmbeddingAdapter(
             model_id=os.getenv("FOOTBALLPULSE_BGE_MODEL", "BAAI/bge-small-en-v1.5")
         )
@@ -123,9 +134,10 @@ def create_worker() -> tuple[ArticlePreprocessingWorker, MongoClient[dict[str, o
 
 
 def main() -> None:
-    logging.basicConfig(
+    configure_logging(
+        service="intelligence-worker",
         level=os.getenv("FOOTBALLPULSE_LOG_LEVEL", "INFO").upper(),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        force=True,
     )
     limit = int(os.getenv("FOOTBALLPULSE_INTELLIGENCE_BATCH_SIZE", "50"))
     poll_seconds = float(os.getenv("FOOTBALLPULSE_INTELLIGENCE_POLL_SECONDS", "30"))
@@ -134,6 +146,7 @@ def main() -> None:
     _log("intelligence_worker_started", batch_size=limit, run_once=run_once)
     try:
         while True:
+            _log("intelligence_poll_started", batch_size=limit)
             report = worker.run_once(limit=limit)
             _log(
                 "intelligence_batch_completed",
@@ -146,6 +159,7 @@ def main() -> None:
             time.sleep(poll_seconds)
     finally:
         mongo_client.close()
+        _log("intelligence_worker_stopped")
 
 
 if __name__ == "__main__":

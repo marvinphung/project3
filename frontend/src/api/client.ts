@@ -40,19 +40,40 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 const CRAWLER_API_BASE_URL = import.meta.env.VITE_CRAWLER_API_BASE_URL ?? ''
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: { Accept: 'application/json', ...init?.headers },
-  })
+  const started = performance.now()
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: { Accept: 'application/json', ...init?.headers },
+    })
+  } catch (error) {
+    logUiEvent('api_request_failed', 'error', {
+      method: init?.method ?? 'GET',
+      path,
+      error_type: error instanceof Error ? error.name : 'UnknownError',
+      duration_ms: Math.round(performance.now() - started),
+    })
+    throw error
+  }
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as
       | { error?: { code?: string; message?: string } }
       | null
-    throw new ApiError(
+    const apiError = new ApiError(
       response.status,
       body?.error?.code ?? 'REQUEST_FAILED',
       body?.error?.message ?? 'Không thể tải dữ liệu',
     )
+    logUiEvent(response.status === 401 ? 'authentication_failed' : 'api_request_failed', 'error', {
+      method: init?.method ?? 'GET',
+      path,
+      status_code: response.status,
+      error_code: apiError.code,
+      request_id: response.headers.get('X-Request-ID'),
+      duration_ms: Math.round(performance.now() - started),
+    })
+    throw apiError
   }
   return (await response.json()) as T
 }
@@ -208,3 +229,4 @@ export function getEntityStories(entityType: string, entitySlug: string) {
     `/api/v1/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entitySlug)}/stories`,
   )
 }
+import { logUiEvent } from '../observability'

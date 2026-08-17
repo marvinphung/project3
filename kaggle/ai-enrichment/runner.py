@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
+import sys
+import time
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,6 +25,21 @@ MAX_INPUT_TOKENS = 24_576
 MAX_CHUNK_WORDS = 1_200
 CHUNK_OVERLAP_WORDS = 150
 REQUIRED_RESULT_FIELDS = frozenset({"event_type", "summary_en", "claims"})
+LOGGER = logging.getLogger("footballpulse.kaggle.runner")
+
+
+def configure_runner_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        stream=sys.stdout,
+        force=True,
+    )
+
+
+def log_progress(event: str, **fields: object) -> None:
+    detail = " ".join(f"{name}={value}" for name, value in fields.items())
+    LOGGER.info("%s%s", event, f" {detail}" if detail else "")
 
 
 def utc_now() -> datetime:
@@ -29,17 +47,24 @@ def utc_now() -> datetime:
 
 
 def find_batch_files(root: Path) -> tuple[Path, Path]:
+    log_progress("input_batch_search_started", root=root)
     candidates = [
         (manifest, manifest.with_name("articles.jsonl"))
-        for manifest in root.glob("*/manifest.json")
+        for manifest in root.rglob("manifest.json")
         if manifest.with_name("articles.jsonl").is_file()
     ]
     if len(candidates) != 1:
         raise RuntimeError(f"expected exactly one batch dataset, found {len(candidates)}")
+    log_progress(
+        "input_batch_found",
+        manifest=candidates[0][0],
+        articles=candidates[0][1],
+    )
     return candidates[0]
 
 
 def find_model_path(root: Path) -> Path:
+    log_progress("model_search_started", root=root)
     candidates: list[Path] = []
     for config_path in root.glob("**/config.json"):
         try:
@@ -51,6 +76,7 @@ def find_model_path(root: Path) -> Path:
     unique = sorted(set(candidates))
     if len(unique) != 1:
         raise RuntimeError(f"expected exactly one Qwen3 model input, found {len(unique)}")
+    log_progress("model_found", path=unique[0])
     return unique[0]
 
 
@@ -141,7 +167,10 @@ def prompt_for(article: dict[str, Any], *, repair_text: str | None = None) -> st
 def load_model(model_path: Path) -> tuple[Any, Any]:
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
+    started = time.monotonic()
+    log_progress("tokenizer_loading", model_path=model_path)
     tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+    log_progress("model_loading", model_path=model_path)
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
         device_map="auto",
@@ -149,6 +178,7 @@ def load_model(model_path: Path) -> tuple[Any, Any]:
         local_files_only=True,
     )
     model.eval()
+    log_progress("model_ready", duration_seconds=round(time.monotonic() - started, 2))
     return tokenizer, model
 
 
@@ -197,7 +227,20 @@ def process_article(
 ) -> dict[str, Any]:
     extracted_chunks: list[dict[str, Any]] = []
     global_claims: list[dict[str, Any]] = []
-    for start, chunk_text in content_chunks(article["cleaned_content"]):
+    chunks = content_chunks(article["cleaned_content"])
+    log_progress(
+        "article_chunking_completed",
+        article_version_id=article["article_version_id"],
+        chunk_count=len(chunks),
+    )
+    for chunk_number, (start, chunk_text) in enumerate(chunks, start=1):
+        chunk_started = time.monotonic()
+        log_progress(
+            "article_chunk_started",
+            article_version_id=article["article_version_id"],
+            chunk_number=chunk_number,
+            chunk_total=len(chunks),
+        )
         end = start + len(chunk_text)
         chunk_mentions = [
             {
@@ -214,6 +257,13 @@ def process_article(
             "unresolved_mentions": chunk_mentions,
         }
         extracted = extract_chunk(tokenizer, model, chunk_article)
+        log_progress(
+            "article_chunk_completed",
+            article_version_id=article["article_version_id"],
+            chunk_number=chunk_number,
+            claims=len(extracted["claims"]),
+            duration_seconds=round(time.monotonic() - chunk_started, 2),
+        )
         extracted_chunks.append(extracted)
         for claim_value in extracted["claims"]:
             if not isinstance(claim_value, dict):
@@ -267,7 +317,10 @@ def error_record(article: dict[str, Any], error: Exception) -> dict[str, Any]:
 
 
 def main() -> None:
+    configure_runner_logging()
     started_at = utc_now()
+    run_started = time.monotonic()
+    log_progress("enrichment_run_started", input_root=INPUT_ROOT, output_root=OUTPUT_ROOT)
     manifest_path, articles_path = find_batch_files(INPUT_ROOT)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     articles_sha256 = hashlib.sha256(articles_path.read_bytes()).hexdigest()
@@ -283,8 +336,15 @@ def main() -> None:
         articles_path.open(encoding="utf-8") as source,
         (OUTPUT_ROOT / "results.jsonl").open("w", encoding="utf-8") as destination,
     ):
-        for line in source:
+        for article_number, line in enumerate(source, start=1):
             article = json.loads(line)
+            article_started = time.monotonic()
+            log_progress(
+                "article_started",
+                article_number=article_number,
+                article_total=manifest["article_count"],
+                article_version_id=article.get("article_version_id"),
+            )
             try:
                 record = process_article(
                     tokenizer,
@@ -294,9 +354,26 @@ def main() -> None:
                     prompt_version=manifest["prompt_version"],
                 )
                 success_count += 1
+                log_progress(
+                    "article_completed",
+                    article_number=article_number,
+                    article_total=manifest["article_count"],
+                    article_version_id=article.get("article_version_id"),
+                    claim_count=len(record["result"]["claims"]),
+                    duration_seconds=round(time.monotonic() - article_started, 2),
+                )
             except Exception as error:  # noqa: BLE001 - one bad article must not abort the batch
                 record = error_record(article, error)
                 error_count += 1
+                LOGGER.exception(
+                    "article_failed article_number=%s article_total=%s article_version_id=%s "
+                    "error_type=%s duration_seconds=%s",
+                    article_number,
+                    manifest["article_count"],
+                    article.get("article_version_id"),
+                    type(error).__name__,
+                    round(time.monotonic() - article_started, 2),
+                )
             destination.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
             destination.flush()
 
@@ -314,6 +391,15 @@ def main() -> None:
     (OUTPUT_ROOT / "job-report.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+    )
+    log_progress(
+        "enrichment_run_completed",
+        article_count=manifest["article_count"],
+        success_count=success_count,
+        error_count=error_count,
+        duration_seconds=round(time.monotonic() - run_started, 2),
+        results_path=OUTPUT_ROOT / "results.jsonl",
+        report_path=OUTPUT_ROOT / "job-report.json",
     )
 
 

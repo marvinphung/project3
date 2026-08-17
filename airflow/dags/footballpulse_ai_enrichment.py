@@ -3,16 +3,23 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from datetime import datetime
 from urllib.request import Request, urlopen
+
+LOGGER = logging.getLogger("footballpulse.airflow.ai_enrichment")
 
 
 def trigger_enrichment_batch(
     *, ai_url: str, collection_batch_ids: list[str], window_started_at: datetime
 ) -> str:
     """Ask the AI service to process a collection batch and return its batch ID."""
+    LOGGER.info(
+        "enrichment_submission_started collection_batch_count=%s",
+        len(collection_batch_ids),
+    )
     token = os.environ.get("FOOTBALLPULSE_AI_INTERNAL_TOKEN", "")
     payload = json.dumps(
         {
@@ -27,7 +34,9 @@ def trigger_enrichment_batch(
         method="POST",
     )
     with urlopen(request, timeout=30) as response:  # noqa: S310 - configured local URL
-        return json.loads(response.read())["id"]
+        batch_id = json.loads(response.read())["id"]
+    LOGGER.info("enrichment_submission_completed batch_id=%s", batch_id)
+    return batch_id
 
 
 def poll_enrichment_batch(*, ai_url: str, batch_id: str) -> dict[str, object]:
@@ -46,7 +55,14 @@ def wait_for_terminal_batch(
     terminal = {"COMPLETED", "PARTIAL", "FAILED_RETRYABLE", "FAILED_TERMINAL"}
     for attempt in range(max_attempts):
         result = poll_enrichment_batch(ai_url=ai_url, batch_id=batch_id)
+        LOGGER.info(
+            "enrichment_status_polled batch_id=%s attempt=%s status=%s",
+            batch_id,
+            attempt + 1,
+            result.get("status"),
+        )
         if result.get("status") in terminal:
+            LOGGER.info("enrichment_terminal batch_id=%s status=%s", batch_id, result.get("status"))
             return result
         if attempt + 1 < max_attempts:
             time.sleep(delay_seconds)

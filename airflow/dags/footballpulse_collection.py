@@ -7,10 +7,13 @@ source selection, RSS/HTML fetching, normalization, and idempotent batches.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+LOGGER = logging.getLogger("footballpulse.airflow.collection")
 
 
 def batch_idempotency_key(source_id: str, window_started_at: datetime) -> str:
@@ -23,6 +26,7 @@ def trigger_crawler_batches(
     """Open one idempotent batch per source and return created batch IDs."""
     token = os.environ.get("FOOTBALLPULSE_CRAWLER_ADMIN_TOKEN", "")
     created: list[str] = []
+    LOGGER.info("crawl_batch_submission_started source_count=%s", len(source_ids))
     for source_id in source_ids:
         payload = json.dumps(
             {"idempotency_key": batch_idempotency_key(source_id, window_started_at)}
@@ -38,6 +42,8 @@ def trigger_crawler_batches(
         )
         with urlopen(request, timeout=30) as response:  # noqa: S310 - configured local URL
             created.append(json.loads(response.read())["id"])
+        LOGGER.info("crawl_batch_submitted source_id=%s batch_id=%s", source_id, created[-1])
+    LOGGER.info("crawl_batch_submission_completed batch_count=%s", len(created))
     return created
 
 
@@ -50,7 +56,9 @@ def fetch_due_source_ids(*, crawler_url: str, at: datetime) -> list[str]:
         headers={"Authorization": f"Bearer {token}"},
     )
     with urlopen(request, timeout=30) as response:  # noqa: S310 - configured local URL
-        return [item["id"] for item in json.loads(response.read())["items"]]
+        source_ids = [item["id"] for item in json.loads(response.read())["items"]]
+    LOGGER.info("due_sources_loaded source_count=%s", len(source_ids))
+    return source_ids
 
 
 try:

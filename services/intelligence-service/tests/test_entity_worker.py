@@ -47,7 +47,7 @@ def _request() -> ExtractionRequest:
     return ExtractionRequest(uuid4(), "Title", "Article content")
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_worker_enforces_cpu_concurrency_limit() -> None:
     pipeline = ConcurrencyRecordingPipeline()
     worker = EntityExtractionWorker(pipeline, max_concurrency=1)
@@ -58,7 +58,7 @@ async def test_worker_enforces_cpu_concurrency_limit() -> None:
     assert pipeline.max_active == 1
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_worker_returns_explicit_failure_without_mock_fallback() -> None:
     pipeline = ConcurrencyRecordingPipeline(fail=True)
     worker = EntityExtractionWorker(

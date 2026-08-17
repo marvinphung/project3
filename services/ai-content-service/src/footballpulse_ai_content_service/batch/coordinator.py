@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -7,6 +8,8 @@ from pathlib import Path
 from time import monotonic, sleep
 from typing import Protocol
 from uuid import UUID
+
+from footballpulse_runtime_config import log_event
 
 from footballpulse_ai_content_service.batch.artifacts import BatchArtifacts
 from footballpulse_ai_content_service.batch.domain import AiBatchManifest, AiBatchStatus
@@ -24,6 +27,8 @@ from footballpulse_ai_content_service.validation.grounding import (
     GroundingResult,
     GroundingValidator,
 )
+
+LOGGER = logging.getLogger("footballpulse.ai.kaggle_coordinator")
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +130,10 @@ class KaggleBatchCoordinator:
             now=self._clock(),
             lease_seconds=self._lease_seconds,
         ):
+            log_event(LOGGER, "batch_lease_unavailable", batch_id=str(batch_id))
             return None
+
+        log_event(LOGGER, "batch_lease_acquired", batch_id=str(batch_id))
 
         current = self._jobs.get_status(batch_id)
         try:
@@ -141,11 +149,15 @@ class KaggleBatchCoordinator:
                     target=artifacts.directory,
                     dataset_slug=self._dataset_slug,
                 )
+                log_event(LOGGER, "kaggle_dataset_upload_started", batch_id=str(batch_id))
                 self._cli.upload_dataset(artifacts.directory, batch_id=str(batch_id))
+                log_event(LOGGER, "kaggle_dataset_upload_completed", batch_id=str(batch_id))
                 current = self._transition(batch_id, current, AiBatchStatus.DATASET_UPLOADED)
 
             if current is AiBatchStatus.DATASET_UPLOADED:
+                log_event(LOGGER, "kaggle_kernel_push_started", batch_id=str(batch_id))
                 self._cli.submit_kernel(kernel_path, accelerator=accelerator)
+                log_event(LOGGER, "kaggle_kernel_push_completed", batch_id=str(batch_id))
                 current = self._transition(batch_id, current, AiBatchStatus.KERNEL_SUBMITTED)
 
             if current in {AiBatchStatus.KERNEL_SUBMITTED, AiBatchStatus.RUNNING}:
@@ -153,7 +165,9 @@ class KaggleBatchCoordinator:
                 current = self._transition(batch_id, current, AiBatchStatus.DOWNLOADING)
 
             if current is AiBatchStatus.DOWNLOADING:
+                log_event(LOGGER, "kaggle_output_download_started", batch_id=str(batch_id))
                 self._cli.download_output(self._kernel_slug, artifacts.directory)
+                log_event(LOGGER, "kaggle_output_download_completed", batch_id=str(batch_id))
                 current = self._transition(batch_id, current, AiBatchStatus.IMPORTING)
 
             if current is not AiBatchStatus.IMPORTING:
@@ -201,6 +215,13 @@ class KaggleBatchCoordinator:
                     error_detail=str(error)[:500],
                 )
             self._sink.persist(grounded)
+            log_event(
+                LOGGER,
+                "enrichment_results_imported",
+                batch_id=str(batch_id),
+                success_count=len(outcome.successes),
+                error_count=len(outcome.retry_article_ids),
+            )
             target = AiBatchStatus.PARTIAL if outcome.retry_article_ids else AiBatchStatus.COMPLETED
             return self._transition(
                 batch_id,
@@ -232,6 +253,7 @@ class KaggleBatchCoordinator:
             )
         finally:
             self._jobs.release_lease(owner=self._worker_id)
+            log_event(LOGGER, "batch_lease_released", batch_id=str(batch_id))
 
     def _await_kernel(self, batch_id: UUID, current: AiBatchStatus) -> AiBatchStatus:
         started_at = self._monotonic()
@@ -243,6 +265,14 @@ class KaggleBatchCoordinator:
             ):
                 raise KaggleCliError("Kaggle single-flight lease was lost")
             state = self._cli.kernel_status(self._kernel_slug)
+            elapsed = self._monotonic() - started_at
+            log_event(
+                LOGGER,
+                "kaggle_job_status_polled",
+                batch_id=str(batch_id),
+                status=state.value,
+                elapsed_seconds=round(elapsed, 1),
+            )
             if state is KaggleKernelState.COMPLETE:
                 return current
             if state is KaggleKernelState.ERROR:
@@ -251,7 +281,7 @@ class KaggleBatchCoordinator:
                 raise KaggleCliError("Kaggle kernel returned an unknown status")
             if state is KaggleKernelState.RUNNING and current is AiBatchStatus.KERNEL_SUBMITTED:
                 current = self._transition(batch_id, current, AiBatchStatus.RUNNING)
-            if self._monotonic() - started_at >= self._poll_budget_seconds:
+            if elapsed >= self._poll_budget_seconds:
                 raise TimeoutError("Kaggle kernel exceeded poll budget")
             self._sleep(self._poll_interval_seconds)
 
@@ -275,6 +305,16 @@ class KaggleBatchCoordinator:
             error_count=error_count,
             error_code=error_code,
             error_detail=error_detail,
+        )
+        log_event(
+            LOGGER,
+            "batch_status_transitioned",
+            batch_id=str(batch_id),
+            previous_status=expected.value,
+            status=target.value,
+            success_count=success_count,
+            error_count=error_count,
+            error_code=error_code,
         )
         return target
 

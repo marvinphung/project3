@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import datetime
 from uuid import UUID
 
+from footballpulse_runtime_config import log_event
+
 from footballpulse_content_service.editorial.repository import EditorialRevisionStore
 from footballpulse_content_service.editorial.revision import EditorialRevision
+
+LOGGER = logging.getLogger("footballpulse.content.editorial")
 
 
 class EditorialWorkflow:
@@ -78,4 +83,12 @@ class EditorialWorkflow:
             raise ValueError("editorial revision does not exist")
         updated = transition(current)
         self._repository.update(updated, expected_revision_number=expected_revision_number)
+        log_event(
+            LOGGER,
+            "editorial_revision_transitioned",
+            generated_article_id=str(generated_article_id),
+            previous_status=current.state.value,
+            status=updated.state.value,
+            revision_number=updated.revision_number,
+        )
         return updated

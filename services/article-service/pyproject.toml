@@ -6,6 +6,7 @@ dependencies = [
     "confluent-kafka>=2.15,<3",
     "footballpulse-event-contracts",
     "footballpulse-fetch-artifacts",
+    "footballpulse-runtime-config",
     "pydantic>=2.12,<3",
     "pymongo>=4.16,<5",
 ]
@@ -13,6 +14,7 @@ dependencies = [
 [tool.uv.sources]
 footballpulse-event-contracts = { workspace = true }
 footballpulse-fetch-artifacts = { workspace = true }
+footballpulse-runtime-config = { workspace = true }
 
 [project.scripts]
 footballpulse-article-service-health = "footballpulse_article_service.health:main"

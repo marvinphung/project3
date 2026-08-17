@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from importlib import import_module
 from threading import Lock
 from typing import Protocol, cast
+
+from footballpulse_runtime_config import log_event
 
 from footballpulse_intelligence_service.domain.embedding import (
     EMBEDDING_DIMENSIONS,
@@ -15,6 +19,7 @@ from footballpulse_intelligence_service.domain.embedding import (
 
 DEFAULT_BGE_MODEL = "BAAI/bge-small-en-v1.5"
 MAX_BGE_TOKENS = 512
+LOGGER = logging.getLogger("footballpulse.intelligence.embedding_model")
 
 
 class Tokenizer(Protocol):
@@ -94,7 +99,15 @@ class BgeEmbeddingAdapter:
         if self._model is None:
             with self._load_lock:
                 if self._model is None:
+                    started = time.monotonic()
+                    log_event(LOGGER, "embedding_model_loading", model=self._model_id)
                     self._model = self._model_loader(self._model_id)
+                    log_event(
+                        LOGGER,
+                        "embedding_model_loaded",
+                        model=self._model_id,
+                        duration_ms=round((time.monotonic() - started) * 1000),
+                    )
         return self._model
 
     def encode(

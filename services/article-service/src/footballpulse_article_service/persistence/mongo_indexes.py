@@ -40,16 +40,16 @@ _INDEX_DEFINITIONS: Final = {
         IndexDefinition(
             name="uq_article_enrichments_run",
             keys=(
-                ("article_id", ASCENDING),
+                ("article_version_id", ASCENDING),
                 ("input_hash", ASCENDING),
-                ("model", ASCENDING),
+                ("model_version", ASCENDING),
                 ("prompt_version", ASCENDING),
             ),
             unique=True,
         ),
         IndexDefinition(
             name="ix_article_enrichments_status_processed",
-            keys=(("validation_status", ASCENDING), ("processed_at", DESCENDING)),
+            keys=(("validation_status", ASCENDING), ("validated_at", DESCENDING)),
         ),
     ),
     "duplicate_links": (
@@ -93,6 +93,13 @@ COLLECTION_NAMES = tuple(_INDEX_DEFINITIONS)
 
 def bootstrap_indexes(database: Database[dict[str, object]]) -> None:
     for collection_name, definitions in INDEX_DEFINITIONS.items():
-        database[collection_name].create_indexes(
-            [definition.to_index_model() for definition in definitions]
-        )
+        collection = database[collection_name]
+        existing = collection.index_information()
+        for definition in definitions:
+            current = existing.get(definition.name)
+            if current is None:
+                continue
+            current_keys = tuple((name, direction) for name, direction in current["key"])
+            if current_keys != definition.keys or bool(current.get("unique")) != definition.unique:
+                collection.drop_index(definition.name)
+        collection.create_indexes([definition.to_index_model() for definition in definitions])

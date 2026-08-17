@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import logging
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from secrets import compare_digest
 from typing import Annotated, Any
@@ -11,6 +12,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from footballpulse_runtime_config import RequestLoggingMiddleware
 from pydantic import AwareDatetime
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -45,6 +47,7 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: {"model": ErrorEnvelope},
 }
 BEARER_SCHEME = HTTPBearer(auto_error=False)
+LOGGER = logging.getLogger("footballpulse.crawler.http")
 
 
 class AuthenticationError(Exception):
@@ -60,8 +63,8 @@ def error_response(
     return JSONResponse(status_code=status_code, content=envelope.model_dump(mode="json"))
 
 
-def bearer_dependency(expected_token: str) -> Callable[..., None]:
-    def authorize(
+def bearer_dependency(expected_token: str) -> Callable[..., Awaitable[None]]:
+    async def authorize(
         credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(BEARER_SCHEME)],
     ) -> None:
         if credentials is None or not compare_digest(credentials.credentials, expected_token):
@@ -80,9 +83,11 @@ def create_app(
     app = FastAPI(title="FootballPulse Crawler Service", version="0.1.0")
     admin_auth = bearer_dependency(admin_token)
     internal_auth = bearer_dependency(internal_token)
+    app.add_middleware(RequestLoggingMiddleware, logger=LOGGER)
+
 
     @app.get("/health", include_in_schema=False)
-    def health() -> dict[str, str]:
+    async def health() -> dict[str, str]:
         return liveness()
 
     @app.exception_handler(AuthenticationError)
@@ -119,7 +124,7 @@ def create_app(
         responses=ERROR_RESPONSES,
         dependencies=[Depends(admin_auth)],
     )
-    def create_source(request: SourceConfigurationRequest) -> SourceResponse:
+    async def create_source(request: SourceConfigurationRequest) -> SourceResponse:
         return SourceResponse.from_domain(source_service.create(request.to_domain()))
 
     @app.get(
@@ -128,7 +133,7 @@ def create_app(
         responses=ERROR_RESPONSES,
         dependencies=[Depends(admin_auth)],
     )
-    def list_sources(
+    async def list_sources(
         limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)
     ) -> SourceListResponse:
         return SourceListResponse(
@@ -144,7 +149,7 @@ def create_app(
         responses=ERROR_RESPONSES,
         dependencies=[Depends(admin_auth)],
     )
-    def update_source(source_id: UUID, request: SourceUpdateRequest) -> SourceResponse:
+    async def update_source(source_id: UUID, request: SourceUpdateRequest) -> SourceResponse:
         return SourceResponse.from_domain(
             source_service.update(
                 source_id,
@@ -159,7 +164,7 @@ def create_app(
         responses=ERROR_RESPONSES,
         dependencies=[Depends(admin_auth)],
     )
-    def toggle_source(source_id: UUID, request: SourceToggleRequest) -> SourceResponse:
+    async def toggle_source(source_id: UUID, request: SourceToggleRequest) -> SourceResponse:
         return SourceResponse.from_domain(
             source_service.toggle(
                 source_id,
@@ -175,7 +180,7 @@ def create_app(
         responses=ERROR_RESPONSES,
         dependencies=[Depends(admin_auth)],
     )
-    def trigger_crawl(source_id: UUID, request: CrawlTriggerRequest) -> CrawlBatchResponse:
+    async def trigger_crawl(source_id: UUID, request: CrawlTriggerRequest) -> CrawlBatchResponse:
         return CrawlBatchResponse.from_domain(
             batch_service.open(
                 source_id=source_id,
@@ -190,7 +195,7 @@ def create_app(
         responses=ERROR_RESPONSES,
         dependencies=[Depends(admin_auth)],
     )
-    def get_crawl_batch(batch_id: UUID) -> CrawlBatchResponse:
+    async def get_crawl_batch(batch_id: UUID) -> CrawlBatchResponse:
         batch = batch_service.get(batch_id)
         return CrawlBatchResponse.from_domain(batch)
 
@@ -200,7 +205,7 @@ def create_app(
         responses=ERROR_RESPONSES,
         dependencies=[Depends(internal_auth)],
     )
-    def due_sources(
+    async def due_sources(
         at: Annotated[AwareDatetime, Query()], limit: int = Query(100, ge=1, le=200)
     ) -> SourceListResponse:
         return SourceListResponse(
@@ -217,7 +222,7 @@ def create_app(
         responses=ERROR_RESPONSES,
         dependencies=[Depends(internal_auth)],
     )
-    def open_batch(request: CrawlBatchOpenRequest) -> CrawlBatchResponse:
+    async def open_batch(request: CrawlBatchOpenRequest) -> CrawlBatchResponse:
         return CrawlBatchResponse.from_domain(
             batch_service.open(
                 source_id=request.source_id,
@@ -232,7 +237,9 @@ def create_app(
         responses=ERROR_RESPONSES,
         dependencies=[Depends(internal_auth)],
     )
-    def complete_batch(batch_id: UUID, request: CrawlBatchCompleteRequest) -> CrawlBatchResponse:
+    async def complete_batch(
+        batch_id: UUID, request: CrawlBatchCompleteRequest
+    ) -> CrawlBatchResponse:
         return CrawlBatchResponse.from_domain(
             batch_service.complete(
                 batch_id,

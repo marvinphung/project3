@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -14,6 +16,7 @@ from footballpulse_event_contracts.article import (
     ArticleDiscoveredEvent,
 )
 from footballpulse_fetch_artifacts.filesystem import FetchArtifact
+from footballpulse_runtime_config import bind_log_context, log_event
 from pydantic import HttpUrl
 
 from footballpulse_article_service.domain.article import (
@@ -29,6 +32,7 @@ from footballpulse_article_service.domain.duplicate import (
 )
 
 _OUTBOX_NAMESPACE = UUID("4f0f31e2-9c16-47f5-8035-f6b598a2c98e")
+LOGGER = logging.getLogger("footballpulse.article.ingestion")
 
 
 class ProcessingDisposition(StrEnum):
@@ -131,6 +135,41 @@ class ArticleIngestionService:
         self._duplicate_policy = duplicate_policy or DuplicatePolicy()
 
     def handle(self, event: ArticleDiscoveredEvent) -> ArticleProcessingResult:
+        started = time.monotonic()
+        with bind_log_context(
+            correlation_id=str(event.correlation_id),
+            batch_id=str(event.payload.batch_id),
+        ):
+            log_event(
+                LOGGER,
+                "article_ingestion_started",
+                event_id=str(event.event_id),
+                source_id=str(event.payload.source_id),
+            )
+            try:
+                result = self._handle(event)
+            except Exception as error:
+                log_event(
+                    LOGGER,
+                    "article_ingestion_failed",
+                    level=logging.ERROR,
+                    error=error,
+                    event_id=str(event.event_id),
+                    duration_ms=round((time.monotonic() - started) * 1000),
+                )
+                raise
+            log_event(
+                LOGGER,
+                "article_ingestion_completed",
+                event_id=str(event.event_id),
+                article_id=str(result.article_id),
+                article_version_id=str(result.article_version_id),
+                disposition=result.disposition.value,
+                duration_ms=round((time.monotonic() - started) * 1000),
+            )
+            return result
+
+    def _handle(self, event: ArticleDiscoveredEvent) -> ArticleProcessingResult:
         replay = self._repository.find_processed(event.event_id)
         if replay is not None:
             return replay.as_replay()

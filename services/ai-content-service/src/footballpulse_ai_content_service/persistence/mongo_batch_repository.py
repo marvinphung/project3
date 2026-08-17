@@ -121,15 +121,30 @@ class MongoEnrichmentResultSink:
         self._collection = database.get_collection("article_enrichments")
 
     def ensure_indexes(self) -> None:
+        indexes = self._collection.index_information()
+        desired_keys = [
+            ("article_version_id", ASCENDING),
+            ("input_hash", ASCENDING),
+            ("model_version", ASCENDING),
+            ("prompt_version", ASCENDING),
+        ]
+        for old_name in ("article_version_id_1_input_hash_1", "uq_article_enrichments_run"):
+            existing = indexes.get(old_name)
+            if existing is not None and list(existing["key"]) != desired_keys:
+                self._collection.drop_index(old_name)
         self._collection.create_index(
-            [("article_version_id", ASCENDING), ("input_hash", ASCENDING)],
+            desired_keys,
             unique=True,
+            name="uq_article_enrichments_run",
         )
 
     def persist(self, outputs: tuple[GroundedEnrichment, ...]) -> None:
         for grounded in outputs:
             output = grounded.output
-            identity = f"{output.article_version_id}:{output.input_hash}"
+            identity = (
+                f"{output.article_version_id}:{output.input_hash}:"
+                f"{output.model_version}:{output.prompt_version}"
+            )
             validation = grounded.validation
             payload: MongoDocument = {
                 **output.model_dump(mode="json"),
@@ -154,7 +169,10 @@ class MongoEnrichmentResultSink:
                 self._collection.insert_one(document)
             except DuplicateKeyError:
                 existing = self._find_existing(identity)
-                if existing != payload:
+                existing.pop("validated_at", None)
+                comparable_payload = dict(payload)
+                comparable_payload.pop("validated_at", None)
+                if existing != comparable_payload:
                     raise EnrichmentPersistenceConflict(
                         "different enrichment output already exists for article input"
                     ) from None

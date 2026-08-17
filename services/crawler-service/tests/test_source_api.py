@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi.testclient import TestClient
+import httpx
+import pytest
 from footballpulse_crawler_service.api.app import create_app
 from footballpulse_crawler_service.application.source_service import (
     CrawlBatchService,
@@ -66,7 +67,8 @@ class MemoryBatchRepository:
         return batch
 
 
-def test_admin_source_flow_and_internal_due_query() -> None:
+@pytest.mark.anyio
+async def test_admin_source_flow_and_internal_due_query() -> None:
     sources = MemorySourceRepository()
     source_service = SourceService(sources, clock=lambda: NOW, id_factory=lambda: SOURCE_ID)
     batch_service = CrawlBatchService(
@@ -74,13 +76,11 @@ def test_admin_source_flow_and_internal_due_query() -> None:
         MemoryBatchRepository(),
         clock=lambda: NOW,
     )
-    client = TestClient(
-        create_app(
+    app = create_app(
             source_service=source_service,
             batch_service=batch_service,
             admin_token="admin-test-token",
             internal_token="internal-test-token",
-        )
     )
     payload = {
         "name": "BBC Sport",
@@ -92,60 +92,64 @@ def test_admin_source_flow_and_internal_due_query() -> None:
         "max_concurrency": 2,
     }
 
-    unauthorized = client.post("/admin/v1/sources", json=payload)
-    assert unauthorized.status_code == 401
-    assert unauthorized.json()["error"]["code"] == "UNAUTHORIZED"
-    created = client.post("/admin/v1/sources", headers=ADMIN_HEADERS, json=payload)
-    assert created.status_code == 201
-    assert created.json()["id"] == str(SOURCE_ID)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://crawler.test",
+    ) as client:
+        unauthorized = await client.post("/admin/v1/sources", json=payload)
+        assert unauthorized.status_code == 401
+        assert unauthorized.json()["error"]["code"] == "UNAUTHORIZED"
+        created = await client.post("/admin/v1/sources", headers=ADMIN_HEADERS, json=payload)
+        assert created.status_code == 201
+        assert created.json()["id"] == str(SOURCE_ID)
 
-    listed = client.get("/admin/v1/sources", headers=ADMIN_HEADERS)
-    assert listed.status_code == 200
-    assert listed.json()["items"][0]["name"] == "BBC Sport"
+        listed = await client.get("/admin/v1/sources", headers=ADMIN_HEADERS)
+        assert listed.status_code == 200
+        assert listed.json()["items"][0]["name"] == "BBC Sport"
 
-    batch_payload = {
-        "source_id": str(SOURCE_ID),
-        "idempotency_key": "bbc:2026-08-01T00:00:00Z",
-        "window_started_at": "2026-08-01T00:00:00Z",
-    }
-    first_batch = client.post(
-        "/internal/v1/crawl-batches", headers=INTERNAL_HEADERS, json=batch_payload
-    )
-    replayed_batch = client.post(
-        "/internal/v1/crawl-batches", headers=INTERNAL_HEADERS, json=batch_payload
-    )
-    assert first_batch.status_code == 201
-    assert replayed_batch.json()["id"] == first_batch.json()["id"]
+        batch_payload = {
+            "source_id": str(SOURCE_ID),
+            "idempotency_key": "bbc:2026-08-01T00:00:00Z",
+            "window_started_at": "2026-08-01T00:00:00Z",
+        }
+        first_batch = await client.post(
+            "/internal/v1/crawl-batches", headers=INTERNAL_HEADERS, json=batch_payload
+        )
+        replayed_batch = await client.post(
+            "/internal/v1/crawl-batches", headers=INTERNAL_HEADERS, json=batch_payload
+        )
+        assert first_batch.status_code == 201
+        assert replayed_batch.json()["id"] == first_batch.json()["id"]
 
-    manual_batch = client.post(
-        f"/admin/v1/sources/{SOURCE_ID}/crawl",
-        headers=ADMIN_HEADERS,
-        json={"idempotency_key": "manual:bbc:2026-08-01T00:00:00Z"},
-    )
-    assert manual_batch.status_code == 201
+        manual_batch = await client.post(
+            f"/admin/v1/sources/{SOURCE_ID}/crawl",
+            headers=ADMIN_HEADERS,
+            json={"idempotency_key": "manual:bbc:2026-08-01T00:00:00Z"},
+        )
+        assert manual_batch.status_code == 201
 
-    disabled = client.post(
-        f"/admin/v1/sources/{SOURCE_ID}/toggle",
-        headers=ADMIN_HEADERS,
-        json={"enabled": False, "expected_version": 1},
-    )
-    assert disabled.status_code == 200
-    assert disabled.json()["version"] == 2
+        disabled = await client.post(
+            f"/admin/v1/sources/{SOURCE_ID}/toggle",
+            headers=ADMIN_HEADERS,
+            json={"enabled": False, "expected_version": 1},
+        )
+        assert disabled.status_code == 200
+        assert disabled.json()["version"] == 2
 
-    due = client.get(
-        "/internal/v1/sources/due?at=2026-08-01T00:00:00Z",
-        headers=INTERNAL_HEADERS,
-    )
-    assert due.status_code == 200
-    assert due.json() == {"items": []}
+        due = await client.get(
+            "/internal/v1/sources/due?at=2026-08-01T00:00:00Z",
+            headers=INTERNAL_HEADERS,
+        )
+        assert due.status_code == 200
+        assert due.json() == {"items": []}
 
-    stale = client.post(
-        f"/admin/v1/sources/{SOURCE_ID}/toggle",
-        headers=ADMIN_HEADERS,
-        json={"enabled": True, "expected_version": 1},
-    )
-    assert stale.status_code == 409
-    assert stale.json()["error"]["code"] == "SOURCE_CONFLICT"
+        stale = await client.post(
+            f"/admin/v1/sources/{SOURCE_ID}/toggle",
+            headers=ADMIN_HEADERS,
+            json={"enabled": True, "expected_version": 1},
+        )
+        assert stale.status_code == 409
+        assert stale.json()["error"]["code"] == "SOURCE_CONFLICT"
 
 
 def test_openapi_exposes_admin_and_internal_bearer_boundaries() -> None:

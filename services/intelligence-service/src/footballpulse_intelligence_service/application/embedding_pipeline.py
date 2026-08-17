@@ -121,7 +121,7 @@ class EmbeddingWorker:
     async def run(self, items: list[EmbeddingInput]) -> EmbeddingWorkResult:
         async with self._semaphore:
             try:
-                records = await asyncio.to_thread(self._pipeline.process_batch, items)
+                records = self._pipeline.process_batch(items)
             except Exception as error:
                 return EmbeddingWorkResult(
                     EmbeddingWorkStatus.EMBEDDING_FAILED,
