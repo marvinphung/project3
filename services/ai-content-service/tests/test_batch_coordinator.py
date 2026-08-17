@@ -22,12 +22,21 @@ SOURCE_ID = UUID("00000000-0000-4000-8000-000000000201")
 
 
 class MemoryJobs:
-    def __init__(self, *, acquire: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        acquire: bool = True,
+        status: AiBatchStatus = AiBatchStatus.PREPARING,
+    ) -> None:
         self.acquire = acquire
-        self.status = AiBatchStatus.PREPARING
+        self.status = status
         self.transitions: list[AiBatchStatus] = []
         self.released = False
         self.acquire_calls = 0
+
+    def get_status(self, batch_id: UUID) -> AiBatchStatus:
+        assert batch_id == BATCH_ID
+        return self.status
 
     def acquire_lease(self, *, owner: str, now: datetime, lease_seconds: int) -> bool:
         self.acquire_calls += 1
@@ -246,3 +255,40 @@ def test_coordinator_refuses_second_concurrent_job(tmp_path: Path) -> None:
     assert result is None
     assert cli.calls == []
     assert jobs.transitions == []
+
+
+def test_coordinator_resumes_after_dataset_upload_without_uploading_again(tmp_path: Path) -> None:
+    jobs = MemoryJobs(status=AiBatchStatus.DATASET_UPLOADED)
+    cli = FakeCli([KaggleKernelState.COMPLETE])
+    sink = RecordingSink()
+
+    result = coordinator(jobs, cli, sink).run(
+        batch_id=BATCH_ID,
+        artifacts=prepare_artifacts(tmp_path, [success()]),
+        kernel_path=tmp_path / "kernel",
+        accelerator="NvidiaTeslaP100",
+    )
+
+    assert result is AiBatchStatus.COMPLETED
+    assert cli.calls == ["submit", "status", "download"]
+    assert jobs.transitions == [
+        AiBatchStatus.KERNEL_SUBMITTED,
+        AiBatchStatus.DOWNLOADING,
+        AiBatchStatus.IMPORTING,
+        AiBatchStatus.COMPLETED,
+    ]
+
+
+def test_coordinator_returns_existing_terminal_status_without_cli_calls(tmp_path: Path) -> None:
+    jobs = MemoryJobs(status=AiBatchStatus.COMPLETED)
+    cli = FakeCli([])
+
+    result = coordinator(jobs, cli, RecordingSink()).run(
+        batch_id=BATCH_ID,
+        artifacts=prepare_artifacts(tmp_path, [success()]),
+        kernel_path=tmp_path / "kernel",
+        accelerator="NvidiaTeslaP100",
+    )
+
+    assert result is AiBatchStatus.COMPLETED
+    assert cli.calls == []

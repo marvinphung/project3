@@ -44,6 +44,18 @@ class MongoBatchJobRepository:
         document["status"] = job.status.value
         self._jobs.insert_one(document)
 
+    def get_status(self, batch_id: UUID) -> AiBatchStatus:
+        try:
+            document = self._jobs.find_one({"_id": str(batch_id)}, {"status": 1})
+        except PyMongoError as error:
+            raise EnrichmentPersistenceUnavailable("MongoDB batch read failed") from error
+        if document is None:
+            raise EnrichmentPersistenceUnavailable(f"AI batch {batch_id} was not found")
+        try:
+            return AiBatchStatus(str(document["status"]))
+        except (KeyError, ValueError) as error:
+            raise EnrichmentPersistenceConflict("AI batch has an invalid durable status") from error
+
     def acquire_lease(self, *, owner: str, now: datetime, lease_seconds: int) -> bool:
         if lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")

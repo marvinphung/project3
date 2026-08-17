@@ -58,6 +58,7 @@ def test_job_transitions_single_flight_and_idempotent_enrichment(
             artifact_directory=f".footballpulse/ai-batches/{BATCH_ID}",
         )
     )
+    assert jobs.get_status(BATCH_ID) is AiBatchStatus.PREPARING
 
     assert jobs.acquire_lease(owner="worker-1", now=NOW, lease_seconds=60) is True
     assert jobs.acquire_lease(owner="worker-2", now=NOW, lease_seconds=60) is False

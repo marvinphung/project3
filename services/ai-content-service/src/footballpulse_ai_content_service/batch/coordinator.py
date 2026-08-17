@@ -42,6 +42,8 @@ class EnrichmentPersistenceUnavailable(RuntimeError):
 
 
 class BatchJobRepository(Protocol):
+    def get_status(self, batch_id: UUID) -> AiBatchStatus: ...
+
     def acquire_lease(self, *, owner: str, now: datetime, lease_seconds: int) -> bool: ...
 
     def transition(
@@ -125,22 +127,37 @@ class KaggleBatchCoordinator:
         ):
             return None
 
-        current = AiBatchStatus.PREPARING
+        current = self._jobs.get_status(batch_id)
         try:
-            self._metadata.write_dataset_metadata(
-                target=artifacts.directory,
-                dataset_slug=self._dataset_slug,
-            )
-            self._cli.upload_dataset(artifacts.directory, batch_id=str(batch_id))
-            current = self._transition(batch_id, current, AiBatchStatus.DATASET_UPLOADED)
+            if current in {
+                AiBatchStatus.COMPLETED,
+                AiBatchStatus.PARTIAL,
+                AiBatchStatus.FAILED_RETRYABLE,
+                AiBatchStatus.FAILED_TERMINAL,
+            }:
+                return current
+            if current is AiBatchStatus.PREPARING:
+                self._metadata.write_dataset_metadata(
+                    target=artifacts.directory,
+                    dataset_slug=self._dataset_slug,
+                )
+                self._cli.upload_dataset(artifacts.directory, batch_id=str(batch_id))
+                current = self._transition(batch_id, current, AiBatchStatus.DATASET_UPLOADED)
 
-            self._cli.submit_kernel(kernel_path, accelerator=accelerator)
-            current = self._transition(batch_id, current, AiBatchStatus.KERNEL_SUBMITTED)
+            if current is AiBatchStatus.DATASET_UPLOADED:
+                self._cli.submit_kernel(kernel_path, accelerator=accelerator)
+                current = self._transition(batch_id, current, AiBatchStatus.KERNEL_SUBMITTED)
 
-            current = self._await_kernel(batch_id, current)
-            current = self._transition(batch_id, current, AiBatchStatus.DOWNLOADING)
-            self._cli.download_output(self._kernel_slug, artifacts.directory)
-            current = self._transition(batch_id, current, AiBatchStatus.IMPORTING)
+            if current in {AiBatchStatus.KERNEL_SUBMITTED, AiBatchStatus.RUNNING}:
+                current = self._await_kernel(batch_id, current)
+                current = self._transition(batch_id, current, AiBatchStatus.DOWNLOADING)
+
+            if current is AiBatchStatus.DOWNLOADING:
+                self._cli.download_output(self._kernel_slug, artifacts.directory)
+                current = self._transition(batch_id, current, AiBatchStatus.IMPORTING)
+
+            if current is not AiBatchStatus.IMPORTING:
+                raise EnrichmentPersistenceConflict(f"cannot resume batch from {current.value}")
 
             manifest = AiBatchManifest.model_validate_json(
                 artifacts.manifest_path.read_text(encoding="utf-8")
