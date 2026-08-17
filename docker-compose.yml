@@ -324,6 +324,33 @@ services:
     mem_limit: 768m
     cpus: 0.75
 
+  intelligence-worker:
+    image: footballpulse-runtime:local
+    build:
+      context: .
+      dockerfile: services/runtime.Dockerfile
+    profiles: ["app"]
+    restart: unless-stopped
+    depends_on:
+      database-migrations:
+        condition: service_completed_successfully
+      mongodb-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *app-database-env
+      FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0
+      FOOTBALLPULSE_MONGODB_DB: ${FOOTBALLPULSE_MONGODB_DB:-footballpulse}
+      FOOTBALLPULSE_LOG_LEVEL: ${FOOTBALLPULSE_LOG_LEVEL:-INFO}
+      FOOTBALLPULSE_ENTITY_PROVIDER: ${FOOTBALLPULSE_ENTITY_PROVIDER:-catalog}
+      FOOTBALLPULSE_GLINER_MODEL: ${FOOTBALLPULSE_GLINER_MODEL:-urchade/gliner_small-v2.1}
+      FOOTBALLPULSE_EMBEDDING_PROVIDER: ${FOOTBALLPULSE_EMBEDDING_PROVIDER:-mock}
+      FOOTBALLPULSE_BGE_MODEL: ${FOOTBALLPULSE_BGE_MODEL:-BAAI/bge-small-en-v1.5}
+      FOOTBALLPULSE_INTELLIGENCE_BATCH_SIZE: ${FOOTBALLPULSE_INTELLIGENCE_BATCH_SIZE:-50}
+      FOOTBALLPULSE_INTELLIGENCE_POLL_SECONDS: ${FOOTBALLPULSE_INTELLIGENCE_POLL_SECONDS:-30}
+    command: ["footballpulse-intelligence-worker"]
+    mem_limit: 768m
+    cpus: 0.75
+
 volumes:
   kafka_data:
   mongodb_data:

@@ -6,6 +6,7 @@ dependencies = [
     "alembic>=1.18,<2",
     "pgvector>=0.5,<0.6",
     "psycopg[binary]>=3.3,<4",
+    "pymongo>=4.16,<5",
     "sqlalchemy>=2.0,<3",
 ]
 
@@ -26,6 +27,7 @@ explicit = true
 
 [project.scripts]
 footballpulse-intelligence-service-health = "footballpulse_intelligence_service.health:main"
+footballpulse-intelligence-worker = "footballpulse_intelligence_service.worker:main"
 
 [build-system]
 requires = ["hatchling"]

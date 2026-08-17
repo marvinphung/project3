@@ -40,12 +40,13 @@ tiếng Việt; frontend hiển thị dữ liệu thật; unit/integration/E2E/b
 ```mermaid
 flowchart TD
   A[Baseline + contracts] --> B[AI provider runtime]
-  B --> C[Enrichment worker]
-  C --> D[Story + timeline worker]
-  D --> E[Operational/Admin API]
-  E --> F[Frontend real-data flows]
-  F --> G[Airflow + Docker E2E]
-  G --> H[Reliability + final handoff]
+  B --> C[Entity + embedding preprocessing]
+  C --> D[Enrichment worker]
+  D --> E[Story + timeline worker]
+  E --> F[Operational/Admin API]
+  F --> G[Frontend real-data flows]
+  G --> H[Airflow + Docker E2E]
+  H --> I[Reliability + final handoff]
 ```
 
 ## Phase A — Baseline và đóng debt đã implement
@@ -154,8 +155,10 @@ có reason redacted; log hiển thị batch/article progress trong Docker.
 - Create: `services/intelligence-service/tests/test_intelligence_worker_runtime.py`
 - Modify: `docker-compose.yml`
 
-**Work:** Đọc enrichment hợp lệ, chạy GLiNER/mock, alias resolution, BGE/mock và
-persist PostgreSQL. Không tự tạo canonical entity từ model output.
+**Work:** Đọc Source Article hợp lệ trước bước AI, chạy GLiNER/catalog alias,
+alias resolution, BGE/mock, persist vector vào PostgreSQL và projection entity
+vào MongoDB. Không tự tạo canonical entity từ model output. Projection này là
+đầu vào grounded cho enrichment worker ở Task B3.
 
 **Acceptance:** Vector đúng 384 chiều; resolved/unresolved inspectable; duplicate
 delivery idempotent; real model acceptance là opt-in vì phải tải model.
@@ -366,4 +369,3 @@ Thiếu các mục trên không chặn offline MVP; chỉ làm các acceptance t
 - Kubernetes/cloud deployment, HA database, production secrets manager.
 - Recommendation/social/live scores/SSR/search cluster riêng.
 - Tự động publish bài dài không qua editorial approval.
-

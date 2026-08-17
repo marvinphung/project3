@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from importlib import import_module
 from typing import Protocol, cast
 
 from footballpulse_intelligence_service.application.entity_extraction import ModelSpan
+from footballpulse_intelligence_service.domain.entity import EntityType
 from footballpulse_intelligence_service.domain.extraction import EntityLabel
 
 DEFAULT_GLINER_MODEL = "urchade/gliner_small-v2.1"
+
+_ENTITY_LABELS = {
+    EntityType.PLAYER: EntityLabel.PLAYER,
+    EntityType.CLUB: EntityLabel.CLUB,
+    EntityType.COACH: EntityLabel.COACH,
+    EntityType.COMPETITION: EntityLabel.COMPETITION,
+}
 
 
 class GlinerModel(Protocol):
@@ -139,6 +148,51 @@ class MockEntityExtractor:
                     ModelSpan(rule.text, rule.label, start, start + len(rule.text), rule.score)
                 )
                 start = text.find(rule.text, start + len(rule.text))
+        return sorted(
+            predictions,
+            key=lambda prediction: (prediction.start, prediction.end, prediction.label.value),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogEntityRule:
+    alias: str
+    entity_type: EntityType
+
+    def __post_init__(self) -> None:
+        if not self.alias.strip():
+            raise ValueError("catalog alias must not be empty")
+
+
+class CatalogAliasEntityExtractor:
+    """Deterministic offline extractor backed only by reviewed catalog aliases."""
+
+    model_name = "catalog-alias"
+    model_version = "catalog-v1"
+
+    def __init__(self, *, rules: tuple[CatalogEntityRule, ...]) -> None:
+        self._rules = tuple(
+            sorted(rules, key=lambda rule: (-len(rule.alias), rule.alias.casefold()))
+        )
+
+    def extract(
+        self,
+        text: str,
+        *,
+        labels: tuple[EntityLabel, ...],
+        threshold: float,
+    ) -> list[ModelSpan]:
+        if not 0 <= threshold <= 1:
+            raise ValueError("catalog threshold must be between 0 and 1")
+        allowed_labels = set(labels)
+        predictions: list[ModelSpan] = []
+        for rule in self._rules:
+            label = _ENTITY_LABELS[rule.entity_type]
+            if label not in allowed_labels:
+                continue
+            pattern = re.compile(rf"(?<!\w){re.escape(rule.alias)}(?!\w)", re.IGNORECASE)
+            for match in pattern.finditer(text):
+                predictions.append(ModelSpan(match.group(), label, match.start(), match.end(), 1.0))
         return sorted(
             predictions,
             key=lambda prediction: (prediction.start, prediction.end, prediction.label.value),

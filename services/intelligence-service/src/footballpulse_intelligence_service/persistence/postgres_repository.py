@@ -320,6 +320,46 @@ class PostgresEntityCatalogRepository:
             rows = connection.execute(statement).mappings().all()
         return [_alias_from_row(row) for row in rows]
 
+    def list_resolvable_aliases(self) -> list[tuple[EntityAlias, Entity]]:
+        statement = (
+            sa.select(
+                entity_aliases,
+                entities.c.id.label("resolved_entity_id"),
+                entities.c.entity_type.label("resolved_entity_type"),
+                entities.c.canonical_name.label("resolved_canonical_name"),
+                entities.c.slug.label("resolved_slug"),
+                entities.c.status.label("resolved_status"),
+                entities.c.version.label("resolved_version"),
+                entities.c.created_at.label("resolved_created_at"),
+                entities.c.updated_at.label("resolved_updated_at"),
+            )
+            .join(entities, entities.c.id == entity_aliases.c.entity_id)
+            .where(
+                entity_aliases.c.review_status == AliasReviewStatus.APPROVED.value,
+                entity_aliases.c.disabled_at.is_(None),
+                entities.c.status == EntityStatus.ACTIVE.value,
+            )
+            .order_by(entity_aliases.c.normalized_alias, entity_aliases.c.id)
+        )
+        with self._engine.connect() as connection:
+            rows = connection.execute(statement).mappings().all()
+        return [
+            (
+                _alias_from_row(row),
+                Entity(
+                    id=row["resolved_entity_id"],
+                    entity_type=EntityType(row["resolved_entity_type"]),
+                    canonical_name=row["resolved_canonical_name"],
+                    slug=row["resolved_slug"],
+                    status=EntityStatus(row["resolved_status"]),
+                    version=row["resolved_version"],
+                    created_at=row["resolved_created_at"],
+                    updated_at=row["resolved_updated_at"],
+                ),
+            )
+            for row in rows
+        ]
+
     @staticmethod
     def _insert_audit(connection: Connection, audit: EntityAuditRecord) -> None:
         connection.execute(entity_audit_log.insert().values(**_audit_values(audit)))

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from footballpulse_intelligence_service.adapters.entity_extractors import (
+    CatalogAliasEntityExtractor,
+    CatalogEntityRule,
     GlinerEntityExtractor,
     MockEntityExtractor,
     MockEntityRule,
 )
+from footballpulse_intelligence_service.domain.entity import EntityType
 from footballpulse_intelligence_service.domain.extraction import EntityLabel
 
 
@@ -95,3 +98,36 @@ def test_mock_rule_rejects_invalid_fixture_confidence() -> None:
         assert "score" in str(error)
     else:
         raise AssertionError("invalid mock confidence must be rejected")
+
+
+def test_catalog_alias_extractor_is_case_insensitive_and_prefers_catalog_labels() -> None:
+    extractor = CatalogAliasEntityExtractor(
+        rules=(
+            CatalogEntityRule("Real Madrid", EntityType.CLUB),
+            CatalogEntityRule("Vinicius Junior", EntityType.PLAYER),
+        )
+    )
+
+    predictions = extractor.extract(
+        "REAL MADRID opened talks with Vinicius Junior.",
+        labels=tuple(EntityLabel),
+        threshold=0.5,
+    )
+
+    assert [(item.text, item.label, item.start, item.end) for item in predictions] == [
+        ("REAL MADRID", EntityLabel.CLUB, 0, 11),
+        ("Vinicius Junior", EntityLabel.PLAYER, 30, 45),
+    ]
+    assert extractor.model_name == "catalog-alias"
+
+
+def test_catalog_alias_extractor_does_not_match_inside_another_word() -> None:
+    extractor = CatalogAliasEntityExtractor(rules=(CatalogEntityRule("Real", EntityType.CLUB),))
+
+    predictions = extractor.extract(
+        "The surrealistic report mentioned Real.",
+        labels=(EntityLabel.CLUB,),
+        threshold=0.5,
+    )
+
+    assert [(item.text, item.start) for item in predictions] == [("Real", 34)]
