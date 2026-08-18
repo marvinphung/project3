@@ -9,6 +9,31 @@ export type PublicArticle = {
   entities: { id: string; entity_type: string; name: string; slug: string }[]
 }
 
+type V2Article = {
+  id: string
+  slug: string
+  title_en: string
+  title_vi: string
+  excerpt_vi: string | null
+  body_en: string
+  body_vi: string
+  story_id: string | null
+  published_at: string
+}
+
+function fromV2Article(article: V2Article): PublicArticle {
+  return {
+    id: article.id,
+    slug: article.slug,
+    title_vi: article.title_vi,
+    body_vi: article.body_vi,
+    story_id: article.story_id ?? article.id,
+    story_version: 1,
+    published_at: article.published_at,
+    entities: [],
+  }
+}
+
 export type PublicTimelineEntry = {
   story_id: string
   window_start: string
@@ -347,17 +372,14 @@ export function listArticles(params: ArticleListParams = {}) {
   const query = new URLSearchParams()
   if (params.limit !== undefined) query.set('limit', String(params.limit))
   if (params.offset !== undefined) query.set('offset', String(params.offset))
-  if (params.storyId) query.set('story_id', params.storyId)
-  if (params.query) query.set('q', params.query)
-  if (params.entityType) query.set('entity_type', params.entityType)
-  if (params.entitySlug) query.set('entity_slug', params.entitySlug)
-  if (params.sort) query.set('sort', params.sort)
   const suffix = query.toString() ? `?${query}` : ''
-  return request<ListResponse<PublicArticle>>(`/api/v1/articles${suffix}`)
+  return request<{ items: V2Article[]; limit: number; offset: number }>(`/api/v2/articles${suffix}`)
+    .then((response) => ({ ...response, items: response.items.map(fromV2Article) }))
 }
 
 export function getArticle(slug: string) {
-  return request<PublicArticle>(`/api/v1/articles/${encodeURIComponent(slug)}`)
+  return request<V2Article>(`/api/v2/articles/${encodeURIComponent(slug)}`)
+    .then(fromV2Article)
 }
 
 export function getStoryTimeline(
@@ -369,9 +391,16 @@ export function getStoryTimeline(
   if (params.offset !== undefined) query.set('offset', String(params.offset))
   if (params.confirmation) query.set('confirmation', params.confirmation)
   const suffix = query.toString() ? `?${query}` : ''
-  return request<ListResponse<PublicTimelineEntry>>(
-    `/api/v1/stories/${encodeURIComponent(storyId)}/timeline${suffix}`,
-  )
+  return request<{ items: { story_id: string; happened_at: string; summary_vi: string; confirmation: string }[] }>(
+    `/api/v2/stories/${encodeURIComponent(storyId)}/timeline${suffix}`,
+  ).then((response) => ({
+    items: response.items.map((item) => ({
+      story_id: item.story_id,
+      window_start: item.happened_at,
+      summary_vi: item.summary_vi,
+      confirmation: item.confirmation,
+    })),
+  }))
 }
 
 export function getEntityStories(entityType: string, entitySlug: string) {
@@ -401,7 +430,7 @@ export function getStory(storyId: string) {
 
 export function getArticleSources(slug: string) {
   return request<ListResponse<PublicArticleSource>>(
-    `/api/v1/articles/${encodeURIComponent(slug)}/sources`,
+    `/api/v2/articles/${encodeURIComponent(slug)}/sources`,
   )
 }
 import { logUiEvent } from '../observability'

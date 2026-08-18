@@ -22,6 +22,7 @@ from sqlalchemy.engine import URL
 from footballpulse_api_gateway.api.auth import create_auth_app
 from footballpulse_api_gateway.api.editorial_admin import create_editorial_admin_app
 from footballpulse_api_gateway.api.public import create_public_app
+from footballpulse_api_gateway.api.public_v2 import create_public_v2_app
 from footballpulse_api_gateway.application.editorial_admin_adapter import (
     ContentEditorialAdminAdapter,
 )
@@ -84,6 +85,8 @@ def build_app(environment: Mapping[str, str] | None = None) -> FastAPI:
         publication_service=publication_service,
     )
     app = create_public_app(PostgresPublicReadRepository(engine))
+    v2_app = create_public_v2_app(engine)
+    app.router.routes.extend(v2_app.router.routes)
     admin_app = create_editorial_admin_app(
         editorial_service,
         admin_token=values.get("FOOTBALLPULSE_API_ADMIN_TOKEN", "local-admin-token"),

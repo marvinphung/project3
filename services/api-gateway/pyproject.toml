@@ -18,6 +18,7 @@ dependencies = [
 [project.scripts]
 footballpulse-api-gateway-health = "footballpulse_api_gateway.health:main"
 footballpulse-api-gateway = "footballpulse_api_gateway.runtime:main"
+footballpulse-api-v2 = "footballpulse_api_gateway.runtime_v2:main"
 
 [tool.uv.sources]
 footballpulse-content-service = { workspace = true }
