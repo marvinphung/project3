@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NewsCrawledEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "event_version", "occurred_at", "producer", "correlation_id", "causation_id", "aggregate_type", "aggregate_id", "idempotency_key", "payload"],
+  "properties": {
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_type": {"const": "news.crawled"},
+    "event_version": {"const": 1},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "producer": {"const": "crawler-service"},
+    "correlation_id": {"type": "string", "format": "uuid"},
+    "causation_id": {"anyOf": [{"type": "string", "format": "uuid"}, {"type": "null"}]},
+    "aggregate_type": {"const": "news_article"},
+    "aggregate_id": {"type": "string", "format": "uuid"},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 256},
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["article_id", "canonical_url", "source_name", "published_time"],
+      "properties": {
+        "article_id": {"type": "string", "format": "uuid"},
+        "canonical_url": {"type": "string", "format": "uri"},
+        "source_name": {"type": "string", "minLength": 1, "maxLength": 200},
+        "published_time": {"anyOf": [{"type": "string", "format": "date-time"}, {"type": "null"}]}
+      }
+    }
+  }
+}

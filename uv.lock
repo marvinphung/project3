@@ -16,6 +16,7 @@ members = [
     "footballpulse-event-contracts",
     "footballpulse-fetch-artifacts",
     "footballpulse-intelligence-service",
+    "footballpulse-mongo-models",
     "footballpulse-runtime-config",
     "footballpulse-shared",
     "footballpulse-workspace",
@@ -159,6 +160,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7d/b2/51899539b6ceeeb420d40ed3cd4b7a40519404f9baf3d4ac99dc413a834b/babel-2.18.0.tar.gz", hash = "sha256:b80b99a14bd085fcacfa15c9165f651fbb3406e66cc603abf11c5750937c992d", size = 9959554, upload-time = "2026-02-01T12:30:56.078Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/77/f5/21d2de20e8b8b0408f0681956ca2c69f1320a3848ac50e6e7f39c6159675/babel-2.18.0-py3-none-any.whl", hash = "sha256:e2b422b277c2b9a9630c1d7903c2a00d0830c409c59ac8cae9081c92f1aeba35", size = 10196845, upload-time = "2026-02-01T12:30:53.445Z" },
+]
+
+[[package]]
+name = "beanie"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "lazy-model" },
+    { name = "pydantic" },
+    { name = "pymongo" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6b/a1/4abc93d5437999c55465f68c3c81e4735cdfe22827072c0e9cab00f63d11/beanie-2.2.0.tar.gz", hash = "sha256:2dc116e7f4a6650f8066f95851d34d898983af6ffaf5366dcfef892993537a51", size = 70115, upload-time = "2026-08-07T17:15:24.494Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c5/ae/2584fb9871b58f3c5334110f8ce00bd1421fe5fbda28eeac9a8d01d10ba6/beanie-2.2.0-py3-none-any.whl", hash = "sha256:4074f893ef00c52b8538b814c9dfd55130eea4ed0579abfae72853657c9029e4", size = 93116, upload-time = "2026-08-07T17:15:22.777Z" },
 ]
 
 [[package]]
@@ -391,7 +408,9 @@ source = { editable = "services/ai-content-service" }
 dependencies = [
     { name = "fastapi" },
     { name = "footballpulse-event-contracts" },
+    { name = "footballpulse-mongo-models" },
     { name = "footballpulse-runtime-config" },
+    { name = "footballpulse-shared" },
     { name = "kaggle" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
@@ -409,7 +428,9 @@ local-model = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "footballpulse-event-contracts", editable = "packages/event-contracts" },
+    { name = "footballpulse-mongo-models", editable = "packages/mongo-models" },
     { name = "footballpulse-runtime-config", editable = "packages/runtime-config" },
+    { name = "footballpulse-shared", editable = "packages/shared" },
     { name = "kaggle", specifier = ">=2.0,<3" },
     { name = "llama-cpp-python", marker = "extra == 'local-model'", specifier = ">=0.3.34,<0.4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
@@ -503,7 +524,9 @@ dependencies = [
     { name = "fastapi" },
     { name = "feedparser" },
     { name = "footballpulse-fetch-artifacts" },
+    { name = "footballpulse-mongo-models" },
     { name = "footballpulse-runtime-config" },
+    { name = "footballpulse-shared" },
     { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pymongo" },
@@ -519,7 +542,9 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "feedparser", specifier = ">=6.0,<7" },
     { name = "footballpulse-fetch-artifacts", editable = "packages/fetch-artifacts" },
+    { name = "footballpulse-mongo-models", editable = "packages/mongo-models" },
     { name = "footballpulse-runtime-config", editable = "packages/runtime-config" },
+    { name = "footballpulse-shared", editable = "packages/shared" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
     { name = "pymongo", specifier = ">=4.16,<5" },
@@ -578,6 +603,21 @@ requires-dist = [
     { name = "torch", marker = "extra == 'models'", specifier = ">=2,<3", index = "https://download.pytorch.org/whl/cpu" },
 ]
 provides-extras = ["models"]
+
+[[package]]
+name = "footballpulse-mongo-models"
+version = "0.1.0"
+source = { editable = "packages/mongo-models" }
+dependencies = [
+    { name = "beanie" },
+    { name = "footballpulse-shared" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "beanie", specifier = ">=2.0,<3" },
+    { name = "footballpulse-shared", editable = "packages/shared" },
+]
 
 [[package]]
 name = "footballpulse-runtime-config"
@@ -925,6 +965,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/44/8b/363ad553d5d8f23b10be03ae469cc0f3dd746862bc1213c4d6fac64a4a4b/kagglesdk-0.1.37.tar.gz", hash = "sha256:bc362761754966919f63cb7a702bc34118f9e8fcce038ee00fb30d5d11afbe08", size = 210001, upload-time = "2026-08-06T22:24:04.514Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/07/8e/70c358fcf8f6c41f9e74bc0d6203cb623eab6d4b062758c716d51f621167/kagglesdk-0.1.37-py3-none-any.whl", hash = "sha256:766e7d1e59379941b373957e7d80f612942e63ab4a638d99ae4ee3e9e92f050e", size = 262519, upload-time = "2026-08-06T22:24:03.344Z" },
+]
+
+[[package]]
+name = "lazy-model"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/85/e25dc36dee49cf0726c03a1558b5c311a17095bc9361bcbf47226cb3075a/lazy-model-0.4.0.tar.gz", hash = "sha256:a851d85d0b518b0b9c8e626bbee0feb0494c0e0cb5636550637f032dbbf9c55f", size = 8256, upload-time = "2025-08-07T20:05:34.737Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5c/54/653ea0d7c578741e9867ccf0cbf47b7eac09ff22e4238f311ac20671a911/lazy_model-0.4.0-py3-none-any.whl", hash = "sha256:95ea59551c1ac557a2c299f75803c56cc973923ef78c67ea4839a238142f7927", size = 13749, upload-time = "2025-08-07T20:05:36.303Z" },
 ]
 
 [[package]]

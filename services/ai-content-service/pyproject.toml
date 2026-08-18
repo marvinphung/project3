@@ -5,6 +5,8 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.116,<1",
     "footballpulse-event-contracts",
+    "footballpulse-mongo-models",
+    "footballpulse-shared",
     "footballpulse-runtime-config",
     "kaggle>=2.0,<3",
     "pydantic>=2.12,<3",
@@ -21,7 +23,9 @@ local-model = [
 
 [tool.uv.sources]
 footballpulse-event-contracts = { workspace = true }
+footballpulse-mongo-models = { workspace = true }
 footballpulse-runtime-config = { workspace = true }
+footballpulse-shared = { workspace = true }
 
 [project.scripts]
 footballpulse-ai-content-service-health = "footballpulse_ai_content_service.health:main"

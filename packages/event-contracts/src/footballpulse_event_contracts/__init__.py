@@ -7,6 +7,8 @@ from footballpulse_event_contracts.article import (
     ArticleEnrichedPayload,
     ArticleEnrichmentFailedEvent,
     ArticleEnrichmentFailedPayload,
+    NewsCrawledEvent,
+    NewsCrawledPayload,
 )
 from footballpulse_event_contracts.envelope import EventEnvelope, event_json_schema
 
@@ -19,6 +21,8 @@ __all__ = [
     "ArticleEnrichedPayload",
     "ArticleEnrichmentFailedEvent",
     "ArticleEnrichmentFailedPayload",
+    "NewsCrawledEvent",
+    "NewsCrawledPayload",
     "EventEnvelope",
     "event_json_schema",
 ]
