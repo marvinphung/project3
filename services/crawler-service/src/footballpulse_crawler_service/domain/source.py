@@ -13,7 +13,6 @@ class SourceType(StrEnum):
     RSS = "RSS"
     SITEMAP = "SITEMAP"
     HTML = "HTML"
-    MOCK = "MOCK"
 
 
 def normalize_domain(value: str) -> str:

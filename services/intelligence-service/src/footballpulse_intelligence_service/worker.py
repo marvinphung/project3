@@ -12,7 +12,6 @@ from sqlalchemy.engine import URL
 
 from footballpulse_intelligence_service.adapters.embedding_models import (
     BgeEmbeddingAdapter,
-    MockEmbeddingAdapter,
 )
 from footballpulse_intelligence_service.adapters.entity_extractors import (
     CatalogAliasEntityExtractor,
@@ -95,7 +94,7 @@ def create_worker() -> tuple[ArticlePreprocessingWorker, MongoClient[dict[str, o
         )
     else:
         raise ValueError("FOOTBALLPULSE_ENTITY_PROVIDER must be catalog or gliner")
-    embedding_mode = os.getenv("FOOTBALLPULSE_EMBEDDING_PROVIDER", "mock").casefold()
+    embedding_mode = os.getenv("FOOTBALLPULSE_EMBEDDING_PROVIDER", "bge").casefold()
     embedder: EmbeddingAdapter
     if embedding_mode == "bge":
         _log(
@@ -106,10 +105,8 @@ def create_worker() -> tuple[ArticlePreprocessingWorker, MongoClient[dict[str, o
         embedder = BgeEmbeddingAdapter(
             model_id=os.getenv("FOOTBALLPULSE_BGE_MODEL", "BAAI/bge-small-en-v1.5")
         )
-    elif embedding_mode == "mock":
-        embedder = MockEmbeddingAdapter()
     else:
-        raise ValueError("FOOTBALLPULSE_EMBEDDING_PROVIDER must be mock or bge")
+        raise ValueError("FOOTBALLPULSE_EMBEDDING_PROVIDER must be bge")
     extraction_pipeline = EntityExtractionPipeline(
         extractor=extractor,
         resolver=catalog_service,

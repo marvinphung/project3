@@ -157,7 +157,7 @@ export type Source = {
   name: string
   rss_url: string
   allowed_domains: string[]
-  source_type: 'RSS' | 'HTML' | 'MOCK'
+  source_type: 'RSS' | 'SITEMAP' | 'HTML'
   reliability_tier: number
   enabled: boolean
   crawl_interval_minutes: number

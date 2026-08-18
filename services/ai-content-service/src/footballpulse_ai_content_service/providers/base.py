@@ -11,7 +11,6 @@ from footballpulse_ai_content_service.contracts.enrichment import ArticleEnrichm
 class ProviderName(StrEnum):
     KAGGLE = "kaggle"
     LOCAL = "local"
-    MOCK = "mock"
 
 
 class FallbackReason(StrEnum):
@@ -57,11 +56,6 @@ class EnrichmentProvider(Protocol):
 class ProviderPolicy:
     primary: ProviderName
     allow_local_fallback: bool = False
-    allow_mock: bool = False
-
-    def __post_init__(self) -> None:
-        if self.primary is ProviderName.MOCK and not self.allow_mock:
-            raise ValueError("mock provider requires explicit demo/test permission")
 
     def should_use_local(self, reason: FallbackReason) -> bool:
         return self.allow_local_fallback and reason in _LOCAL_FALLBACK_REASONS
