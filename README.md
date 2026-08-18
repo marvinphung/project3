@@ -1,118 +1,92 @@
 # FootballPulse
 
-FootballPulse là nền tảng tự động thu thập, phân tích và tổng hợp tin tức bóng
-đá thành các dòng sự kiện có thể theo dõi theo thời gian. Hệ thống giữ nguyên
-bài báo nguồn làm bằng chứng, dùng AI để hiểu nội dung tiếng Anh, gom các cập
-nhật liên quan vào `Story`, tạo bản trình bày tiếng Việt và xuất bản qua quy
-trình editorial review.
+FootballPulse là pipeline local-first để crawl tin bóng đá, xử lý dữ liệu trong
+MongoDB, rồi materialize read model public lên PostgreSQL/Supabase cho backend
+API và frontend.
 
-> Đồ án: Thiết kế và xây dựng nền tảng tự động thu thập, tổng hợp và xuất bản
-> tin tức bóng đá theo kiến trúc service-oriented.
+Kiến trúc `version2` hiện tại:
 
-## Bài toán
+```text
+Local:
+Airflow -> crawler -> Mongo -> Kafka news.crawled.v1
+Kafka news.crawled.v1 -> processor -> Mongo -> Kaggle enrichment -> Mongo news_enrichments
+Mongo news_enrichments -> publisher -> PostgreSQL/Supabase
 
-Một sự kiện bóng đá thường được nhiều tòa soạn cập nhật ở những thời điểm khác
-nhau. Các bài viết có thể trùng lặp, mâu thuẫn hoặc chỉ bổ sung một chi tiết mới.
-Nếu chỉ hiển thị danh sách bài báo theo thời gian, người đọc phải tự ghép toàn bộ
-diễn biến.
-
-FootballPulse chuyển luồng bài báo rời rạc thành ba lớp dữ liệu:
-
-- **Source Article**: nội dung gốc đã crawl, không bị sửa và luôn truy ngược được
-  về nguồn.
-- **Story**: một sự kiện bóng đá gồm entity, claim, evidence, mức xác thực và
-  timeline sáu giờ.
-- **Generated Article**: bài tổng hợp song ngữ được biên tập, duyệt và xuất bản
-  cho giao diện.
-
-## Luồng xử lý
-
-```mermaid
-flowchart LR
-    A[RSS / News Sitemap] --> B[Collector]
-    B --> C[Clean & Deduplicate]
-    C --> D[Entity Extraction]
-    D --> E[English Embedding]
-    E --> F[Kaggle AI Enrichment]
-    F --> G[Grounding Validation]
-    G --> H[Story & Claims]
-    H --> I[6-hour Timeline]
-    I --> J[Editorial Review]
-    J --> K[PostgreSQL Public Read Model]
-    K --> L[API & Vietnamese Web UI]
+Serving:
+Frontend -> API /api/v2 -> PostgreSQL/Supabase
 ```
 
-Pipeline mặc định chạy theo cửa sổ `00:00`, `06:00`, `12:00` và `18:00` theo
-múi giờ Việt Nam. Nếu một Story không có diễn biến mới, hệ thống không tạo thêm
-timeline entry chỉ để lặp lại nội dung cũ.
+## Trạng thái hiện tại
 
-## Điểm nổi bật
+Đã verify local tính đến Tuesday, August 18, 2026:
 
-- Crawl dữ liệu thật từ RSS, news sitemap và HTML với giới hạn theo từng nguồn.
-- Chuẩn hóa URL/nội dung, phát hiện duplicate và lưu raw article trong MongoDB.
-- Nhận diện cầu thủ, câu lạc bộ, huấn luyện viên và giải đấu bằng GLiNER.
-- Tạo embedding tiếng Anh bằng BGE để tìm nội dung liên quan.
-- Chạy Qwen theo private batch trên Kaggle; dữ liệu nguồn vẫn nằm ở máy local.
-- Chỉ chấp nhận claim có evidence khớp chính xác với nội dung đã crawl.
-- Lưu dữ liệu xử lý bằng tiếng Anh; PostgreSQL giữ thêm projection tiếng Việt
-  dành cho API và giao diện.
-- Editorial workflow có các trạng thái draft, review, approve, reject và publish.
-- Structured logging cho crawler, intelligence, Kaggle batch và API.
+- `docker-compose.v2.yml` chạy được cho MongoDB, Kafka, PostgreSQL local.
+- `footballpulse_pipeline crawl` chạy được với nguồn live và ghi vào
+  `news_metadata`, `news_content`, đồng thời publish `news.crawled.v1`.
+- `footballpulse_pipeline process` xử lý được `news_entities`.
+- `footballpulse_pipeline publish` publish được dữ liệu validated từ Mongo sang
+  PostgreSQL/Supabase.
+- `scripts/smoke-v2-api.py` pass trên `/api/v2`.
+- Focused API tests pass.
 
-## Kiến trúc
+Phần đang có phụ thuộc external queue:
 
-| Thành phần | Trách nhiệm chính | Kho dữ liệu |
-| --- | --- | --- |
-| Crawler Service | Khám phá URL, tải HTML, làm sạch và bàn giao bài viết | PostgreSQL + MongoDB |
-| Article Service | Versioning, duplicate và article event | MongoDB + Kafka |
-| Intelligence Service | Entity resolution, embedding, Story và timeline | PostgreSQL + MongoDB |
-| AI Content Service | Kaggle batch, enrichment, grounding và generation contract | MongoDB |
-| Content Service | Editorial revision và publication | PostgreSQL |
-| API Gateway | Public API, admin API và authentication boundary | PostgreSQL read model |
-| Web App | Tin mới, tìm kiếm, entity, Story timeline và editorial UI | REST API |
-| Airflow | Điều phối lịch batch sáu giờ | PostgreSQL metadata |
+- Kaggle enrichment đã đi được tới bước upload dataset và push kernel.
+- Runtime local hiện phải chờ GPU queue phía Kaggle; vì vậy đây là phần dễ bị
+  chậm hoặc pending ngoài hệ thống local.
 
-MongoDB là nơi giữ Source Article và kết quả xử lý linh hoạt. PostgreSQL là
-nguồn dữ liệu có cấu trúc cho entity, Story, timeline, editorial và public API.
-Kafka vận chuyển business event; Airflow chỉ điều phối lịch chạy, không chứa
-business logic.
+## Quick Start
 
-Trong trạng thái `version2` hien tai, local pipeline crawl/process/enrichment/
-publish da chay 100% tu dong. MongoDB local giu raw + processed article;
-Supabase PostgreSQL giu read model public cho API va frontend. Xem chi tiet va
-cac lenh kiem tra tai [ADR version 2](docs/version2/adr-0001-version2-local-pipeline-supabase-serving.md).
+1. Tạo file môi trường:
 
-## Công nghệ chính
+```bash
+cp .env.example .env
+```
 
-- Python 3.12, FastAPI, Pydantic, SQLAlchemy và Alembic
-- MongoDB, PostgreSQL/pgvector, Kafka và Redis
-- GLiNER, BGE Small English và Qwen3
-- Kaggle Notebooks cho GPU batch
-- React, TypeScript và Vite
-- Docker Compose và Apache Airflow
+2. Điền các biến tối thiểu trong `.env`:
 
-## Chạy dự án
+- `FOOTBALLPULSE_MONGODB_URL`
+- `FOOTBALLPULSE_MONGODB_DB`
+- `FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS`
+- `SUPABASE_DB_HOST`
+- `SUPABASE_DB_PORT`
+- `SUPABASE_DB_NAME`
+- `SUPABASE_DB_USER`
+- `SUPABASE_DB_PASSWORD`
+- `FOOTBALLPULSE_KAGGLE_DATASET_SLUG`
+- `FOOTBALLPULSE_KAGGLE_KERNEL_SLUG`
+- `FOOTBALLPULSE_KAGGLE_MODEL_SOURCE`
+- `KAGGLE_USERNAME`
+- `KAGGLE_API_TOKEN`
 
-Xem [tai lieu version 2](docs/version2/) de cau hinh moi truong, khoi dong
-stack local, va doi chieu luong du lieu end-to-end.
+3. Sync workspace:
 
-Sau khi tạo `.env`, có thể khởi động toàn bộ stack bằng một command:
+```bash
+UV_CACHE_DIR=/tmp/footballpulse-uv-cache /home/pmv259/.local/bin/uv sync --all-packages --all-extras --group dev
+```
+
+4. Khởi động hạ tầng local:
 
 ```bash
 docker compose -f docker-compose.v2.yml up -d --build
 ```
 
-Hướng dẫn local cũng có phương án chạy lần lượt từng lớp để dễ theo dõi log và
-xác định lỗi.
+5. Xem runbook local:
 
-Các địa chỉ mặc định sau khi stack khởi động:
+- [Local Development V2](docs/version2/local-development.md)
 
-| Dịch vụ | Địa chỉ |
+## Lệnh chính
+
+| Command | Mục đích |
 | --- | --- |
-| Web App | <http://localhost:8443> |
-| Public API | <http://localhost:8000> |
-| API docs | <http://localhost:8000/docs> |
-| Airflow | <http://localhost:8080> |
+| `python -m footballpulse_pipeline crawl --source 'The Guardian Football' --max-articles 1` | Crawl live một nguồn |
+| `python -m footballpulse_pipeline process --limit 1` | Consume/process backlog local |
+| `python -m footballpulse_pipeline publish --limit 10` | Publish từ Mongo sang Postgres |
+| `python scripts/smoke-v2-api.py` | Smoke API v2 trên DB thật |
+| `docker compose -f docker-compose.v2.yml ps` | Kiểm tra hạ tầng local |
+
+Khi chạy trực tiếp, nên dùng `PYTHONPATH` hoặc cài workspace đầy đủ qua `uv sync`
+để `footballpulse_pipeline` và các packages nội bộ được import đúng.
 
 ## Cấu trúc repository
 
@@ -139,17 +113,68 @@ footballpulse/
 - [API contract version 2](docs/version2/proposed-api-contract.md)
 - [Service boundary version 2](docs/version2/proposed-service-boundary.md)
 - [Implementation plan version 2](docs/version2/refactor-implementation-plan.md)
+- [Local Development V2](docs/version2/local-development.md)
 
-## Nguyên tắc dữ liệu
+## Deploy FE / BE
 
-- Không xuất bản thông tin không truy được về Source Article.
-- Raw content và bản tiếng Anh là dữ liệu xử lý gốc; bản tiếng Việt là
-  presentation projection.
-- AI output không tự động trở thành sự thật: claim phải qua grounding validator
-  và nội dung phải qua editorial workflow.
-- Mọi batch, article version, Story, claim và publication có định danh để replay
-  idempotent và điều tra lỗi.
+Deployment target da chot cho `version2`:
 
-## Tác giả
+- Frontend deploy len Vercel
+- Backend API deploy len Render
+- MongoDB, Kafka, Airflow, crawler va Kaggle van chay local
+- PostgreSQL public read model dung Supabase
 
-Phùng Minh Vũ — 20235252
+### Frontend -> Vercel
+
+Project root:
+
+- `frontend/`
+
+Build settings:
+
+- Install command: `npm install`
+- Build command: `npm run build`
+- Output directory: `dist`
+
+Env toi thieu:
+
+- `VITE_API_BASE_URL=https://<render-backend-domain>`
+
+Frontend chi goi `/api/v2` tu backend, khong noi truc tiep Mongo, Kafka, Airflow
+hay Kaggle.
+
+### Backend API -> Render
+
+Project root:
+
+- `services/api-gateway/`
+
+Recommended start command:
+
+```bash
+uv run footballpulse-api-v2
+```
+
+Neu Render khong dung workspace root lam runtime context, co the dung:
+
+```bash
+PYTHONPATH=services/api-gateway/src:services/content-service/src:packages/runtime-config/src uv run footballpulse-api-v2
+```
+
+Env toi thieu:
+
+- `SUPABASE_DB_HOST`
+- `SUPABASE_DB_PORT`
+- `SUPABASE_DB_NAME`
+- `SUPABASE_DB_USER`
+- `SUPABASE_DB_PASSWORD`
+- `FOOTBALLPULSE_API_ADMIN_TOKEN`
+- `FOOTBALLPULSE_API_EDITOR_TOKEN`
+- `FOOTBALLPULSE_API_JWT_SECRET`
+- `FOOTBALLPULSE_API_ADMIN_USERNAME`
+- `FOOTBALLPULSE_API_ADMIN_PASSWORD`
+- `FOOTBALLPULSE_API_EDITOR_USERNAME`
+- `FOOTBALLPULSE_API_EDITOR_PASSWORD`
+
+Backend Render chi doc PostgreSQL/Supabase. Khong deploy MongoDB, Kafka,
+Airflow, crawler hay Kaggle len Render.
