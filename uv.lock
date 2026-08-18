@@ -406,6 +406,7 @@ name = "footballpulse-ai-content-service"
 version = "0.1.0"
 source = { editable = "services/ai-content-service" }
 dependencies = [
+    { name = "confluent-kafka" },
     { name = "fastapi" },
     { name = "footballpulse-event-contracts" },
     { name = "footballpulse-mongo-models" },
@@ -426,6 +427,7 @@ local-model = [
 
 [package.metadata]
 requires-dist = [
+    { name = "confluent-kafka", specifier = ">=2.15,<3" },
     { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "footballpulse-event-contracts", editable = "packages/event-contracts" },
     { name = "footballpulse-mongo-models", editable = "packages/mongo-models" },
