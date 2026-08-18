@@ -3,6 +3,7 @@ name = "footballpulse-crawler-service"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "confluent-kafka>=2.15,<3",
     "alembic>=1.18,<2",
     "beautifulsoup4>=4.13,<5",
     "fastapi>=0.116,<1",

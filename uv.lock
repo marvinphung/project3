@@ -521,6 +521,7 @@ source = { editable = "services/crawler-service" }
 dependencies = [
     { name = "alembic" },
     { name = "beautifulsoup4" },
+    { name = "confluent-kafka" },
     { name = "fastapi" },
     { name = "feedparser" },
     { name = "footballpulse-fetch-artifacts" },
@@ -539,6 +540,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.18,<2" },
     { name = "beautifulsoup4", specifier = ">=4.13,<5" },
+    { name = "confluent-kafka", specifier = ">=2.15,<3" },
     { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "feedparser", specifier = ">=6.0,<7" },
     { name = "footballpulse-fetch-artifacts", editable = "packages/fetch-artifacts" },
