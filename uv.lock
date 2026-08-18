@@ -17,6 +17,7 @@ members = [
     "footballpulse-fetch-artifacts",
     "footballpulse-intelligence-service",
     "footballpulse-runtime-config",
+    "footballpulse-shared",
     "footballpulse-workspace",
 ]
 
@@ -582,6 +583,11 @@ provides-extras = ["models"]
 name = "footballpulse-runtime-config"
 version = "0.1.0"
 source = { editable = "packages/runtime-config" }
+
+[[package]]
+name = "footballpulse-shared"
+version = "0.1.0"
+source = { editable = "packages/shared" }
 
 [[package]]
 name = "footballpulse-workspace"
