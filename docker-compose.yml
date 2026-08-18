@@ -223,6 +223,8 @@ services:
       FOOTBALLPULSE_API_JWT_SECRET: ${FOOTBALLPULSE_API_JWT_SECRET:-local-jwt-secret-change-me-0123456789}
       FOOTBALLPULSE_API_ADMIN_USERNAME: ${FOOTBALLPULSE_API_ADMIN_USERNAME:-admin}
       FOOTBALLPULSE_API_ADMIN_PASSWORD: ${FOOTBALLPULSE_API_ADMIN_PASSWORD:-footballpulse-admin}
+      FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0
+      FOOTBALLPULSE_MONGODB_DB: ${FOOTBALLPULSE_MONGODB_DB:-footballpulse}
       FOOTBALLPULSE_LOG_LEVEL: ${FOOTBALLPULSE_LOG_LEVEL:-INFO}
     command: ["footballpulse-api-gateway"]
     ports:
@@ -410,6 +412,37 @@ services:
       - ai_batch_artifacts:/workspace/.footballpulse/ai-batches
     mem_limit: 1g
     cpus: 1.0
+
+  story-projector:
+    image: footballpulse-runtime:local
+    logging: *default-logging
+    build:
+      context: .
+      dockerfile: services/runtime.Dockerfile
+    profiles: ["app"]
+    restart: unless-stopped
+    depends_on:
+      database-migrations:
+        condition: service_completed_successfully
+      mongodb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *app-database-env
+      FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0
+      FOOTBALLPULSE_MONGODB_DB: ${FOOTBALLPULSE_MONGODB_DB:-footballpulse}
+      FOOTBALLPULSE_PROJECTOR_POLL_SECONDS: ${FOOTBALLPULSE_PROJECTOR_POLL_SECONDS:-60}
+    command:
+      - /bin/sh
+      - -c
+      - >-
+        while true; do
+        python -u scripts/project-validated-enrichments.py --limit 50;
+        sleep "$${FOOTBALLPULSE_PROJECTOR_POLL_SECONDS}";
+        done
+    mem_limit: 512m
+    cpus: 0.5
 
 volumes:
   kafka_data:

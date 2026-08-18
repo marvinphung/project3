@@ -77,6 +77,13 @@ nguồn dữ liệu có cấu trúc cho entity, Story, timeline, editorial và p
 Kafka vận chuyển business event; Airflow chỉ điều phối lịch chạy, không chứa
 business logic.
 
+Trong trạng thái vận hành hiện tại, crawler/intelligence/enrichment đã chạy tự
+động nhưng bước materialize enrichment thành Story, editorial revision và
+publication vẫn tuân theo editorial gate. Vì vậy dữ liệu trong MongoDB không tự
+động xuất hiện trên UI; chỉ các dòng đã có trong
+`content_schema.publications` mới được Public API trả về. Xem chi tiết và các
+lệnh kiểm tra tại [Hướng dẫn chạy local](docs/local-development.md).
+
 ## Công nghệ chính
 
 - Python 3.12, FastAPI, Pydantic, SQLAlchemy và Alembic

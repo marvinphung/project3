@@ -16,10 +16,13 @@ export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
+  const authToken = getAuthToken()
 
   useEffect(() => {
-    if (!getAuthToken()) navigate('/admin/login', { replace: true })
-  }, [navigate])
+    if (!authToken) navigate('/admin/login', { replace: true })
+  }, [authToken, navigate])
+
+  if (!authToken) return null
 
   const logout = () => {
     clearAuthToken()

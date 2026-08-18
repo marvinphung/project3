@@ -73,6 +73,12 @@ Kaggle, theo dõi log và quota, rồi dừng AI worker khi đã xử lý đủ 
 docker compose --profile core --profile app stop ai-enrichment-worker
 ```
 
+> Lưu ý về trạng thái hiện tại: hai worker trên chỉ ghi Source Article,
+> intelligence và enrichment vào MongoDB (cùng các bảng intelligence liên quan).
+> Chúng không tự biến mọi enrichment thành publication trong PostgreSQL. Public
+> API chỉ trả các dòng đã có trong `content_schema.publications`, vì vậy crawl
+> xong không đồng nghĩa giao diện sẽ có thêm tin.
+
 ## 4. Chạy lần lượt để dễ kiểm tra
 
 Phương án này phù hợp khi chạy lần đầu hoặc cần biết lỗi nằm ở bước nào.
@@ -183,6 +189,73 @@ giao diện/API:
 
 ```bash
 docker compose --profile core --profile app logs -f frontend api-gateway
+```
+
+### Bước 8 — Story/timeline và editorial publication
+
+Hiện repository có một operational bridge cho bài đã được review trước:
+
+```bash
+docker compose --profile core --profile app run --rm \
+  api-gateway python scripts/publish-reviewed-real-article.py
+
+### Duyệt và xuất bản bằng giao diện Admin
+
+Mở <http://localhost:8443/admin/login>, đăng nhập bằng `FOOTBALLPULSE_API_ADMIN_USERNAME`
+và `FOOTBALLPULSE_API_ADMIN_PASSWORD` trong `.env` (mặc định local lần lượt là `admin`
+và `footballpulse-admin`). Chọn **Bản nháp** tại
+<http://localhost:8443/admin/ban-nhap>. Trang này đọc editorial revision thật từ
+PostgreSQL; quy trình là chỉnh tiếng Việt → **Lưu bản nháp** → **Gửi duyệt** →
+**Phê duyệt** → **Xuất bản**. Chỉ revision ở trạng thái `APPROVED` mới có nút xuất bản.
+```
+
+Lệnh này là idempotent cho fixture bài Arsenal đã cấu hình sẵn; nó không phải
+command để publish toàn bộ MongoDB. Nó yêu cầu Source Article, intelligence và
+enrichment tương ứng đã hoàn tất, sau đó tạo Story, timeline, revision, approve
+và publication cho đúng bài đó.
+
+Đối với dữ liệu mới, chỉ enrichment có `validation_status=VALIDATED` mới đủ điều
+kiện tạo Story/timeline tự động. Enrichment `NEEDS_CONTENT_REVIEW` phải được
+biên tập/grounding lại trước khi tạo bản public. Sau khi có revision, editor phải
+review và approve nội dung tiếng Việt rồi mới publish qua Admin API. Không dùng
+SQL thủ công để chèn publication vì sẽ bỏ qua idempotency và outbox.
+
+Projector cho các enrichment đã validated (được bật tự động khi chạy full stack):
+
+```bash
+docker compose --profile core --profile app up -d story-projector
+docker compose --profile core --profile app logs -f story-projector
+```
+
+Worker này quét mỗi `FOOTBALLPULSE_PROJECTOR_POLL_SECONDS` giây (mặc định 60
+giây). Có thể chạy một lượt thủ công với:
+
+```bash
+docker compose --profile core --profile app run --rm \
+  -e FOOTBALLPULSE_MONGODB_URL='mongodb://mongodb:27017/?replicaSet=rs0' \
+  -e FOOTBALLPULSE_POSTGRES_HOST=postgres \
+  api-gateway python scripts/project-validated-enrichments.py --limit 50
+```
+
+Projector chỉ tạo Story, timeline và revision ở trạng thái `DRAFT`; nó cố ý không
+publish bản dịch tiếng Việt placeholder. Chạy lặp lại an toàn nhờ processed-event
+marker và các khóa idempotency. Sau khi editor hoàn thiện bản dịch, dùng Editorial
+API để submit/approve/publish.
+
+Kiểm tra số lượng theo từng tầng trước khi kết luận pipeline đã chạy hết:
+
+```bash
+docker compose exec -T mongodb mongosh --quiet footballpulse --eval \
+  'printjson(db.source_articles.countDocuments()); \
+   printjson(db.article_intelligence.countDocuments({status:"COMPLETED"})); \
+   printjson(db.article_enrichments.countDocuments({validation_status:"VALIDATED"}));'
+
+docker compose exec -T postgres sh -c \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "SELECT count(*) FROM intelligence_schema.stories; \
+   SELECT count(*) FROM intelligence_schema.timeline_entries; \
+   SELECT count(*) FROM content_schema.editorial_revisions; \
+   SELECT count(*) FROM content_schema.publications;"'
 ```
 
 Các container dài hạn phải ở trạng thái `Up`/`healthy`. `database-migrations`,
@@ -383,6 +456,12 @@ docker compose --profile core --profile app up -d
 
 Kiểm tra public API trước. PostgreSQL phải có `content_schema.publications`; raw
 article trong MongoDB không tự động xuất hiện trên trang public.
+
+Nếu MongoDB có nhiều bài nhưng PostgreSQL chỉ có một publication, đây là trạng
+thái editorial bình thường của phiên bản hiện tại: dữ liệu đang dừng ở
+enrichment/grounding hoặc mới chỉ có một bài được review và publish. Cần kiểm tra
+`validation_status`, tạo Story/revision, rồi approve/publish; chỉ chạy lại
+`crawler-worker` sẽ không tạo thêm publication.
 
 ### Kaggle batch chạy nhưng không tạo Story
 

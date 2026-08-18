@@ -188,8 +188,12 @@ def prompt_for(article: dict[str, Any], *, repair_text: str | None = None) -> st
     )
     return (
         "Extract only facts supported by the English article. Never invent entities, numbers, "
-        "dates, scores, or certainty. Evidence offsets use Python character indexes into "
-        "cleaned_content. Return JSON only.\nSchema:\n"
+        "dates, scores, or certainty. When canonical entities are present, return at least "
+        "one claim if the article states a concrete event. Every claim must use an exact, "
+        "contiguous evidence_quote copied from the input and valid character offsets. "
+        "Make summary_en a conservative sentence assembled from those evidence quotes; "
+        "do not paraphrase beyond the evidence. Evidence offsets use Python character "
+        "indexes into cleaned_content. Return JSON only.\nSchema:\n"
         + json.dumps(contract, ensure_ascii=False)
         + "\nInput:\n"
         + json.dumps(article, ensure_ascii=False)
@@ -374,7 +378,13 @@ def process_article(
     event_counts = Counter(str(item["event_type"]) for item in extracted_chunks)
     event_type = max(event_counts, key=lambda value: event_counts[value])
     summaries = list(dict.fromkeys(str(item["summary_en"]).strip() for item in extracted_chunks))
-    summary = " ".join(summaries)
+    # Keep the persisted summary tied to exact model evidence. This avoids a
+    # chunk-level paraphrase invalidating an otherwise usable claim set.
+    evidence_summaries = list(dict.fromkeys(
+        str(claim["evidence_quote"]).strip() for claim in global_claims
+        if str(claim.get("evidence_quote", "")).strip()
+    ))
+    summary = " ".join(evidence_summaries) or " ".join(summaries)
     if len(summary) > 4_000 or len(global_claims) > 500:
         raise ValueError("combined model output exceeds contract bounds")
 

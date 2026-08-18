@@ -166,11 +166,88 @@ export type Source = {
   version: number
 }
 
+export type SourceConfiguration = Pick<
+  Source,
+  'name' | 'rss_url' | 'allowed_domains' | 'source_type' | 'reliability_tier' | 'crawl_interval_minutes' | 'max_concurrency'
+>
+
+export type SourceArticle = {
+  id: string
+  title: string
+  source_url: string
+  collected_at: string
+  extraction_status: string
+  duplicate_type: string
+}
+
+export type OperationsSummary = {
+  source_articles_total: number
+  source_articles_today: number
+  enrichments_validated: number
+  enrichments_needs_content_review: number
+  revisions_by_state: Record<string, number>
+  publications_total: number
+}
+
+export type AdminStory = { id: string; event_type: string; status: string; confidence_score: number; version: number; last_seen_at: string; source_count: number }
+export type AdminPublication = { id: string; slug: string; title_vi: string; story_id: string; published_at: string }
+export type ProcessingFailure = { id: string; stage: string; status: string; message: string; attempts: number; occurred_at: string }
+
 export function listSources() {
   return request<{ items: Source[] }>(`${CRAWLER_API_BASE_URL}/admin/v1/sources`, {
     headers: authHeaders(),
   })
 }
+
+export function createSource(configuration: SourceConfiguration) {
+  return request<Source>(`${CRAWLER_API_BASE_URL}/admin/v1/sources`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(configuration),
+  })
+}
+
+export function updateSource(sourceId: string, configuration: SourceConfiguration, expectedVersion: number) {
+  return request<Source>(`${CRAWLER_API_BASE_URL}/admin/v1/sources/${sourceId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ ...configuration, expected_version: expectedVersion }),
+  })
+}
+
+export function listSourceArticles(params: { limit?: number; offset?: number; query?: string } = {}) {
+  const query = new URLSearchParams()
+  if (params.limit !== undefined) query.set('limit', String(params.limit))
+  if (params.offset !== undefined) query.set('offset', String(params.offset))
+  if (params.query) query.set('q', params.query)
+  const suffix = query.toString() ? `?${query}` : ''
+  return request<ListResponse<SourceArticle>>(`/admin/v1/source-articles${suffix}`, {
+    headers: authHeaders(),
+  })
+}
+
+export function getOperationsSummary() {
+  return request<OperationsSummary>('/admin/v1/operations/summary', {
+    headers: authHeaders(),
+  })
+}
+
+export function listAdminStories(params: { limit?: number; offset?: number; status?: string } = {}) {
+  const query = new URLSearchParams()
+  if (params.limit !== undefined) query.set('limit', String(params.limit))
+  if (params.offset !== undefined) query.set('offset', String(params.offset))
+  if (params.status) query.set('status', params.status)
+  return request<ListResponse<AdminStory>>(`/admin/v1/stories?${query}`, { headers: authHeaders() })
+}
+
+export function listAdminPublications(params: { limit?: number; offset?: number } = {}) {
+  const query = new URLSearchParams()
+  if (params.limit !== undefined) query.set('limit', String(params.limit))
+  if (params.offset !== undefined) query.set('offset', String(params.offset))
+  return request<ListResponse<AdminPublication>>(`/admin/v1/publications?${query}`, { headers: authHeaders() })
+}
+
+export function listProcessingFailures() { return request<ListResponse<ProcessingFailure>>('/admin/v1/processing-failures?limit=50', { headers: authHeaders() }) }
 
 export function toggleSource(sourceId: string, enabled: boolean, expectedVersion: number) {
   return request<Source>(`${CRAWLER_API_BASE_URL}/admin/v1/sources/${sourceId}/toggle`, {
@@ -197,11 +274,37 @@ export type EditorialRevision = {
   updated_at: string
 }
 
+export type EditorialRevisionDetail = EditorialRevision & {
+  story_id: string
+  title_en: string
+  body_en: string
+  title_vi: string
+  body_vi: string
+}
+
 async function adminRequest<T>(path: string, body: unknown) {
   return request<T>(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
+  })
+}
+
+export function listEditorialRevisions(params: { limit?: number; offset?: number; state?: string } = {}) {
+  const query = new URLSearchParams()
+  if (params.limit !== undefined) query.set('limit', String(params.limit))
+  if (params.offset !== undefined) query.set('offset', String(params.offset))
+  if (params.state) query.set('state', params.state)
+  return request<ListResponse<EditorialRevisionDetail>>(`/admin/v1/editorial/revisions?${query}`, {
+    headers: authHeaders(),
+  })
+}
+
+export function updateEditorialRevision(articleId: string, payload: Pick<EditorialRevisionDetail, 'title_vi' | 'body_vi'>, expectedRevisionNumber: number) {
+  return request<EditorialRevisionDetail>(`/admin/v1/articles/${articleId}/revision`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ ...payload, expected_revision_number: expectedRevisionNumber }),
   })
 }
 

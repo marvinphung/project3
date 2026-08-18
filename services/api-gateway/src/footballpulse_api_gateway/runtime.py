@@ -15,6 +15,7 @@ from footballpulse_content_service.editorial.postgres_repository import (
 )
 from footballpulse_content_service.editorial.publication import PublicationService
 from footballpulse_runtime_config import configure_logging, log_event
+from pymongo import MongoClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
@@ -28,6 +29,15 @@ from footballpulse_api_gateway.auth import AuthService, Role, TokenService
 from footballpulse_api_gateway.health import liveness
 from footballpulse_api_gateway.middleware import install_gateway_middleware
 from footballpulse_api_gateway.persistence.identity_repository import PostgresUserRepository
+from footballpulse_api_gateway.persistence.mongo_source_article_read_repository import (
+    MongoSourceArticleReadRepository,
+)
+from footballpulse_api_gateway.persistence.operations_read_repository import (
+    OperationsReadRepository,
+)
+from footballpulse_api_gateway.persistence.admin_story_read_repository import AdminStoryReadRepository
+from footballpulse_api_gateway.persistence.admin_publication_read_repository import AdminPublicationReadRepository
+from footballpulse_api_gateway.persistence.processing_failure_read_repository import ProcessingFailureReadRepository
 from footballpulse_api_gateway.persistence.public_read_repository import (
     PostgresPublicReadRepository,
 )
@@ -52,6 +62,11 @@ def database_url(environment: Mapping[str, str]) -> str:
 def build_app(environment: Mapping[str, str] | None = None) -> FastAPI:
     values = os.environ if environment is None else environment
     engine = create_engine(database_url(values), pool_pre_ping=True)
+    mongo_client = MongoClient(
+        values.get("FOOTBALLPULSE_MONGODB_URL", "mongodb://127.0.0.1:27017"),
+        connect=False,
+    )
+    mongo_database = mongo_client[values.get("FOOTBALLPULSE_MONGODB_DB", "footballpulse")]
     revision_repository = PostgresEditorialRevisionRepository(engine)
     publication_service = PublicationService(PostgresPublicationRepository(engine))
     user_repository = PostgresUserRepository(engine)
@@ -74,6 +89,13 @@ def build_app(environment: Mapping[str, str] | None = None) -> FastAPI:
         admin_token=values.get("FOOTBALLPULSE_API_ADMIN_TOKEN", "local-admin-token"),
         editor_token=values.get("FOOTBALLPULSE_API_EDITOR_TOKEN"),
         token_service=token_service,
+        source_article_repository=MongoSourceArticleReadRepository(
+            mongo_database["source_articles"]
+        ),
+        operations_repository=OperationsReadRepository(mongo_database, engine),
+        story_repository=AdminStoryReadRepository(engine),
+        publication_repository=AdminPublicationReadRepository(engine),
+        failure_repository=ProcessingFailureReadRepository(engine),
     )
     auth_app = create_auth_app(auth_service)
     app.router.routes.extend(admin_app.router.routes)

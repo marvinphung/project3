@@ -70,6 +70,28 @@ class PostgresEditorialRevisionRepository:
             )
         return None if row is None else _from_row(row)
 
+    def list_current(self, *, limit: int = 100) -> list[EditorialRevision]:
+        if not 1 <= limit <= 500:
+            raise ValueError("revision list limit must be between 1 and 500")
+        with self._engine.connect() as connection:
+            rows = connection.execute(
+                sa.select(editorial_revisions).order_by(
+                    editorial_revisions.c.updated_at.desc(),
+                    editorial_revisions.c.revision_number.desc(),
+                )
+            ).mappings().all()
+        seen: set[UUID] = set()
+        result: list[EditorialRevision] = []
+        for row in rows:
+            revision = _from_row(row)
+            if revision.generated_article_id in seen:
+                continue
+            seen.add(revision.generated_article_id)
+            result.append(revision)
+            if len(result) >= limit:
+                break
+        return result
+
     def update(self, revision: EditorialRevision, *, expected_revision_number: int) -> None:
         values = _values(revision)
         values.pop("id")

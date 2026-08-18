@@ -7,7 +7,10 @@ import httpx
 import pytest
 from footballpulse_api_gateway.api.editorial_admin import (
     EditorialRevisionView,
+    OperationsSummaryView,
     PublicationView,
+    SourceArticlePage,
+    SourceArticleView,
     create_editorial_admin_app,
 )
 from footballpulse_api_gateway.auth import Role, TokenService
@@ -52,6 +55,56 @@ class MemoryEditorialService:
             title_vi="Arsenal hỏi mua",
             body_vi="Arsenal đã gửi đề nghị.",
             published_at=now,
+        )
+
+    def list_revisions_page(self, *, limit, offset, state):
+        revisions = [
+            self._detail("NEEDS_REVIEW", UUID(int=10)),
+            self._detail("APPROVED", UUID(int=11)),
+        ]
+        filtered = [item for item in revisions if state is None or item.state == state]
+        return filtered[offset:offset + limit], len(filtered)
+
+    @staticmethod
+    def _detail(state, article_id):
+        from footballpulse_api_gateway.api.editorial_admin import EditorialRevisionDetailView
+
+        return EditorialRevisionDetailView(
+            generated_article_id=article_id, revision_id=UUID(int=2), revision_number=1,
+            story_version=1, state=state, updated_at=NOW, story_id=UUID(int=3),
+            title_en="Title", body_en="Body", title_vi="Tiêu đề", body_vi="Nội dung",
+        )
+
+
+class MemorySourceArticleRepository:
+    def list_source_articles(self, *, limit, offset, query=None):
+        assert limit == 50
+        assert offset == 0
+        assert query == "Arsenal"
+        return SourceArticlePage(
+            items=(
+                SourceArticleView(
+                    id="source-article-1",
+                    title="Arsenal agree transfer terms",
+                    source_url="https://www.bbc.com/sport/football/example",
+                    collected_at=NOW,
+                    extraction_status="SUCCESS",
+                    duplicate_type="NONE",
+                ),
+            ),
+            total=1655,
+        )
+
+
+class MemoryOperationsRepository:
+    def summary(self):
+        return OperationsSummaryView(
+            source_articles_total=1655,
+            source_articles_today=247,
+            enrichments_validated=1,
+            enrichments_needs_content_review=1192,
+            revisions_by_state={"DRAFT": 2, "NEEDS_REVIEW": 3, "APPROVED": 4},
+            publications_total=7,
         )
 
 
@@ -173,3 +226,74 @@ async def test_jwt_role_controls_editorial_routes() -> None:
     assert reviewed.status_code == 200
     assert forbidden.status_code == 403
     assert published.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_editorial_admin_lists_source_articles_with_pagination_and_query() -> None:
+    transport = httpx.ASGITransport(
+        app=create_editorial_admin_app(
+            MemoryEditorialService(),
+            admin_token="admin-token",
+            source_article_repository=MemorySourceArticleRepository(),
+        )
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/admin/v1/source-articles?limit=50&offset=0&q=Arsenal",
+            headers={"Authorization": "Bearer admin-token"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "id": "source-article-1",
+                "title": "Arsenal agree transfer terms",
+                "source_url": "https://www.bbc.com/sport/football/example",
+                "collected_at": "2026-08-10T12:00:00Z",
+                "extraction_status": "SUCCESS",
+                "duplicate_type": "NONE",
+            }
+        ],
+        "total": 1655,
+        "limit": 50,
+        "offset": 0,
+        "next_offset": 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_editorial_admin_returns_live_operations_summary() -> None:
+    transport = httpx.ASGITransport(
+        app=create_editorial_admin_app(
+            MemoryEditorialService(),
+            admin_token="admin-token",
+            operations_repository=MemoryOperationsRepository(),
+        )
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/admin/v1/operations/summary",
+            headers={"Authorization": "Bearer admin-token"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["source_articles_total"] == 1655
+    assert response.json()["enrichments_needs_content_review"] == 1192
+    assert response.json()["revisions_by_state"]["NEEDS_REVIEW"] == 3
+
+
+@pytest.mark.asyncio
+async def test_editorial_admin_paginates_and_filters_revisions() -> None:
+    transport = httpx.ASGITransport(
+        app=create_editorial_admin_app(MemoryEditorialService(), admin_token="admin-token")
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/admin/v1/editorial/revisions?state=NEEDS_REVIEW&limit=50&offset=0",
+            headers={"Authorization": "Bearer admin-token"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert [item["state"] for item in response.json()["items"]] == ["NEEDS_REVIEW"]

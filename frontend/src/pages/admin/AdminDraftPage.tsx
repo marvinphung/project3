@@ -1,185 +1,101 @@
-import { useState } from 'react'
-import { ApiError, approveArticle, publishArticle, rejectArticle, submitArticle } from '../../api/client'
+import { useEffect, useState } from 'react'
+import {
+  ApiError,
+  EditorialRevisionDetail,
+  approveArticle,
+  listEditorialRevisions,
+  publishArticle,
+  rejectArticle,
+  submitArticle,
+  updateEditorialRevision,
+} from '../../api/client'
 
-const drafts = [
-  { id: 1, headline: 'Arsenal tăng tốc đàm phán trong thương vụ chiêu mộ tiền đạo trẻ', story: 'Arsenal Transfer Saga', status: 'pending', warning: true, time: '20 phút trước' },
-  { id: 2, headline: 'Pep Guardiola lên tiếng về kế hoạch nhân sự mùa giải mới', story: 'Man City Squad Planning', status: 'pending', warning: false, time: '1 giờ trước' },
-  { id: 3, headline: 'Barcelona công bố danh sách cầu thủ tham dự chuyến du đấu hè', story: 'Barcelona Pre-season', status: 'revision', warning: false, time: '3 giờ trước' },
-  { id: 4, headline: 'Kylian Mbappé chia sẻ về mục tiêu đầy tham vọng trong mùa giải mới', story: 'Mbappe at Real Madrid', status: 'pending', warning: true, time: '5 giờ trước' },
-  { id: 5, headline: 'Liverpool chuẩn bị thay đổi hệ thống thi đấu trong trận sắp tới', story: 'Liverpool Tactics', status: 'approved', warning: false, time: '6 giờ trước' },
-]
-
-const StatusBadge = ({ status }: { status: string }) => {
-  const m: Record<string, { cls: string; label: string }> = {
-    pending: { cls: 'bg-amber-50 text-amber-700', label: 'Chờ duyệt' },
-    approved: { cls: 'bg-green-50 text-green-700', label: 'Đã duyệt' },
-    revision: { cls: 'bg-blue-50 text-blue-700', label: 'Cần chỉnh sửa' },
-    rejected: { cls: 'bg-red-50 text-red-600', label: 'Từ chối' },
-  }
-  const { cls, label } = m[status] ?? m.pending
-  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
+const stateLabel: Record<string, string> = {
+  DRAFT: 'Bản nháp',
+  NEEDS_REVIEW: 'Chờ duyệt',
+  APPROVED: 'Đã duyệt',
+  REJECTED: 'Từ chối',
+  STALE: 'Cũ',
 }
 
 export default function AdminDraftPage() {
-  const [selected, setSelected] = useState<typeof drafts[0] | null>(null)
-  const [showConfirm, setShowConfirm] = useState(false)
-  const [actionState, setActionState] = useState<{ loading: boolean; message: string }>({ loading: false, message: '' })
+  const [items, setItems] = useState<EditorialRevisionDetail[]>([])
+  const [selected, setSelected] = useState<EditorialRevisionDetail | null>(null)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
 
-  const draft = selected ?? drafts[0]
-
-  const runAction = async (action: 'submit' | 'approve' | 'reject' | 'publish') => {
-    const articleId = String(draft.id)
-    if (!/^[0-9a-f-]{36}$/i.test(articleId)) {
-      setActionState({ loading: false, message: 'Bản nháp demo chưa có UUID từ backend.' })
-      setShowConfirm(false)
-      return
-    }
-    setActionState({ loading: true, message: '' })
+  const load = async () => {
+    setLoading(true)
     try {
-      if (action === 'submit') await submitArticle(articleId, 1)
-      if (action === 'approve') await approveArticle(articleId, 1)
-      if (action === 'reject') await rejectArticle(articleId, 1)
-      if (action === 'publish') await publishArticle(articleId, `draft-${articleId}`, crypto.randomUUID())
-      setActionState({ loading: false, message: 'Đã cập nhật trạng thái thành công.' })
-      setShowConfirm(false)
+      const response = await listEditorialRevisions()
+      const revisions = response.items
+      setItems(revisions)
+      if (selected) {
+        const fresh = revisions.find(item => item.generated_article_id === selected.generated_article_id)
+        if (fresh) { setSelected(fresh); setTitle(fresh.title_vi); setBody(fresh.body_vi) }
+      }
     } catch (error) {
-      setActionState({ loading: false, message: error instanceof ApiError ? error.message : 'Không thể cập nhật bản nháp.' })
-    }
+      setMessage(error instanceof ApiError ? error.message : 'Không thể tải bản nháp.')
+    } finally { setLoading(false) }
   }
 
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold text-[#111827] mb-6">Bản nháp</h1>
+  useEffect(() => { void load() }, [])
 
-      {selected ? (
-        /* Draft editor */
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
-          {/* Left: editor */}
-          <div className="bg-white border border-[#E5E7EB] rounded-xl p-6">
-            <button onClick={() => setSelected(null)} className="flex items-center gap-1 text-sm text-[#6B7280] hover:text-[#111827] mb-5 transition-colors">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-              Quay lại
-            </button>
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-1.5">Tiêu đề</label>
-              <textarea className="w-full px-3 py-2 border border-[#E5E7EB] rounded-lg text-xl font-bold text-[#111827] resize-none focus:outline-none focus:ring-2 focus:ring-[#78A83D]/30 focus:border-[#78A83D] leading-snug" rows={2} defaultValue={draft.headline} />
-            </div>
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-1.5">Tóm tắt</label>
-              <textarea className="w-full px-3 py-2 border border-[#E5E7EB] rounded-lg text-sm text-[#374151] resize-none focus:outline-none focus:ring-2 focus:ring-[#78A83D]/30 focus:border-[#78A83D]" rows={3} defaultValue="Nhiều nguồn cho biết Arsenal đã đạt tiến triển trong đàm phán với cầu thủ, nhưng hai câu lạc bộ vẫn chưa thống nhất mức phí chuyển nhượng." />
-            </div>
-            <div className="mb-5">
-              <label className="block text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-1.5">Nội dung bài viết</label>
-              <div className="border border-[#E5E7EB] rounded-lg p-3 min-h-[300px]">
-                <textarea className="w-full text-sm text-[#374151] leading-relaxed resize-none focus:outline-none min-h-[280px]" defaultValue={"Arsenal đang đẩy mạnh các cuộc đàm phán với đại diện của tiền đạo trẻ mà họ nhắm tới trong kỳ chuyển nhượng hè này. Theo thông tin từ nhiều nguồn uy tín, câu lạc bộ London đã có những tiến triển đáng kể trong việc thỏa thuận các điều khoản cá nhân với cầu thủ.\n\nTuy nhiên, trở ngại lớn nhất vẫn là mức phí chuyển nhượng. Câu lạc bộ chủ quản hiện tại yêu cầu một khoản phí lên đến 80 triệu euro, trong khi Arsenal chỉ sẵn sàng trả tối đa 65 triệu euro. Hai bên hiện đang tiếp tục thương lượng.\n\nHLV Mikel Arteta đã xác nhận rằng đội bóng đang tìm kiếm sự tăng cường trong mùa hè này, nhưng từ chối tiết lộ cụ thể về tên cầu thủ hay câu lạc bộ liên quan."} />
-              </div>
-            </div>
+  const open = (item: EditorialRevisionDetail) => {
+    setSelected(item); setTitle(item.title_vi); setBody(item.body_vi); setMessage('')
+  }
 
-            {/* Actions */}
-            <div className="flex flex-wrap gap-2">
-              <button className="px-4 py-2 border border-[#E5E7EB] text-[#374151] rounded-lg text-sm font-medium hover:bg-[#F3F4F6] transition-colors">Lưu bản nháp</button>
-              <button className="px-4 py-2 border border-[#E5E7EB] text-[#374151] rounded-lg text-sm font-medium hover:bg-[#F3F4F6] transition-colors">Yêu cầu tạo lại</button>
-              <button onClick={() => void runAction('approve')} disabled={actionState.loading} className="px-4 py-2 bg-[#2E7D32] text-white rounded-lg text-sm font-semibold hover:bg-[#246328] transition-colors disabled:opacity-50">Phê duyệt</button>
-              <button onClick={() => void runAction('reject')} disabled={actionState.loading} className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50">Từ chối</button>
-              <button
-                onClick={() => setShowConfirm(true)}
-                className="px-4 py-2 bg-[#78A83D] text-white rounded-lg text-sm font-semibold hover:bg-[#6a9435] transition-colors"
-              >
-                Xuất bản
-              </button>
-            </div>
-            {actionState.message && <p className="mt-3 text-sm text-[#6B7280]">{actionState.message}</p>}
-          </div>
+  const save = async () => {
+    if (!selected) return
+    setBusy(true); setMessage('')
+    try {
+      const updated = await updateEditorialRevision(selected.generated_article_id, { title_vi: title, body_vi: body }, selected.revision_number)
+      setSelected(updated); setItems(current => current.map(item => item.generated_article_id === updated.generated_article_id ? updated : item))
+      setMessage('Đã lưu nội dung tiếng Việt.')
+    } catch (error) { setMessage(error instanceof ApiError ? error.message : 'Không thể lưu bản nháp.') }
+    finally { setBusy(false) }
+  }
 
-          {/* Right: review panel */}
-          <div className="space-y-4">
-            <div className="bg-white border border-[#E5E7EB] rounded-xl p-4">
-              <h3 className="text-sm font-bold text-[#111827] mb-3">Thông tin bản nháp</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-[#6B7280]">Trạng thái</span><StatusBadge status={draft.status} /></div>
-                <div className="flex justify-between"><span className="text-[#6B7280]">Story</span><span className="text-[#374151] text-right text-xs">{draft.story}</span></div>
-                <div className="flex justify-between"><span className="text-[#6B7280]">Tạo lúc</span><span className="text-[#374151]">{draft.time}</span></div>
-              </div>
-            </div>
+  const transition = async (action: 'submit' | 'approve' | 'reject' | 'publish') => {
+    if (!selected) return
+    setBusy(true); setMessage('')
+    try {
+      if (action === 'submit') await submitArticle(selected.generated_article_id, selected.revision_number)
+      if (action === 'approve') await approveArticle(selected.generated_article_id, selected.revision_number)
+      if (action === 'reject') await rejectArticle(selected.generated_article_id, selected.revision_number)
+      if (action === 'publish') await publishArticle(selected.generated_article_id, title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `story-${selected.story_id}`, crypto.randomUUID())
+      setMessage(action === 'publish' ? 'Đã xuất bản bài viết.' : 'Đã cập nhật trạng thái.')
+      await load()
+    } catch (error) { setMessage(error instanceof ApiError ? error.message : 'Không thể cập nhật trạng thái.') }
+    finally { setBusy(false) }
+  }
 
-            {draft.warning && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <div className="flex items-start gap-2">
-                  <svg className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  <p className="text-xs text-amber-800">Một thông tin trong bài chưa có đủ nguồn tham khảo.</p>
-                </div>
-              </div>
-            )}
+  if (loading) return <div className="p-6 text-sm text-[#6B7280]">Đang tải bản nháp thật từ PostgreSQL...</div>
 
-            <div className="bg-white border border-[#E5E7EB] rounded-xl p-4">
-              <h3 className="text-sm font-bold text-[#111827] mb-3">Nguồn hỗ trợ</h3>
-              <div className="space-y-2">
-                {['BBC Sport', 'Sky Sports', 'The Athletic', 'Fabrizio Romano'].map(s => (
-                  <div key={s} className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#78A83D] flex-shrink-0" />
-                    <span className="text-xs text-[#374151]">{s}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+  if (selected) return (
+    <div className="p-6 max-w-5xl">
+      <button onClick={() => setSelected(null)} className="text-sm text-[#78A83D] mb-5">← Quay lại danh sách</button>
+      <div className="bg-white border border-[#E5E7EB] rounded-xl p-6">
+        <div className="flex justify-between gap-4 mb-5">
+          <div><h1 className="text-2xl font-bold text-[#111827]">Biên tập bản nháp</h1><p className="text-xs text-[#6B7280] mt-1">Article ID: {selected.generated_article_id}</p></div>
+          <span className="h-fit px-3 py-1 rounded-full text-xs font-semibold bg-[#F3F4F6]">{stateLabel[selected.state] ?? selected.state}</span>
         </div>
-      ) : (
-        /* Draft list */
-        <div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#E5E7EB] bg-[#F9FAFB]">
-                  <th className="text-left px-4 py-3 font-semibold text-[#374151] text-xs uppercase tracking-wider">Tiêu đề</th>
-                  <th className="text-left px-4 py-3 font-semibold text-[#374151] text-xs uppercase tracking-wider hidden sm:table-cell">Story</th>
-                  <th className="text-left px-4 py-3 font-semibold text-[#374151] text-xs uppercase tracking-wider">Trạng thái</th>
-                  <th className="text-left px-4 py-3 font-semibold text-[#374151] text-xs uppercase tracking-wider hidden md:table-cell">Thời gian</th>
-                  <th className="text-right px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E5E7EB]">
-                {drafts.map(d => (
-                  <tr key={d.id} className="hover:bg-[#F9FAFB] transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-start gap-2">
-                        {d.warning && <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
-                        <span className="font-medium text-[#111827] line-clamp-2 leading-snug">{d.headline}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-[#6B7280] hidden sm:table-cell">{d.story}</td>
-                    <td className="px-4 py-3"><StatusBadge status={d.status} /></td>
-                    <td className="px-4 py-3 text-[#6B7280] hidden md:table-cell">{d.time}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={() => setSelected(d)} className="px-3 py-1.5 text-xs font-medium text-[#78A83D] border border-[#78A83D]/30 rounded-lg hover:bg-[#78A83D]/5 transition-colors">
-                        Xem & duyệt
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <label className="block text-xs font-semibold text-[#6B7280] mb-1">TIÊU ĐỀ TIẾNG VIỆT</label>
+        <textarea value={title} onChange={event => setTitle(event.target.value)} rows={2} className="w-full border rounded-lg p-3 mb-4 text-lg font-semibold" />
+        <label className="block text-xs font-semibold text-[#6B7280] mb-1">NỘI DUNG TIẾNG VIỆT</label>
+        <textarea value={body} onChange={event => setBody(event.target.value)} rows={14} className="w-full border rounded-lg p-3 mb-5 text-sm leading-relaxed" />
+        <div className="flex flex-wrap gap-2">
+          {(selected.state === 'DRAFT' || selected.state === 'REJECTED') && <><button disabled={busy} onClick={() => void save()} className="px-4 py-2 rounded-lg bg-[#78A83D] text-white text-sm font-semibold">Lưu bản nháp</button><button disabled={busy} onClick={() => void transition('submit')} className="px-4 py-2 rounded-lg border text-sm">Gửi duyệt</button></>}
+          {selected.state === 'NEEDS_REVIEW' && <><button disabled={busy} onClick={() => void transition('approve')} className="px-4 py-2 rounded-lg bg-[#2E7D32] text-white text-sm font-semibold">Phê duyệt</button><button disabled={busy} onClick={() => void transition('reject')} className="px-4 py-2 rounded-lg border border-red-200 text-red-600 text-sm">Từ chối</button></>}
+          {selected.state === 'APPROVED' && <button disabled={busy} onClick={() => void transition('publish')} className="px-4 py-2 rounded-lg bg-[#78A83D] text-white text-sm font-semibold">Xuất bản</button>}
         </div>
-      )}
-
-      {/* Confirm publish modal */}
-      {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowConfirm(false)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6 text-center">
-            <div className="w-12 h-12 rounded-full bg-[#78A83D]/10 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-[#78A83D]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-            </div>
-            <h2 className="font-bold text-[#111827] mb-2">Xác nhận xuất bản</h2>
-            <p className="text-sm text-[#6B7280] mb-6">Bài viết sẽ được công bố ngay lập tức cho tất cả người dùng. Bạn có chắc chắn muốn xuất bản không?</p>
-            <div className="flex gap-3">
-              <button onClick={() => setShowConfirm(false)} className="flex-1 py-2 border border-[#E5E7EB] text-[#374151] rounded-lg text-sm font-medium hover:bg-[#F3F4F6] transition-colors">Hủy</button>
-              <button onClick={() => void runAction('publish')} disabled={actionState.loading} className="flex-1 py-2 bg-[#78A83D] text-white rounded-lg text-sm font-semibold hover:bg-[#6a9435] transition-colors disabled:opacity-50">Xuất bản</button>
-            </div>
-          </div>
-        </div>
-      )}
+        {message && <p className="mt-4 text-sm text-[#374151]">{message}</p>}
+      </div>
     </div>
   )
+
+  return <div className="p-6"><div className="flex items-center justify-between mb-6"><h1 className="text-2xl font-bold text-[#111827]">Bản nháp</h1><button onClick={() => void load()} className="text-sm text-[#78A83D]">Làm mới</button></div>{message && <p className="mb-4 text-sm text-red-600">{message}</p>}<div className="bg-white border border-[#E5E7EB] rounded-xl overflow-hidden">{items.length === 0 ? <p className="p-6 text-sm text-[#6B7280]">Chưa có bản nháp cần biên tập.</p> : <table className="w-full text-sm"><thead><tr className="border-b bg-[#F9FAFB]"><th className="text-left px-4 py-3">Tiêu đề</th><th className="text-left px-4 py-3">Trạng thái</th><th className="text-left px-4 py-3">Cập nhật</th><th /></tr></thead><tbody className="divide-y">{items.map(item => <tr key={item.generated_article_id}><td className="px-4 py-3 font-medium">{item.title_vi}</td><td className="px-4 py-3">{stateLabel[item.state] ?? item.state}</td><td className="px-4 py-3 text-[#6B7280]">{new Date(item.updated_at).toLocaleString('vi-VN')}</td><td className="px-4 py-3 text-right"><button onClick={() => open(item)} className="text-[#78A83D]">Xem & duyệt</button></td></tr>)}</tbody></table>}</div></div>
 }

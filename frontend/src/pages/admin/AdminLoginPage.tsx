@@ -50,7 +50,7 @@ export default function AdminLoginPage() {
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-1.5">Email</label>
               <input
-                type="email"
+                type="text"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="admin@footballpulse.vn"
