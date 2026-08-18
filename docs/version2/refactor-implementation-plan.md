@@ -31,7 +31,7 @@ khong connect Mongo, Kafka, Airflow, Kaggle, GLiNER, hoac local pipeline.
   publisher; Airflow khong tao task tung article.
 - Kaggle dataset gom toan bo article chua co validated enrichment trong moi lan
   upload, khong luu `batch_id` vao DB.
-- Backend API chi doc Supabase PostgreSQL va expose `/api/v1`.
+- Backend API chi doc Supabase PostgreSQL va expose `/api/v2`.
 - Khong luu log, batch state, job state, outbox, processed events trong DB schema
   chinh.
 
@@ -498,10 +498,10 @@ co data doc ngay tu Supabase.
 
 **Acceptance criteria:**
 
-- [ ] `GET /api/v1/articles`.
-- [ ] `GET /api/v1/articles/{id}`.
-- [ ] `GET /api/v1/stories`.
-- [ ] `GET /api/v1/stories/{id}`.
+- [ ] `GET /api/v2/articles`.
+- [ ] `GET /api/v2/articles/{slug}`.
+- [ ] `GET /api/v2/stories`.
+- [ ] `GET /api/v2/stories/{id}`.
 - [ ] Pagination va error envelope thong nhat.
 
 **Verification:**
@@ -673,7 +673,7 @@ batch/job-state DB.
 **Acceptance criteria:**
 
 - [ ] Code V1 khong con duoc import boi V2 apps/pipeline.
-- [ ] Docs version1 van giu lich su thiet ke cu.
+- [x] Docs version1 da duoc loai bo khoi repo active.
 - [ ] README/local commands tro ve V2 path.
 
 **Verification:**

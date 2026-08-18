@@ -3,7 +3,10 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shlex
+import shutil
 import subprocess
+import sys
 import time
 from enum import StrEnum
 from pathlib import Path
@@ -80,11 +83,12 @@ class KaggleCli:
         self._runner = runner or SubprocessCommandRunner()
         self._command_timeout_seconds = command_timeout_seconds
         self._kernel_timeout_seconds = kernel_timeout_seconds
+        self._command_prefix = self._resolve_command_prefix()
 
     def upload_dataset(self, dataset_path: Path, *, batch_id: str) -> None:
         self._execute(
             [
-                "kaggle",
+                *self._command_prefix,
                 "datasets",
                 "version",
                 "-p",
@@ -106,7 +110,7 @@ class KaggleCli:
             raise ValueError("invalid Kaggle accelerator")
         self._execute(
             [
-                "kaggle",
+                *self._command_prefix,
                 "kernels",
                 "push",
                 "-p",
@@ -120,7 +124,7 @@ class KaggleCli:
 
     def kernel_status(self, kernel_slug: str) -> KaggleKernelState:
         self._validate_slug(kernel_slug)
-        result = self._execute(["kaggle", "kernels", "status", kernel_slug])
+        result = self._execute([*self._command_prefix, "kernels", "status", kernel_slug])
         output = result.stdout.casefold()
         if "complete" in output:
             return KaggleKernelState.COMPLETE
@@ -137,7 +141,7 @@ class KaggleCli:
         output_path.mkdir(parents=True, exist_ok=True, mode=0o700)
         self._execute(
             [
-                "kaggle",
+                *self._command_prefix,
                 "kernels",
                 "output",
                 kernel_slug,
@@ -194,6 +198,19 @@ class KaggleCli:
             duration_ms=round((time.monotonic() - started) * 1000),
         )
         return result
+
+    @staticmethod
+    def _resolve_command_prefix() -> list[str]:
+        explicit = os.getenv("KAGGLE_COMMAND", "").strip()
+        if explicit:
+            return shlex.split(explicit)
+        discovered = shutil.which("kaggle")
+        if discovered:
+            return [discovered]
+        venv_candidate = Path(sys.executable).with_name("kaggle")
+        if venv_candidate.is_file():
+            return [str(venv_candidate)]
+        return ["kaggle"]
 
     @classmethod
     def _validate_slug(cls, slug: str) -> None:

@@ -460,8 +460,7 @@ local API gateway as composition service
 MongoDB transactions for outbox/event flow
 ```
 
-Co the giu lai source code cu trong `docs/version1`/history trong luc migrate,
-nhung khong nen nam trong target architecture V2.
+Khong dua lai tai lieu/history V1 vao target architecture V2.
 
 ## 10. Ly do khong chon stack khac
 

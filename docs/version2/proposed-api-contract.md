@@ -13,12 +13,22 @@ Backend API khong:
 - sync du lieu
 - luu log/job/batch state vao database
 
+Ghi chu:
+
+- Surface da implement trong code hien tai gom:
+  - `GET /api/v2/articles`
+  - `GET /api/v2/articles/{slug}`
+  - `GET /api/v2/articles/{slug}/sources`
+  - `GET /api/v2/stories/{story_id}/timeline`
+- Cac section story/entity/publication/search ben duoi la backlog contract cho
+  cac phase tiep theo, chua duoc expose day du trong runtime hien tai.
+
 ## 1. Quy uoc chung
 
 Base path:
 
 ```text
-/api/v1
+/api/v2
 ```
 
 Response list dung shape thong nhat:
@@ -157,7 +167,7 @@ Response:
 
 ## 4. Articles API
 
-### `GET /api/v1/articles`
+### `GET /api/v2/articles`
 
 Lay danh sach bai news da materialize len Supabase.
 
@@ -206,7 +216,7 @@ Sort mac dinh:
 published_at desc, crawled_at desc
 ```
 
-### `GET /api/v1/articles/{id}`
+### `GET /api/v2/articles/{slug}`
 
 Lay chi tiet mot article.
 
@@ -239,7 +249,7 @@ Notes:
 
 ## 5. Stories API
 
-### `GET /api/v1/stories`
+### `GET /api/v2/stories`
 
 Lay danh sach story dang theo doi.
 
@@ -289,7 +299,7 @@ Sort mac dinh:
 last_seen_at desc
 ```
 
-### `GET /api/v1/stories/{id}`
+### `GET /api/v2/stories/{id}`
 
 Lay story detail.
 
@@ -314,7 +324,7 @@ Response:
 }
 ```
 
-### `GET /api/v1/stories/{id}/timeline`
+### `GET /api/v2/stories/{id}/timeline`
 
 Lay timeline cua mot story.
 
@@ -366,7 +376,7 @@ happened_at desc
 
 ## 6. Entities API
 
-### `GET /api/v1/entities`
+### `GET /api/v2/entities`
 
 Lay danh sach entities.
 
@@ -400,7 +410,7 @@ Response:
 }
 ```
 
-### `GET /api/v1/entities/{type}/{slug}`
+### `GET /api/v2/entities/{type}/{slug}`
 
 Lay entity detail.
 
@@ -421,7 +431,7 @@ Response:
 }
 ```
 
-### `GET /api/v1/entities/{type}/{slug}/timeline`
+### `GET /api/v2/entities/{type}/{slug}/timeline`
 
 Lay timeline tong hop theo entity. Endpoint nay join:
 
@@ -472,7 +482,7 @@ Response:
 
 ## 7. Publications API
 
-### `GET /api/v1/publications`
+### `GET /api/v2/publications`
 
 Lay danh sach bai tong hop da publish.
 
@@ -510,7 +520,7 @@ Response:
 }
 ```
 
-### `GET /api/v1/publications/{slug}`
+### `GET /api/v2/publications/{slug}`
 
 Lay detail bai publish.
 
@@ -535,7 +545,7 @@ Response:
 
 ## 8. Search API
 
-### `GET /api/v1/search`
+### `GET /api/v2/search`
 
 Search nhe cho UI.
 

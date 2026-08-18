@@ -8,7 +8,7 @@ export function toArticle(article: PublicArticle): Article {
   return {
     id: article.slug,
     headline: article.title_vi,
-    summary: article.body_vi,
+    summary: article.excerpt_vi ?? article.body_vi,
     time: new Date(article.published_at).toLocaleString('vi-VN'),
     sources: 1,
     entities: article.entities.map((entity) => ({

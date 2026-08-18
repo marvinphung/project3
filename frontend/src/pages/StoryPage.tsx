@@ -19,8 +19,11 @@ export default function StoryPage() {
       </div>
       <div className="mb-8">
         <span className="text-xs font-semibold uppercase tracking-wider text-[#78A83D]">Story</span>
-        <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-[#111827]">{story.data.event_type}</h1>
-        <p className="mt-2 text-sm text-[#6B7280]">{story.data.status} · độ tin cậy {Math.round(story.data.confidence_score * 100)}% · phiên bản {story.data.version}</p>
+        <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-[#111827]">{story.data.title_vi || story.data.event_type}</h1>
+        <p className="mt-2 text-sm text-[#6B7280]">{story.data.status} · {story.data.confirmation} · {story.data.entity_ids.length} entity</p>
+        {story.data.summary_vi && (
+          <p className="mt-3 text-sm leading-relaxed text-[#4B5563]">{story.data.summary_vi}</p>
+        )}
       </div>
       <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 sm:p-7">
         <StoryTimeline storyId={id ?? null} />

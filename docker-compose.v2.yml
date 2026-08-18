@@ -1,0 +1,87 @@
+name: footballpulse-v2
+
+services:
+  mongodb:
+    image: mongo:7.0.37-jammy
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "127.0.0.1:27117:27017"
+    volumes:
+      - footballpulse_v2_mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'quit(db.adminCommand({ping: 1}).ok ? 0 : 1)' >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mongodb-init:
+    image: mongo:7.0.37-jammy
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    command: ["mongosh", "--host", "mongodb:27017", "--quiet", "/scripts/init-replica-set.js"]
+    volumes:
+      - ./infrastructure/mongodb/init-replica-set.js:/scripts/init-replica-set.js:ro
+
+  kafka:
+    image: apache/kafka:4.3.1
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:19092:9092"
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://:29092,CONTROLLER://:29093,PLAINTEXT_HOST://:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:19092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+    volumes:
+      - footballpulse_v2_kafka_data:/tmp/kraft-combined-logs
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  kafka-init:
+    image: apache/kafka:4.3.1
+    user: "0:0"
+    command: ["sh", "-c", "chown -R 1000:1000 /tmp/kraft-combined-logs"]
+    volumes:
+      - footballpulse_v2_kafka_data:/tmp/kraft-combined-logs
+
+  postgres:
+    image: pgvector/pgvector:0.8.5-pg17-bookworm
+    environment:
+      POSTGRES_DB: footballpulse_v2
+      POSTGRES_USER: footballpulse
+      POSTGRES_PASSWORD: footballpulse_v2_local
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - footballpulse_v2_postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init/001-enable-vector.sql:/docker-entrypoint-initdb.d/001-enable-vector.sql:ro
+      - ./supabase/migrations/202608180001_v2_product_schema.sql:/docker-entrypoint-initdb.d/002-v2-product-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U footballpulse -d footballpulse_v2"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  footballpulse_v2_mongodb_data:
+  footballpulse_v2_kafka_data:
+  footballpulse_v2_postgres_data:

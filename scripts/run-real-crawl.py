@@ -20,47 +20,39 @@ from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 from bs4 import BeautifulSoup
+from confluent_kafka import Producer
 from pymongo import MongoClient
 from pymongo.database import Database
-from sqlalchemy import create_engine
-from sqlalchemy.engine import URL
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "crawler-service" / "src"))
-sys.path.insert(0, str(ROOT / "services" / "article-service" / "src"))
-sys.path.insert(0, str(ROOT / "packages" / "fetch-artifacts" / "src"))
 sys.path.insert(0, str(ROOT / "packages" / "event-contracts" / "src"))
 sys.path.insert(0, str(ROOT / "packages" / "runtime-config" / "src"))
+sys.path.insert(0, str(ROOT / "packages" / "shared" / "src"))
 
-from footballpulse_article_service.application.ingest_article import ArticleIngestionService
-from footballpulse_article_service.persistence.mongo_article_store import MongoArticleStore
-from footballpulse_article_service.persistence.mongo_indexes import bootstrap_indexes
-from footballpulse_crawler_service.application.source_service import (
-    CrawlBatchService,
-    SourceService,
-)
+from footballpulse_crawler_service.application.v2_article_pipeline import V2ArticlePipeline
 from footballpulse_crawler_service.discovery.fetcher import RssFetcher, create_http_client
 from footballpulse_crawler_service.discovery.runner import DiscoveryJob
 from footballpulse_crawler_service.discovery.security import UrlSafetyPolicy
 from footballpulse_crawler_service.discovery.service import RssDiscovery
-from footballpulse_crawler_service.domain.crawl_batch import CrawlBatchStatus
+from footballpulse_crawler_service.discovery.v2_policy import (
+    V2_BOOTSTRAP_FETCH_LIMIT,
+    V2_CANDIDATE_LIMIT,
+    V2_SCHEDULED_FETCH_LIMIT,
+    select_new_candidates,
+)
 from footballpulse_crawler_service.domain.source import NewSource, SourceType
-from footballpulse_crawler_service.extraction.artifact_handoff import ArticleArtifactHandoff
 from footballpulse_crawler_service.extraction.fetcher import HtmlFetcher
 from footballpulse_crawler_service.extraction.processor import ArticleContentProcessor
 from footballpulse_crawler_service.extraction.service import ExtractedArticle, HtmlExtractionService
-from footballpulse_crawler_service.persistence.postgres_repositories import (
-    PostgresCrawlBatchRepository,
-    PostgresSourceRepository,
-)
-from footballpulse_event_contracts.article import ArticleDiscoveredEvent, ArticleDiscoveredPayload
-from footballpulse_fetch_artifacts.filesystem import FilesystemArtifactStore
+from footballpulse_crawler_service.messaging.v2 import V2NewsCrawledPublisher
+from footballpulse_crawler_service.persistence.mongo_v2 import V2MongoArticleWriter
 from footballpulse_runtime_config import bind_log_context, configure_logging
 from footballpulse_runtime_config import log_event as structured_log_event
+from footballpulse_shared import canonicalize_news_url
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,53 +238,35 @@ def log_event(event: str, **fields: object) -> None:
     structured_log_event(LOGGER, event, **fields)
 
 
-def database_engine() -> object:
-    return create_engine(
-        URL.create(
-            "postgresql+psycopg",
-            username=os.getenv("FOOTBALLPULSE_POSTGRES_USER", "footballpulse"),
-            password=os.getenv("FOOTBALLPULSE_POSTGRES_PASSWORD", "footballpulse_local_only"),
-            host=os.getenv("FOOTBALLPULSE_POSTGRES_HOST", "127.0.0.1"),
-            port=int(os.getenv("FOOTBALLPULSE_POSTGRES_PORT", "5432")),
-            database=os.getenv("FOOTBALLPULSE_POSTGRES_DB", "footballpulse"),
-        )
+def mongo_connection_url() -> str:
+    raw = os.getenv(
+        "FOOTBALLPULSE_MONGODB_URL",
+        "mongodb://127.0.0.1:27117/?directConnection=true",
     )
+    parsed = urlsplit(raw)
+    query = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True) if key.lower() != "replicaset"]
+    if not any(key.lower() == "directconnection" for key, _value in query):
+        query.append(("directConnection", "true"))
+    if parsed.hostname in {"mongodb", "mongodb:27017"}:
+        netloc = parsed.netloc.replace("mongodb:27017", "127.0.0.1:27117")
+    else:
+        netloc = parsed.netloc
+    return urlunsplit((parsed.scheme, netloc, parsed.path, urlencode(query), parsed.fragment))
 
 
-def ensure_source(service: SourceService, item: CatalogSource):
-    existing = next(
-        (source for source in service.list_sources(limit=200) if source.rss_url == item.url), None
-    )
-    if existing is not None:
-        if (
-            tuple(item.domains) != existing.allowed_domains
-            or existing.source_type is not item.source_type
-        ):
-            return service.update(
-                existing.id,
-                NewSource.create(
-                    name=item.name,
-                    rss_url=item.url,
-                    allowed_domains=list(item.domains),
-                    source_type=item.source_type,
-                    reliability_tier=existing.reliability_tier,
-                    crawl_interval_minutes=existing.crawl_interval_minutes,
-                    max_concurrency=existing.max_concurrency,
-                ),
-                expected_version=existing.version,
-            )
-        return existing
-    return service.create(
-        NewSource.create(
-            name=item.name,
-            rss_url=item.url,
-            allowed_domains=list(item.domains),
-            source_type=item.source_type,
-            reliability_tier=1 if "Reuters" in item.name or "Associated" in item.name else 2,
-            crawl_interval_minutes=360,
-            max_concurrency=2,
-        )
-    )
+
+@dataclass(frozen=True, slots=True)
+class LocalSourceRecord:
+    name: str
+    rss_url: str
+    allowed_domains: tuple[str, ...]
+    source_type: SourceType
+    id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class LocalBatchRecord:
+    id: UUID
 
 
 def _is_article_url(source: CatalogSource, url: str) -> bool:
@@ -364,14 +338,14 @@ async def _sitemap_links(item: CatalogSource, source, client, safety, limit: int
 async def _browser_article(
     renderer: BrowserRenderer,
     *,
-    batch_id: UUID,
+    source_key: str,
     url: str,
     allowed: tuple[str, ...],
 ) -> ExtractedArticle:
     rendered = await renderer.fetch(url, allowed_domains=allowed)
     extraction = ArticleContentProcessor().process(rendered.content, url=rendered.final_url)
     return ExtractedArticle(
-        source_key=str(batch_id),
+        source_key=source_key,
         requested_url=url,
         final_url=rendered.final_url,
         content_type="text/html",
@@ -383,7 +357,16 @@ async def _browser_article(
 
 
 async def crawl_source(
-    item: CatalogSource, source, batch, ingestion, handoff, client, safety, renderer, max_articles
+    item: CatalogSource,
+    source,
+    batch,
+    pipeline: V2ArticlePipeline,
+    database: Database[dict[str, object]],
+    client,
+    safety,
+    renderer,
+    max_articles,
+    candidate_limit: int,
 ):
     allowed = tuple(source.allowed_domains)
     links: list[tuple[str, str, str | None, datetime | None]] = []
@@ -427,11 +410,28 @@ async def crawl_source(
 
     if not links:
         raise RuntimeError("source listing contained no usable article URLs")
+    candidate_metadata = {
+        canonicalize_news_url(url): (rss_title, guid, published_at)
+        for url, rss_title, guid, published_at in links
+    }
+    candidates = select_new_candidates(
+        [url for url, *_rest in links],
+        exists=lambda article_id: database.news_metadata.find_one({"_id": article_id}, {"_id": 1}) is not None,
+        candidate_limit=candidate_limit,
+        fetch_limit=max_articles,
+    )
+    links = [
+        (candidate.url, *candidate_metadata[candidate.url])
+        for candidate in candidates
+        if candidate.url in candidate_metadata
+    ]
+    if not links:
+        log_event("source_skipped_no_new_candidates", source=item.name, batch_id=batch.id)
+        return 0, 0, 0
     fetched = failed = 0
     log_event("source_discovered", source=item.name, batch_id=batch.id, count=len(links))
     extractor = HtmlExtractionService(fetcher=HtmlFetcher(client=client, safety_policy=safety))
     for article_number, (url, rss_title, guid, published_at) in enumerate(links, start=1):
-        artifact_id = uuid.uuid4()
         article_started = time.monotonic()
         log_event(
             "article_fetch_started",
@@ -444,7 +444,7 @@ async def crawl_source(
         try:
             try:
                 article = await extractor.fetch_and_extract(
-                    DiscoveryJob(str(batch.id), url, allowed)
+                    DiscoveryJob(item.name, url, allowed)
                 )
             except Exception as static_error:
                 if renderer is None or item.name not in BROWSER_ARTICLE_SOURCES:
@@ -457,7 +457,7 @@ async def crawl_source(
                     reason=str(static_error),
                 )
                 article = await _browser_article(
-                    renderer, batch_id=batch.id, url=url, allowed=allowed
+                    renderer, source_key=item.name, url=url, allowed=allowed
                 )
             if (
                 article.extraction.status.value == "FAILED"
@@ -468,7 +468,7 @@ async def crawl_source(
                     "browser_fallback", source=item.name, url=url, reason_type="ExtractionFailed"
                 )
                 article = await _browser_article(
-                    renderer, batch_id=batch.id, url=url, allowed=allowed
+                    renderer, source_key=item.name, url=url, allowed=allowed
                 )
             if article.extraction.status.value == "FAILED":
                 failed += 1
@@ -483,7 +483,6 @@ async def crawl_source(
                 continue
             if article.extraction.title is None:
                 article = replace(article, extraction=replace(article.extraction, title=rss_title))
-            handoff.persist(artifact_id, article)
             log_event(
                 "article_extraction_completed",
                 source=item.name,
@@ -493,39 +492,25 @@ async def crawl_source(
                 html_bytes=len(article.raw_html),
                 text_chars=len(article.extraction.text or ""),
             )
-            now = datetime.now(UTC)
-            event = ArticleDiscoveredEvent(
-                event_id=uuid.uuid4(),
-                event_type="article.discovered",
-                event_version=1,
-                occurred_at=now,
-                producer="crawler-service",
-                correlation_id=batch.id,
-                causation_id=None,
-                aggregate_type="source_article",
-                aggregate_id=uuid.uuid5(uuid.NAMESPACE_URL, article.final_url),
-                idempotency_key=f"{batch.id}:{article.final_url}",
-                payload=ArticleDiscoveredPayload(
-                    source_id=source.id,
+            article_id = pipeline.persist_and_publish(article)
+            if article_id is None:
+                failed += 1
+                log_event(
+                    "article_failed",
+                    source=item.name,
                     batch_id=batch.id,
-                    canonical_url=article.final_url,
-                    rss_guid=guid,
-                    rss_title=rss_title,
-                    rss_published_at=published_at,
-                    fetched_at=now,
-                    fetch_artifact_id=artifact_id,
-                    http_status=200,
-                    content_type=article.content_type,
-                    content_length=len(article.raw_html),
-                ),
-            )
-            ingestion.handle(event)
+                    url=url,
+                    error_type="MongoWriteRejected",
+                    error="crawler v2 writer rejected article payload",
+                )
+                continue
             fetched += 1
             log_event(
                 "article_processed",
                 source=item.name,
                 batch_id=batch.id,
                 url=url,
+                article_id=article_id,
                 status="SUCCESS",
                 duration_ms=round((time.monotonic() - article_started) * 1000),
             )
@@ -547,50 +532,64 @@ async def main_async(args: argparse.Namespace) -> int:
     selected = select_sources(args.source)
     if not selected:
         raise SystemExit("No matching source. Use --list-sources to see catalog names.")
-    engine = database_engine()
-    source_repo = PostgresSourceRepository(engine)
-    batch_repo = PostgresCrawlBatchRepository(engine)
-    source_service = SourceService(source_repo, clock=lambda: datetime.now(UTC))
-    batch_service = CrawlBatchService(source_repo, batch_repo, clock=lambda: datetime.now(UTC))
-    mongo_url = os.getenv("FOOTBALLPULSE_MONGODB_URL", "mongodb://127.0.0.1:27017/?replicaSet=rs0")
-    mongo_client: MongoClient[dict[str, object]] = MongoClient(mongo_url)
+    mongo_url = mongo_connection_url()
+    mongo_client: MongoClient[dict[str, object]] = MongoClient(
+        mongo_url,
+        uuidRepresentation="standard",
+    )
     database: Database[dict[str, object]] = mongo_client[
         os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse")
     ]
-    bootstrap_indexes(database)
-    article_store = MongoArticleStore(database)
-    artifact_root = ROOT / os.getenv(
-        "FOOTBALLPULSE_FETCH_ARTIFACT_ROOT", ".local-data/fetch-artifacts"
+    kafka_producer = Producer(
+        {
+            "bootstrap.servers": os.getenv(
+                "FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS",
+                "127.0.0.1:19092",
+            )
+        }
     )
-    artifact_store = FilesystemArtifactStore(artifact_root)
-    handoff = ArticleArtifactHandoff(store=artifact_store)
-    ingestion = ArticleIngestionService(
-        repository=article_store, artifacts=artifact_store, clock=lambda: datetime.now(UTC)
-    )
+    writer = V2MongoArticleWriter(database)
     safety = UrlSafetyPolicy()
-    renderer = (
-        BrowserRenderer(safety)
-        if os.getenv("FOOTBALLPULSE_BROWSER_FALLBACK", "true").lower() in {"1", "true", "yes"}
-        else None
+    browser_enabled = os.getenv("FOOTBALLPULSE_BROWSER_FALLBACK", "true").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    needs_browser = any(
+        item.name in BROWSER_LISTING_SOURCES or item.name in BROWSER_ARTICLE_SOURCES
+        for item in selected
     )
+    renderer = BrowserRenderer(safety) if browser_enabled and needs_browser else None
     if renderer is not None:
         await renderer.start()
     started = time.monotonic()
+    fetch_limit = (
+        V2_BOOTSTRAP_FETCH_LIMIT
+        if os.getenv("FOOTBALLPULSE_CRAWL_MODE", "scheduled").casefold() == "bootstrap"
+        else V2_SCHEDULED_FETCH_LIMIT
+    )
+    max_articles = min(args.max_articles, fetch_limit)
     log_event(
         "crawl_run_started",
         source_count=len(selected),
-        max_articles_per_source=args.max_articles,
+        max_articles_per_source=max_articles,
         browser_fallback=renderer is not None,
     )
     try:
         async with create_http_client(max_connections=20) as client:
             for item in selected:
-                source = ensure_source(source_service, item)
-                batch = batch_service.open(
-                    source_id=source.id,
-                    idempotency_key=f"real:{item.name}:{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}:{uuid.uuid4().hex[:8]}",
-                    window_started_at=datetime.now(UTC),
+                pipeline = V2ArticlePipeline(
+                    mongo=writer,
+                    kafka=V2NewsCrawledPublisher(kafka_producer, source_name=item.name),
                 )
+                source = LocalSourceRecord(
+                    name=item.name,
+                    rss_url=item.url,
+                    allowed_domains=item.domains,
+                    source_type=item.source_type,
+                    id=uuid.uuid5(uuid.NAMESPACE_URL, item.url),
+                )
+                batch = LocalBatchRecord(id=uuid.uuid4())
                 log_event(
                     "source_started",
                     source=item.name,
@@ -606,24 +605,16 @@ async def main_async(args: argparse.Namespace) -> int:
                             item,
                             source,
                             batch,
-                            ingestion,
-                            handoff,
+                            pipeline,
+                            database,
                             client,
                             safety,
                             renderer,
-                            args.max_articles,
+                            max_articles,
+                            V2_CANDIDATE_LIMIT,
                         )
-                        status = (
-                            CrawlBatchStatus.COMPLETED if failed == 0 else CrawlBatchStatus.PARTIAL
-                        )
+                        status = "COMPLETED" if failed == 0 else "PARTIAL"
                     except asyncio.CancelledError:
-                        batch_service.complete(
-                            batch.id,
-                            status=CrawlBatchStatus.PARTIAL,
-                            discovered_count=discovered,
-                            fetched_count=fetched,
-                            failed_count=failed,
-                        )
                         log_event("source_aborted", source=item.name, batch_id=batch.id)
                         raise
                     except Exception as exc:
@@ -636,19 +627,12 @@ async def main_async(args: argparse.Namespace) -> int:
                             error_type=type(exc).__name__,
                             error=str(exc),
                         )
-                        status = CrawlBatchStatus.FAILED
-                batch_service.complete(
-                    batch.id,
-                    status=status,
-                    discovered_count=discovered,
-                    fetched_count=fetched,
-                    failed_count=failed,
-                )
+                        status = "FAILED"
                 log_event(
                     "source_completed",
                     source=item.name,
                     batch_id=batch.id,
-                    status=status.value,
+                    status=status,
                     discovered=discovered,
                     fetched=fetched,
                     failed=failed,
@@ -657,6 +641,7 @@ async def main_async(args: argparse.Namespace) -> int:
     finally:
         if renderer is not None:
             await renderer.close()
+        kafka_producer.flush(10)
         mongo_client.close()
         log_event(
             "crawl_run_completed",

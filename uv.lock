@@ -17,6 +17,7 @@ members = [
     "footballpulse-fetch-artifacts",
     "footballpulse-intelligence-service",
     "footballpulse-mongo-models",
+    "footballpulse-pipeline",
     "footballpulse-publisher-service",
     "footballpulse-runtime-config",
     "footballpulse-shared",
@@ -622,6 +623,31 @@ dependencies = [
 requires-dist = [
     { name = "beanie", specifier = ">=2.0,<3" },
     { name = "footballpulse-shared", editable = "packages/shared" },
+]
+
+[[package]]
+name = "footballpulse-pipeline"
+version = "0.1.0"
+source = { editable = "packages/pipeline" }
+dependencies = [
+    { name = "footballpulse-ai-content-service" },
+    { name = "footballpulse-crawler-service" },
+    { name = "footballpulse-publisher-service" },
+    { name = "footballpulse-runtime-config" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pymongo" },
+    { name = "sqlalchemy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "footballpulse-ai-content-service", editable = "services/ai-content-service" },
+    { name = "footballpulse-crawler-service", editable = "services/crawler-service" },
+    { name = "footballpulse-publisher-service", editable = "services/publisher-service" },
+    { name = "footballpulse-runtime-config", editable = "packages/runtime-config" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
+    { name = "pymongo", specifier = ">=4.16,<5" },
+    { name = "sqlalchemy", specifier = ">=2.0,<3" },
 ]
 
 [[package]]

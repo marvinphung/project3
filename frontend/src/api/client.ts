@@ -3,8 +3,8 @@ export type PublicArticle = {
   slug: string
   title_vi: string
   body_vi: string
-  story_id: string
-  story_version: number
+  excerpt_vi?: string | null
+  story_id: string | null
   published_at: string
   entities: { id: string; entity_type: string; name: string; slug: string }[]
 }
@@ -19,6 +19,7 @@ type V2Article = {
   body_vi: string
   story_id: string | null
   published_at: string
+  entities?: { id: string; entity_type: string; name: string; slug: string }[]
 }
 
 function fromV2Article(article: V2Article): PublicArticle {
@@ -27,10 +28,10 @@ function fromV2Article(article: V2Article): PublicArticle {
     slug: article.slug,
     title_vi: article.title_vi,
     body_vi: article.body_vi,
-    story_id: article.story_id ?? article.id,
-    story_version: 1,
+    excerpt_vi: article.excerpt_vi,
+    story_id: article.story_id,
     published_at: article.published_at,
-    entities: [],
+    entities: article.entities ?? [],
   }
 }
 
@@ -58,12 +59,14 @@ export type PublicEntity = {
 
 export type PublicStory = {
   id: string
+  title_vi: string
+  summary_vi: string | null
   event_type: string
   status: string
-  confidence_score: number
-  version: number
+  confirmation: string
   first_seen_at: string
   last_seen_at: string
+  entity_ids: string[]
 }
 
 export type PublicArticleSource = {
@@ -372,6 +375,10 @@ export function listArticles(params: ArticleListParams = {}) {
   const query = new URLSearchParams()
   if (params.limit !== undefined) query.set('limit', String(params.limit))
   if (params.offset !== undefined) query.set('offset', String(params.offset))
+  if (params.storyId) query.set('story_id', params.storyId)
+  if (params.query) query.set('q', params.query)
+  if (params.entityType) query.set('entity_type', params.entityType)
+  if (params.entitySlug) query.set('entity_slug', params.entitySlug)
   const suffix = query.toString() ? `?${query}` : ''
   return request<{ items: V2Article[]; limit: number; offset: number }>(`/api/v2/articles${suffix}`)
     .then((response) => ({ ...response, items: response.items.map(fromV2Article) }))
@@ -405,7 +412,7 @@ export function getStoryTimeline(
 
 export function getEntityStories(entityType: string, entitySlug: string) {
   return request<PublicEntityStories>(
-    `/api/v1/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entitySlug)}/stories`,
+    `/api/v2/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entitySlug)}/stories`,
   )
 }
 
@@ -415,17 +422,17 @@ export function listEntities(params: { type?: string; query?: string; limit?: nu
   if (params.query) query.set('q', params.query)
   if (params.limit !== undefined) query.set('limit', String(params.limit))
   if (params.offset !== undefined) query.set('offset', String(params.offset))
-  return request<ListResponse<PublicEntity>>(`/api/v1/entities?${query}`)
+  return request<ListResponse<PublicEntity>>(`/api/v2/entities?${query}`)
 }
 
 export function getEntity(entityType: string, entitySlug: string) {
   return request<PublicEntity>(
-    `/api/v1/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entitySlug)}`,
+    `/api/v2/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entitySlug)}`,
   )
 }
 
 export function getStory(storyId: string) {
-  return request<PublicStory>(`/api/v1/stories/${encodeURIComponent(storyId)}`)
+  return request<PublicStory>(`/api/v2/stories/${encodeURIComponent(storyId)}`)
 }
 
 export function getArticleSources(slug: string) {

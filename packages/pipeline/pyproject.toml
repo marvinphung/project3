@@ -1,0 +1,26 @@
+[project]
+name = "footballpulse-pipeline"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "footballpulse-ai-content-service",
+    "footballpulse-crawler-service",
+    "footballpulse-publisher-service",
+    "footballpulse-runtime-config",
+    "pymongo>=4.16,<5",
+    "sqlalchemy>=2.0,<3",
+    "psycopg[binary]>=3.3,<4",
+]
+
+[tool.uv.sources]
+footballpulse-ai-content-service = { workspace = true }
+footballpulse-crawler-service = { workspace = true }
+footballpulse-publisher-service = { workspace = true }
+footballpulse-runtime-config = { workspace = true }
+
+[project.scripts]
+footballpulse-pipeline = "footballpulse_pipeline.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

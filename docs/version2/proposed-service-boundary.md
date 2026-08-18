@@ -37,7 +37,6 @@ project3/
 │   ├── supabase-models/
 │   └── shared/
 ├── docs/
-│   ├── version1/
 │   └── version2/
 └── scripts/
 ```
@@ -102,16 +101,10 @@ API surface dau tien:
 
 ```text
 GET /health
-GET /api/v1/articles
-GET /api/v1/articles/{id}
-GET /api/v1/publications
-GET /api/v1/publications/{slug}
-GET /api/v1/stories
-GET /api/v1/stories/{id}
-GET /api/v1/stories/{id}/timeline
-GET /api/v1/entities
-GET /api/v1/entities/{type}/{slug}
-GET /api/v1/entities/{type}/{slug}/timeline
+GET /api/v2/articles
+GET /api/v2/articles/{slug}
+GET /api/v2/articles/{slug}/sources
+GET /api/v2/stories/{id}/timeline
 ```
 
 Nguyen tac:
@@ -122,6 +115,8 @@ Nguyen tac:
 - API khong trigger crawl.
 - List endpoint co pagination.
 - Error response thong nhat.
+- Surface public version 2 giu nho gon; entity/story aggregate mo rong sau khi
+  read model on dinh.
 
 ## 4. `pipeline/crawler`
 

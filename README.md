@@ -77,12 +77,10 @@ nguồn dữ liệu có cấu trúc cho entity, Story, timeline, editorial và p
 Kafka vận chuyển business event; Airflow chỉ điều phối lịch chạy, không chứa
 business logic.
 
-Trong trạng thái vận hành hiện tại, crawler/intelligence/enrichment đã chạy tự
-động nhưng bước materialize enrichment thành Story, editorial revision và
-publication vẫn tuân theo editorial gate. Vì vậy dữ liệu trong MongoDB không tự
-động xuất hiện trên UI; chỉ các dòng đã có trong
-`content_schema.publications` mới được Public API trả về. Xem chi tiết và các
-lệnh kiểm tra tại [Hướng dẫn chạy local](docs/local-development.md).
+Trong trạng thái `version2` hien tai, local pipeline crawl/process/enrichment/
+publish da chay 100% tu dong. MongoDB local giu raw + processed article;
+Supabase PostgreSQL giu read model public cho API va frontend. Xem chi tiet va
+cac lenh kiem tra tai [ADR version 2](docs/version2/adr-0001-version2-local-pipeline-supabase-serving.md).
 
 ## Công nghệ chính
 
@@ -95,14 +93,13 @@ lệnh kiểm tra tại [Hướng dẫn chạy local](docs/local-development.md)
 
 ## Chạy dự án
 
-Xem [Hướng dẫn chạy FootballPulse trên local](docs/local-development.md) để cấu
-hình môi trường, khởi động Docker, chạy crawl thật, theo dõi log và kiểm tra dữ
-liệu end-to-end.
+Xem [tai lieu version 2](docs/version2/) de cau hinh moi truong, khoi dong
+stack local, va doi chieu luong du lieu end-to-end.
 
 Sau khi tạo `.env`, có thể khởi động toàn bộ stack bằng một command:
 
 ```bash
-docker compose --profile core --profile app --profile airflow up -d --build
+docker compose -f docker-compose.v2.yml up -d --build
 ```
 
 Hướng dẫn local cũng có phương án chạy lần lượt từng lớp để dễ theo dõi log và
@@ -113,10 +110,8 @@ Các địa chỉ mặc định sau khi stack khởi động:
 | Dịch vụ | Địa chỉ |
 | --- | --- |
 | Web App | <http://localhost:8443> |
-| Public/Admin API | <http://localhost:8000> |
+| Public API | <http://localhost:8000> |
 | API docs | <http://localhost:8000/docs> |
-| Crawler API | <http://localhost:8011> |
-| AI Content API | <http://localhost:8002> |
 | Airflow | <http://localhost:8080> |
 
 ## Cấu trúc repository
@@ -132,20 +127,18 @@ footballpulse/
 ├── scripts/            # Crawl, smoke check và công cụ vận hành
 ├── services/           # Các Python service
 ├── tests/              # Cross-service và infrastructure tests
-└── docker-compose.yml
+└── docker-compose.v2.yml
 ```
 
 ## Tài liệu
 
-- [Tổng quan hệ thống](docs/overview.md)
-- [Kiến trúc](docs/architecture.md)
-- [Luồng nội dung](docs/content-flow.md)
-- [Data model](docs/data-model.md)
-- [Thiết kế Story](docs/story-design.md)
-- [API design](docs/api-design.md)
-- [Editorial flow](docs/editorial-flow.md)
-- [Testing](docs/testing.md)
-- [Open questions](docs/open-questions.md)
+- [ADR version 2](docs/version2/adr-0001-version2-local-pipeline-supabase-serving.md)
+- [DB schema version 2](docs/version2/proposed-db-schema.md)
+- [Technology stack version 2](docs/version2/proposed-technology-stack.md)
+- [Pipeline flow version 2](docs/version2/proposed-pipeline-flow.md)
+- [API contract version 2](docs/version2/proposed-api-contract.md)
+- [Service boundary version 2](docs/version2/proposed-service-boundary.md)
+- [Implementation plan version 2](docs/version2/refactor-implementation-plan.md)
 
 ## Nguyên tắc dữ liệu
 
