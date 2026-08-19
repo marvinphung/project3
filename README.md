@@ -82,8 +82,9 @@ Lenh nay dung full cac service local chinh cua `version2`:
 - `processor`
 - `publisher`
 
-5. Xem runbook local:
+5. Xem tài liệu hướng dẫn vận hành chi tiết:
 
+- [Hướng Dẫn Chạy & Vận Hành Hệ Thống](docs/HUONG_DAN_CHAY.md)
 - [Local Development V2](docs/version2/local-development.md)
 
 ## Lệnh chính

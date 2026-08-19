@@ -555,7 +555,10 @@ async def main_async(args: argparse.Namespace) -> int:
     )
     renderer = BrowserRenderer(safety) if browser_enabled and needs_browser else None
     if renderer is not None:
-        await renderer.start()
+        try:
+            await renderer.start()
+        except Exception as exc:
+            renderer = None
     started = time.monotonic()
     fetch_limit = (
         V2_BOOTSTRAP_FETCH_LIMIT
