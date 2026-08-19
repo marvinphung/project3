@@ -17,8 +17,22 @@ sys.path.extend(
 from footballpulse_api_gateway.runtime_v2 import build_app
 
 
+def _load_repo_env() -> dict[str, str]:
+    env = dict(os.environ)
+    env_path = ROOT / '.env'
+    if env_path.exists():
+        for line in env_path.read_text(encoding='utf-8').splitlines():
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, val = line.split('=', 1)
+            env.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+    return env
+
+
 def main() -> None:
-    app = build_app(os.environ)
+    env = _load_repo_env()
+    app = build_app(env)
     client = TestClient(app)
 
     listing = client.get('/api/v2/articles?limit=5')

@@ -29,15 +29,29 @@ def main() -> None:
         raise AssertionError('no crawled article found')
     article_id = metadata['_id']
 
-    url = URL.create(
-        'postgresql+psycopg',
-        username=os.environ['SUPABASE_DB_USER'],
-        password=os.environ['SUPABASE_DB_PASSWORD'],
-        host=os.environ['SUPABASE_DB_HOST'],
-        port=int(os.environ['SUPABASE_DB_PORT']),
-        database=os.environ['SUPABASE_DB_NAME'],
-    )
-    engine = create_engine(url, pool_pre_ping=True)
+    postgres_url = os.getenv('FOOTBALLPULSE_V2_POSTGRES_URL')
+    if postgres_url:
+        engine = create_engine(postgres_url, pool_pre_ping=True)
+    elif os.getenv('SUPABASE_DB_HOST'):
+        url = URL.create(
+            'postgresql+psycopg',
+            username=os.environ['SUPABASE_DB_USER'],
+            password=os.environ['SUPABASE_DB_PASSWORD'],
+            host=os.environ['SUPABASE_DB_HOST'],
+            port=int(os.environ.get('SUPABASE_DB_PORT', '5432')),
+            database=os.environ.get('SUPABASE_DB_NAME', 'postgres'),
+        )
+        engine = create_engine(url, pool_pre_ping=True)
+    else:
+        url = URL.create(
+            'postgresql+psycopg',
+            username=os.getenv('FOOTBALLPULSE_POSTGRES_USER', 'footballpulse'),
+            password=os.getenv('FOOTBALLPULSE_POSTGRES_PASSWORD', 'footballpulse_v2_local'),
+            host=os.getenv('FOOTBALLPULSE_POSTGRES_HOST', '127.0.0.1'),
+            port=int(os.getenv('FOOTBALLPULSE_POSTGRES_PORT', '15432')),
+            database=os.getenv('FOOTBALLPULSE_POSTGRES_DB', 'footballpulse_v2'),
+        )
+        engine = create_engine(url, pool_pre_ping=True)
     publisher = V2Publisher(mongo=database, postgres=engine)
     published = publisher.publish_article(article_id)
     if not published:

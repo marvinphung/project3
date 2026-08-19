@@ -76,22 +76,30 @@ def main() -> None:
     if stored is None or stored.get('validation_status') != 'VALIDATED':
         raise AssertionError('validated enrichment was not written to Mongo')
 
+    producer.flush(5.0)
+
+    from uuid import uuid4
     consumer = Consumer(
         {
             'bootstrap.servers': '127.0.0.1:19092',
-            'group.id': 'footballpulse-v2-enrichment-smoke',
+            'group.id': f'footballpulse-v2-enrichment-smoke-{uuid4()}',
             'enable.auto.commit': False,
             'auto.offset.reset': 'earliest',
         }
     )
     consumer.subscribe(['news.enriched.v1'])
-    message = consumer.poll(10.0)
+    matched = False
+    for _ in range(10):
+        message = consumer.poll(2.0)
+        if message is None or message.error() is not None:
+            continue
+        payload = json.loads(message.value().decode('utf-8'))
+        if payload.get('article_id') == str(article_id):
+            matched = True
+            break
     consumer.close()
-    if message is None or message.error() is not None:
-        raise AssertionError('did not receive news.enriched.v1 event')
-    payload = json.loads(message.value().decode('utf-8'))
-    if payload.get('article_id') != str(article_id):
-        raise AssertionError('news.enriched.v1 payload article_id mismatch')
+    if not matched:
+        raise AssertionError(f'did not receive news.enriched.v1 event for {article_id}')
 
     print(f'v2 enrichment smoke passed: backlog_rows={count} article_id={article_id}')
 

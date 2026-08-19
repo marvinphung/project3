@@ -212,6 +212,10 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-webserver:8080/execution/"
+      AIRFLOW__CORE__SECRET_KEY: "footballpulse-v2-airflow-secret-key-32chars!"
+      AIRFLOW__CORE__INTERNAL_API_SECRET_KEY: "footballpulse-v2-airflow-internal-key-32ch!"
+      AIRFLOW__API_AUTH__JWT_SECRET: "footballpulse-v2-airflow-jwt-secret-key-32chars!"
       FOOTBALLPULSE_CRAWL_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm crawler python -m footballpulse_pipeline crawl
       FOOTBALLPULSE_PROCESS_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm processor python -m footballpulse_pipeline process
       FOOTBALLPULSE_PUBLISH_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm publisher python -m footballpulse_pipeline publish
