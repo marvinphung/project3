@@ -88,4 +88,8 @@ class V2Publisher:
                 ),
                 {"id": article_id, "story": story_id, "slug": slug, "title_en": title, "title_vi": title, "excerpt": summary_vi, "body_en": summary_en, "body_vi": summary_vi, "published": now},
             )
+        self._mongo.news_enrichments.update_one(
+            {"_id": article_id},
+            {"$set": {"publish_status": "PUBLISHED", "published_to_postgres_at": now}},
+        )
         return True

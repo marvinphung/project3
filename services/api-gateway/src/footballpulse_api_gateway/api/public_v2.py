@@ -215,7 +215,7 @@ def create_public_v2_app(engine: Engine) -> FastAPI:
         statement = sa.text(
             """select story_id, happened_at, summary_en, summary_vi, confirmation
             from timeline_entries where story_id = :story_id
-              and (:confirmation is null or confirmation::text = upper(:confirmation))
+              and (cast(:confirmation as text) is null or confirmation::text = upper(cast(:confirmation as text)))
             order by happened_at desc limit :limit offset :offset"""
         )
         with engine.connect() as connection:
@@ -252,8 +252,8 @@ def create_public_v2_app(engine: Engine) -> FastAPI:
                    published.story_count, published.article_count
             from entities e
             join published on published.entity_id = e.id
-            where (:entity_type is null or e.entity_type::text = upper(:entity_type))
-              and (:query is null or e.name ilike :query)
+            where (cast(:entity_type as text) is null or e.entity_type::text = upper(cast(:entity_type as text)))
+              and (cast(:query as text) is null or e.name ilike cast(:query as text))
             order by published.article_count desc, e.name asc
             limit :limit offset :offset"""
         )
@@ -268,8 +268,8 @@ def create_public_v2_app(engine: Engine) -> FastAPI:
             select count(*)
             from entities e
             join published on published.entity_id = e.id
-            where (:entity_type is null or e.entity_type::text = upper(:entity_type))
-              and (:query is null or e.name ilike :query)"""
+            where (cast(:entity_type as text) is null or e.entity_type::text = upper(cast(:entity_type as text)))
+              and (cast(:query as text) is null or e.name ilike cast(:query as text))"""
         )
         params = {"entity_type": type, "query": query, "limit": limit, "offset": offset}
         with engine.connect() as connection:

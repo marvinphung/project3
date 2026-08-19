@@ -239,19 +239,13 @@ def log_event(event: str, **fields: object) -> None:
 
 
 def mongo_connection_url() -> str:
-    raw = os.getenv(
-        "FOOTBALLPULSE_MONGODB_URL",
-        "mongodb://127.0.0.1:27117/?directConnection=true",
+    return os.getenv(
+        "FOOTBALLPULSE_V2_MONGODB_URL",
+        os.getenv(
+            "FOOTBALLPULSE_MONGODB_URL",
+            "mongodb://127.0.0.1:27117/?replicaSet=rs0&directConnection=true",
+        ),
     )
-    parsed = urlsplit(raw)
-    query = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True) if key.lower() != "replicaset"]
-    if not any(key.lower() == "directconnection" for key, _value in query):
-        query.append(("directConnection", "true"))
-    if parsed.hostname in {"mongodb", "mongodb:27017"}:
-        netloc = parsed.netloc.replace("mongodb:27017", "127.0.0.1:27117")
-    else:
-        netloc = parsed.netloc
-    return urlunsplit((parsed.scheme, netloc, parsed.path, urlencode(query), parsed.fragment))
 
 
 
@@ -375,10 +369,10 @@ async def crawl_source(
         record = await rss.discover(DiscoveryJob(str(source.id), source.rss_url, allowed))
         links = [
             (entry.url, entry.title, entry.guid, entry.published_at)
-            for entry in record.feed.entries[:max_articles]
+            for entry in record.feed.entries[:candidate_limit]
         ]
     elif item.source_type is SourceType.SITEMAP:
-        for url in await _sitemap_links(item, source, client, safety, max_articles):
+        for url in await _sitemap_links(item, source, client, safety, candidate_limit):
             links.append((url, url.rsplit("/", 1)[-1].replace("-", " ")[:500] or url, None, None))
     else:
         if renderer is not None and item.name in BROWSER_LISTING_SOURCES:
@@ -391,7 +385,7 @@ async def crawl_source(
             )
         host = urlsplit(source.rss_url).hostname.lower().rstrip(".")
         for url in article_links_from_html(
-            listing.content, listing.final_url, host, max_articles, item
+            listing.content, listing.final_url, host, candidate_limit, item
         ):
             links.append((url, url.rsplit("/", 1)[-1].replace("-", " ")[:500] or url, None, None))
         if item.name == "Premier League":
@@ -405,7 +399,7 @@ async def crawl_source(
                 url = f"https://www.premierleague.com/en/news/{match.group(1)}"
                 if all(existing[0] != url for existing in links):
                     links.append((url, f"Premier League article {match.group(1)}", None, None))
-                if len(links) >= max_articles:
+                if len(links) >= candidate_limit:
                     break
 
     if not links:
@@ -538,7 +532,7 @@ async def main_async(args: argparse.Namespace) -> int:
         uuidRepresentation="standard",
     )
     database: Database[dict[str, object]] = mongo_client[
-        os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse")
+        os.getenv("FOOTBALLPULSE_V2_MONGODB_DB", os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse_v2"))
     ]
     kafka_producer = Producer(
         {
@@ -575,69 +569,76 @@ async def main_async(args: argparse.Namespace) -> int:
         max_articles_per_source=max_articles,
         browser_fallback=renderer is not None,
     )
+    source_semaphore = asyncio.Semaphore(
+        int(os.getenv("FOOTBALLPULSE_V2_SOURCE_CONCURRENCY", "4"))
+    )
+
+    async def _crawl_single_source(item: CatalogSource) -> None:
+        async with source_semaphore:
+            pipeline = V2ArticlePipeline(
+                mongo=writer,
+                kafka=V2NewsCrawledPublisher(kafka_producer, source_name=item.name),
+            )
+            source = LocalSourceRecord(
+                name=item.name,
+                rss_url=item.url,
+                allowed_domains=item.domains,
+                source_type=item.source_type,
+                id=uuid.uuid5(uuid.NAMESPACE_URL, item.url),
+            )
+            batch = LocalBatchRecord(id=uuid.uuid4())
+            log_event(
+                "source_started",
+                source=item.name,
+                url=item.url,
+                source_id=source.id,
+                batch_id=batch.id,
+            )
+            discovered = fetched = failed = 0
+            source_started = time.monotonic()
+            with bind_log_context(correlation_id=str(batch.id), batch_id=str(batch.id)):
+                try:
+                    discovered, fetched, failed = await crawl_source(
+                        item,
+                        source,
+                        batch,
+                        pipeline,
+                        database,
+                        client,
+                        safety,
+                        renderer,
+                        max_articles,
+                        V2_CANDIDATE_LIMIT,
+                    )
+                    status = "COMPLETED" if failed == 0 else "PARTIAL"
+                except asyncio.CancelledError:
+                    log_event("source_aborted", source=item.name, batch_id=batch.id)
+                    raise
+                except Exception as exc:
+                    discovered = 1
+                    failed = 1
+                    log_event(
+                        "source_failed",
+                        source=item.name,
+                        batch_id=batch.id,
+                        error_type=type(exc).__name__,
+                        error=str(exc),
+                    )
+                    status = "FAILED"
+            log_event(
+                "source_completed",
+                source=item.name,
+                batch_id=batch.id,
+                status=status,
+                discovered=discovered,
+                fetched=fetched,
+                failed=failed,
+                duration_ms=round((time.monotonic() - source_started) * 1000),
+            )
+
     try:
         async with create_http_client(max_connections=20) as client:
-            for item in selected:
-                pipeline = V2ArticlePipeline(
-                    mongo=writer,
-                    kafka=V2NewsCrawledPublisher(kafka_producer, source_name=item.name),
-                )
-                source = LocalSourceRecord(
-                    name=item.name,
-                    rss_url=item.url,
-                    allowed_domains=item.domains,
-                    source_type=item.source_type,
-                    id=uuid.uuid5(uuid.NAMESPACE_URL, item.url),
-                )
-                batch = LocalBatchRecord(id=uuid.uuid4())
-                log_event(
-                    "source_started",
-                    source=item.name,
-                    url=item.url,
-                    source_id=source.id,
-                    batch_id=batch.id,
-                )
-                discovered = fetched = failed = 0
-                source_started = time.monotonic()
-                with bind_log_context(correlation_id=str(batch.id), batch_id=str(batch.id)):
-                    try:
-                        discovered, fetched, failed = await crawl_source(
-                            item,
-                            source,
-                            batch,
-                            pipeline,
-                            database,
-                            client,
-                            safety,
-                            renderer,
-                            max_articles,
-                            V2_CANDIDATE_LIMIT,
-                        )
-                        status = "COMPLETED" if failed == 0 else "PARTIAL"
-                    except asyncio.CancelledError:
-                        log_event("source_aborted", source=item.name, batch_id=batch.id)
-                        raise
-                    except Exception as exc:
-                        discovered = 1
-                        failed = 1
-                        log_event(
-                            "source_failed",
-                            source=item.name,
-                            batch_id=batch.id,
-                            error_type=type(exc).__name__,
-                            error=str(exc),
-                        )
-                        status = "FAILED"
-                log_event(
-                    "source_completed",
-                    source=item.name,
-                    batch_id=batch.id,
-                    status=status,
-                    discovered=discovered,
-                    fetched=fetched,
-                    failed=failed,
-                    duration_ms=round((time.monotonic() - source_started) * 1000),
-                )
+            await asyncio.gather(*(_crawl_single_source(item) for item in selected))
     finally:
         if renderer is not None:
             await renderer.close()

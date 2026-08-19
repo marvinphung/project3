@@ -11,9 +11,17 @@ try {
 for (let attempt = 0; attempt < 60; attempt += 1) {
   if (db.hello().isWritablePrimary) {
     print("MongoDB replica set rs0 is writable");
-    quit(0);
+    break;
   }
   sleep(500);
 }
 
-throw new Error("MongoDB replica set rs0 did not elect a primary");
+const v2 = db.getSiblingDB("footballpulse_v2");
+v2.news_metadata.createIndex({ canonical_url: 1 }, { unique: true });
+v2.news_metadata.createIndex({ domain_name: 1, published_time: -1 });
+v2.news_metadata.createIndex({ content_hash: 1 });
+v2.news_content.createIndex({ cleaned_at: -1 });
+v2.news_entities.createIndex({ processed_at: -1 });
+v2.news_enrichments.createIndex({ validation_status: 1, processed_at: -1 });
+print("MongoDB v2 indexes ensured successfully");
+quit(0);

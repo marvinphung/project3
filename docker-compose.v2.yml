@@ -81,6 +81,7 @@ services:
     volumes:
       - footballpulse_v2_postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init/001-enable-vector.sql:/docker-entrypoint-initdb.d/001-enable-vector.sql:ro
+      - ./infrastructure/postgres/init/003-create-airflow-db.sql:/docker-entrypoint-initdb.d/003-create-airflow-db.sql:ro
       - ./supabase/migrations/202608180001_v2_product_schema.sql:/docker-entrypoint-initdb.d/002-v2-product-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U footballpulse -d footballpulse_v2"]
@@ -140,11 +141,8 @@ services:
       FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
       SUPABASE_DB_HOST: ""
       SUPABASE_DATABASE_URL: ""
-    command:
-      - sh
-      - -c
-      - while true; do python -m footballpulse_pipeline crawl --source "The Guardian Football" --source "BBC Sport Football" --max-articles ${FOOTBALLPULSE_CRAWL_MAX_ARTICLES:-10}; sleep ${FOOTBALLPULSE_V2_CRAWLER_LOOP_SECONDS:-1800}; done
-    restart: unless-stopped
+    command: ["python", "-m", "footballpulse_pipeline", "crawl", "--source", "The Guardian Football", "--source", "BBC Sport Football", "--max-articles", "100"]
+    restart: "no"
 
   processor:
     image: footballpulse-v2-runtime:local
@@ -169,12 +167,8 @@ services:
       FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
       SUPABASE_DB_HOST: ""
       SUPABASE_DATABASE_URL: ""
-      FOOTBALLPULSE_AI_PROVIDER: local_skip
-    command:
-      - sh
-      - -c
-      - while true; do python -m footballpulse_pipeline process --limit ${FOOTBALLPULSE_V2_PROCESS_LIMIT:-20}; sleep ${FOOTBALLPULSE_V2_PROCESS_LOOP_SECONDS:-1800}; done
-    restart: unless-stopped
+    command: ["python", "-m", "footballpulse_pipeline", "process", "--limit", "100"]
+    restart: "no"
 
   publisher:
     image: footballpulse-v2-runtime:local
@@ -199,11 +193,104 @@ services:
       FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
       SUPABASE_DB_HOST: ""
       SUPABASE_DATABASE_URL: ""
-    command:
-      - sh
-      - -c
-      - while true; do python -m footballpulse_pipeline publish --limit ${FOOTBALLPULSE_V2_PUBLISH_LIMIT:-50}; sleep ${FOOTBALLPULSE_V2_PUBLISH_LOOP_SECONDS:-900}; done
+    command: ["python", "-m", "footballpulse_pipeline", "publish", "--limit", "100"]
+    restart: "no"
+
+  airflow-init:
+    image: footballpulse-v2-airflow:local
+    build:
+      context: .
+      dockerfile: services/airflow.Dockerfile
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment: &airflow-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      FOOTBALLPULSE_CRAWL_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm crawler python -m footballpulse_pipeline crawl
+      FOOTBALLPULSE_PROCESS_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm processor python -m footballpulse_pipeline process
+      FOOTBALLPULSE_PUBLISH_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm publisher python -m footballpulse_pipeline publish
+    command: ["bash", "-c", "airflow db migrate"]
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags:ro
+
+  airflow-dag-processor:
+    image: footballpulse-v2-airflow:local
+    build:
+      context: .
+      dockerfile: services/airflow.Dockerfile
     restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment: *airflow-env
+    command: ["airflow", "dag-processor"]
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags:ro
+
+  airflow-scheduler:
+    image: footballpulse-v2-airflow:local
+    build:
+      context: .
+      dockerfile: services/airflow.Dockerfile
+    restart: unless-stopped
+    user: "0:0"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      mongodb-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment: *airflow-env
+    command: ["airflow", "scheduler"]
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/workspace
+    healthcheck:
+      test: ["CMD-SHELL", "airflow dags list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  airflow-webserver:
+    image: footballpulse-v2-airflow:local
+    build:
+      context: .
+      dockerfile: services/airflow.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment: *airflow-env
+    command: ["airflow", "api-server"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:8080/health || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 volumes:
   footballpulse_v2_mongodb_data:
