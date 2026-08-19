@@ -1,4 +1,4 @@
-from __future__ import annotations
+from collections.abc import Mapping
 
 from footballpulse_intelligence_service.adapters.entity_extractors import (
     CatalogAliasEntityExtractor,
@@ -13,35 +13,42 @@ from footballpulse_intelligence_service.domain.extraction import EntityLabel
 
 class RecordingModel:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, list[str], float]] = []
+        self.calls: list[tuple[str, Mapping[str, str] | list[str], float]] = []
 
-    def predict_entities(
+    def extract_entities(
         self,
         text: str,
-        labels: list[str],
+        entity_types: Mapping[str, str] | list[str],
         *,
-        threshold: float,
-    ) -> list[dict[str, object]]:
-        self.calls.append((text, labels, threshold))
-        return [
-            {
-                "text": "Vinicius Junior",
-                "label": "football player",
-                "start": 9,
-                "end": 24,
-                "score": 0.91,
+        threshold: float = 0.5,
+        format_results: bool = True,
+        include_confidence: bool = True,
+        include_spans: bool = True,
+    ) -> dict[str, object]:
+        self.calls.append((text, entity_types, threshold))
+        return {
+            "entities": {
+                "player": [
+                    {
+                        "text": "Vinicius Junior",
+                        "confidence": 0.91,
+                        "start": 9,
+                        "end": 24,
+                    }
+                ]
             }
-        ]
+        }
 
 
 def test_gliner_adapter_lazy_loads_once_and_validates_contract() -> None:
     model = RecordingModel()
     load_count = 0
 
-    def loader(model_id: str) -> RecordingModel:
+    def loader(model_id: str, device: str = "cpu") -> RecordingModel:
         nonlocal load_count
         load_count += 1
-        assert model_id == "urchade/gliner_small-v2.1"
+        assert model_id == "fastino/gliner2-large-v1"
+        assert device == "cpu"
         return model
 
     extractor = GlinerEntityExtractor(model_loader=loader)
@@ -54,23 +61,30 @@ def test_gliner_adapter_lazy_loads_once_and_validates_contract() -> None:
     assert first[0].label is EntityLabel.PLAYER
     assert second == first
     assert load_count == 1
-    assert model.calls[0][1] == [label.value for label in EntityLabel]
+    assert set(model.calls[0][1].keys()) == {label.value for label in EntityLabel}
     assert model.calls[0][2] == 0.5
 
 
 def test_gliner_adapter_rejects_untrusted_model_output() -> None:
     class InvalidModel(RecordingModel):
-        def predict_entities(
+        def extract_entities(
             self,
             text: str,
-            labels: list[str],
+            entity_types: Mapping[str, str] | list[str],
             *,
-            threshold: float,
-        ) -> list[dict[str, object]]:
-            del text, labels, threshold
-            return [{"text": "Arsenal", "label": "malicious type", "start": 0, "end": 7}]
+            threshold: float = 0.5,
+            format_results: bool = True,
+            include_confidence: bool = True,
+            include_spans: bool = True,
+        ) -> dict[str, object]:
+            del text, entity_types, threshold, format_results, include_confidence, include_spans
+            return {
+                "entities": {
+                    "malicious type": [{"text": "Arsenal", "start": 0, "end": 7, "confidence": 0.9}]
+                }
+            }
 
-    extractor = GlinerEntityExtractor(model_loader=lambda model_id: InvalidModel())
+    extractor = GlinerEntityExtractor(model_loader=lambda model_id, device="cpu": InvalidModel())
 
     try:
         extractor.extract("Arsenal update", labels=tuple(EntityLabel), threshold=0.5)
@@ -88,7 +102,7 @@ def test_mock_extractor_is_deterministic_and_finds_repeated_mentions() -> None:
     )
 
     assert [(span.start, span.end) for span in predictions] == [(0, 7), (12, 19)]
-    assert extractor.model_name == "mock-gliner"
+    assert extractor.model_name == "mock-gliner2"
 
 
 def test_mock_rule_rejects_invalid_fixture_confidence() -> None:

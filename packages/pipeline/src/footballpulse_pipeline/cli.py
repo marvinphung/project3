@@ -9,13 +9,16 @@ from typing import Any
 from uuid import UUID
 
 from confluent_kafka import Consumer
+from footballpulse_ai_content_service.persistence.v2_backlog import V2EnrichmentBacklog
+from footballpulse_ai_content_service.v2_processor import (
+    V2EntityProcessor,
+    V2NewsCrawledConsumer,
+)
+from footballpulse_publisher_service.publisher import V2Publisher
 from pymongo import MongoClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
-from footballpulse_ai_content_service.persistence.v2_backlog import V2EnrichmentBacklog
-from footballpulse_ai_content_service.v2_processor import V2EntityProcessor, V2NewsCrawledConsumer
-from footballpulse_publisher_service.publisher import V2Publisher
 from footballpulse_pipeline.v2_enrichment_runtime import run_v2_kaggle_enrichment
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -56,7 +59,7 @@ def _mongo_client() -> MongoClient[dict[str, object]]:
     )
 
 
-def _postgres_engine():
+def _postgres_engine() -> Any:
     if os.getenv("SUPABASE_DB_HOST"):
         url = URL.create(
             "postgresql+psycopg",
@@ -78,7 +81,84 @@ def _postgres_engine():
     return create_engine(url, pool_pre_ping=True)
 
 
+_EXTRACTOR: Any = None
+
+
+def _get_extractor() -> Any:
+    global _EXTRACTOR
+    if _EXTRACTOR is None:
+        try:
+            from footballpulse_intelligence_service.adapters.entity_extractors import (
+                GlinerEntityExtractor,
+            )
+
+            model_name = (
+                os.getenv("NER_MODEL_NAME")
+                or os.getenv("FOOTBALLPULSE_GLINER_MODEL")
+                or "fastino/gliner2-large-v1"
+            )
+            device = os.getenv("NER_DEVICE") or "cpu"
+            _EXTRACTOR = GlinerEntityExtractor(model_id=model_name, device=device)
+        except Exception:
+            _EXTRACTOR = False
+    return _EXTRACTOR
+
+
 def _extract_entities(text: str) -> list[dict[str, object]]:
+    extractor = _get_extractor()
+    if extractor:
+        try:
+            from footballpulse_intelligence_service.domain.extraction import (
+                EntityLabel,
+                SourceField,
+                SpanPrediction,
+                deduplicate_predictions,
+                split_text,
+            )
+
+            min_conf = (
+                os.getenv("ENTITY_EXTRACTION_MIN_CONFIDENCE")
+                or os.getenv("FOOTBALLPULSE_ENTITY_DETECTION_THRESHOLD")
+                or "0.5"
+            )
+            threshold = float(min_conf)
+            chunks = split_text(text, max_words=300, overlap_words=40, max_chunks=64)
+            if not chunks:
+                return []
+            raw_predictions: list[SpanPrediction] = []
+            for chunk in chunks:
+                spans = extractor.extract(
+                    chunk.text,
+                    labels=tuple(EntityLabel),
+                    threshold=threshold,
+                )
+                for span in spans:
+                    raw_predictions.append(
+                        SpanPrediction.create(
+                            source_field=SourceField.CONTENT,
+                            source_text=text,
+                            label=span.label,
+                            start=chunk.start + span.start,
+                            end=chunk.start + span.end,
+                            score=span.score,
+                        )
+                    )
+            deduped = deduplicate_predictions(raw_predictions)
+            return [
+                {
+                    "label": p.label.value.upper(),
+                    "text": p.text,
+                    "score": p.score,
+                    "start": p.start,
+                    "end": p.end,
+                    "canonical_entity_id": None,
+                    "canonical_name": p.text,
+                }
+                for p in deduped
+            ]
+        except Exception:
+            pass
+
     entities: list[dict[str, object]] = []
     seen: set[tuple[str, str, int, int]] = set()
     rules = {
@@ -139,7 +219,10 @@ def _run_process(limit: int) -> int:
                     "FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS",
                     "127.0.0.1:19092",
                 ),
-                "group.id": os.getenv("FOOTBALLPULSE_V2_PROCESSOR_GROUP", "footballpulse-v2-processor"),
+                "group.id": os.getenv(
+                    "FOOTBALLPULSE_V2_PROCESSOR_GROUP",
+                    "footballpulse-v2-processor",
+                ),
                 "enable.auto.commit": False,
                 "auto.offset.reset": "earliest",
             }
@@ -176,9 +259,10 @@ def _run_process(limit: int) -> int:
         )
     finally:
         mongo.close()
+    status_label = enriched_status.value if enriched_status else "SKIPPED"
     print(
-        "footballpulse_pipeline process completed: "
-        f"processed={processed} enrichment_status={enriched_status.value if enriched_status else 'SKIPPED'}"
+        f"footballpulse_pipeline process completed: processed={processed} "
+        f"enrichment_status={status_label}"
     )
     return 0
 
@@ -190,7 +274,9 @@ def _run_publish(limit: int) -> int:
     try:
         database = mongo[os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse_v2")]
         publisher = V2Publisher(mongo=database, postgres=engine)
-        cursor = database.news_enrichments.find({"validation_status": "VALIDATED"}).sort("processed_at", 1)
+        cursor = database.news_enrichments.find({"validation_status": "VALIDATED"}).sort(
+            "processed_at", 1
+        )
         for document in cursor:
             article_id = document.get("_id")
             if not isinstance(article_id, UUID):

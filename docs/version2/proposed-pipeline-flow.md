@@ -432,8 +432,8 @@ Validation la automated gate. Neu output khong dat rule thi processor khong publ
 {
   "_id": "article_id",
   "entities": [],
-  "model_name": "gliner",
-  "model_version": "urchade/gliner_small-v2.1",
+  "model_name": "gliner2",
+  "model_version": "fastino/gliner2-large-v1",
   "processed_at": "UTC"
 }
 ```

@@ -8,10 +8,27 @@ _WORD_PATTERN = re.compile(r"\S+")
 
 
 class EntityLabel(StrEnum):
-    PLAYER = "football player"
-    CLUB = "football club"
-    COACH = "football coach"
-    COMPETITION = "football competition"
+    PLAYER = "player"
+    CLUB = "club"
+    COACH = "coach"
+    COMPETITION = "competition"
+
+    @classmethod
+    def from_string(cls, value: str) -> EntityLabel:
+        mapping = {
+            "player": cls.PLAYER,
+            "football player": cls.PLAYER,
+            "club": cls.CLUB,
+            "football club": cls.CLUB,
+            "coach": cls.COACH,
+            "football coach": cls.COACH,
+            "competition": cls.COMPETITION,
+            "football competition": cls.COMPETITION,
+        }
+        normalized = value.strip().casefold()
+        if normalized in mapping:
+            return mapping[normalized]
+        return cls(value)
 
 
 class SourceField(StrEnum):
@@ -41,7 +58,7 @@ class SpanPrediction:
         *,
         source_field: SourceField,
         source_text: str,
-        label: EntityLabel,
+        label: EntityLabel | str,
         start: int,
         end: int,
         score: float,
@@ -53,10 +70,13 @@ class SpanPrediction:
         mention = source_text[start:end]
         if not mention.strip():
             raise ValueError("prediction offsets must select non-empty text")
+        entity_label = (
+            label if isinstance(label, EntityLabel) else EntityLabel.from_string(str(label))
+        )
         return cls(
             SourceField(source_field),
             mention,
-            EntityLabel(label),
+            entity_label,
             start,
             end,
             score,

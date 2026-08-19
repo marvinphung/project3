@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import os
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -8,9 +8,8 @@ from typing import Any
 from uuid import UUID
 
 from confluent_kafka import Consumer
-from pymongo.database import Database
-
 from footballpulse_event_contracts import NewsCrawledEvent
+from pymongo.database import Database
 
 NEWS_CRAWLED_TOPIC = "news.crawled.v1"
 
@@ -45,8 +44,10 @@ class V2EntityProcessor:
             {
                 "_id": article_id,
                 "entities": entities,
-                "model_name": "gliner",
-                "model_version": "configured-runtime",
+                "model_name": os.getenv("NER_MODEL_NAME", "gliner2"),
+                "model_version": os.getenv(
+                    "FOOTBALLPULSE_GLINER_MODEL", "fastino/gliner2-large-v1"
+                ),
                 "processed_at": datetime.now(UTC),
             },
             upsert=True,

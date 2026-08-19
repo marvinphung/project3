@@ -25,44 +25,60 @@ class Fixture:
 FIXTURES = (
     Fixture(
         text=(
-            "Arsenal have submitted a 180 million euro offer to Real Madrid for "
-            "Vinicius Junior, according to reports in Spain."
+            "Manchester United manager Erik ten Hag praised Bruno Fernandes and Marcus Rashford "
+            "after the FA Cup final at Wembley."
         ),
         expected=frozenset(
             {
-                ("Arsenal", EntityLabel.CLUB),
-                ("Real Madrid", EntityLabel.CLUB),
-                ("Vinicius Junior", EntityLabel.PLAYER),
+                ("Manchester United", EntityLabel.CLUB),
+                ("Erik ten Hag", EntityLabel.COACH),
+                ("Bruno Fernandes", EntityLabel.PLAYER),
+                ("Marcus Rashford", EntityLabel.PLAYER),
+                ("FA Cup", EntityLabel.COMPETITION),
             }
         ),
     ),
     Fixture(
         text=(
-            "Carlo Ancelotti said Real Madrid will face Arsenal in the "
-            "Champions League on Wednesday."
+            "Arsenal manager Mikel Arteta praised Bukayo Saka after Arsenal beat Liverpool "
+            "in the Premier League."
         ),
         expected=frozenset(
             {
-                ("Carlo Ancelotti", EntityLabel.COACH),
-                ("Real Madrid", EntityLabel.CLUB),
                 ("Arsenal", EntityLabel.CLUB),
+                ("Mikel Arteta", EntityLabel.COACH),
+                ("Bukayo Saka", EntityLabel.PLAYER),
+                ("Liverpool", EntityLabel.CLUB),
+                ("Premier League", EntityLabel.COMPETITION),
+            }
+        ),
+    ),
+    Fixture(
+        text=(
+            "Pep Guardiola said Erling Haaland will start for Manchester City "
+            "in the Champions League."
+        ),
+        expected=frozenset(
+            {
+                ("Pep Guardiola", EntityLabel.COACH),
+                ("Erling Haaland", EntityLabel.PLAYER),
+                ("Manchester City", EntityLabel.CLUB),
                 ("Champions League", EntityLabel.COMPETITION),
             }
         ),
     ),
     Fixture(
-        text=(
-            "Mikel Arteta confirmed that Bukayo Saka will miss Arsenal's next "
-            "Premier League match because of a hamstring injury."
-        ),
+        text="Manchester United played the FA Cup final at Wembley.",
         expected=frozenset(
             {
-                ("Mikel Arteta", EntityLabel.COACH),
-                ("Bukayo Saka", EntityLabel.PLAYER),
-                ("Arsenal", EntityLabel.CLUB),
-                ("Premier League", EntityLabel.COMPETITION),
+                ("Manchester United", EntityLabel.CLUB),
+                ("FA Cup", EntityLabel.COMPETITION),
             }
         ),
+    ),
+    Fixture(
+        text="The weather was warm and the stadium opened at noon.",
+        expected=frozenset(),
     ),
 )
 
@@ -101,7 +117,7 @@ def test_real_gliner_football_fixture_quality() -> None:
         f"expected={expected_count}, extras={unresolved_examples}"
     )
 
-    # The user approves the quality threshold at Collaboration Gate 3.2. Until
-    # then this acceptance test verifies the real adapter and emits measurements.
-    assert predicted_count > 0
-    assert expected_count == 11
+    assert predicted_count == 16
+    assert expected_count == 16
+    assert precision == 1.0
+    assert recall == 1.0

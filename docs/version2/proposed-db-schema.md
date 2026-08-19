@@ -130,8 +130,8 @@ Luu entity extraction cua tung bai.
       "canonical_name": "Vinicius Junior"
     }
   ],
-  "model_name": "gliner",
-  "model_version": "urchade/gliner_small-v2.1",
+  "model_name": "gliner2",
+  "model_version": "fastino/gliner2-large-v1",
   "processed_at": "2026-08-18T08:08:00Z"
 }
 ```

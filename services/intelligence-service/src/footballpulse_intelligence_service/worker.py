@@ -74,16 +74,24 @@ def create_worker() -> tuple[ArticlePreprocessingWorker, MongoClient[dict[str, o
         catalog_repository,
         clock=lambda: datetime.now(UTC),
     )
-    entity_mode = os.getenv("FOOTBALLPULSE_ENTITY_PROVIDER", "catalog").casefold()
+    entity_mode = os.getenv("FOOTBALLPULSE_ENTITY_PROVIDER", "gliner").casefold()
     extractor: EntityExtractor
-    if entity_mode == "gliner":
+    if entity_mode in {"gliner", "gliner2"}:
+        model_name = (
+            os.getenv("NER_MODEL_NAME")
+            or os.getenv("FOOTBALLPULSE_GLINER_MODEL")
+            or "fastino/gliner2-large-v1"
+        )
+        device = os.getenv("NER_DEVICE") or "cpu"
         _log(
             "entity_provider_configured",
             provider=entity_mode,
-            model=os.getenv("FOOTBALLPULSE_GLINER_MODEL", "urchade/gliner_small-v2.1"),
+            model=model_name,
+            device=device,
         )
         extractor = GlinerEntityExtractor(
-            model_id=os.getenv("FOOTBALLPULSE_GLINER_MODEL", "urchade/gliner_small-v2.1")
+            model_id=model_name,
+            device=device,
         )
     elif entity_mode == "catalog":
         extractor = CatalogAliasEntityExtractor(
@@ -93,7 +101,7 @@ def create_worker() -> tuple[ArticlePreprocessingWorker, MongoClient[dict[str, o
             )
         )
     else:
-        raise ValueError("FOOTBALLPULSE_ENTITY_PROVIDER must be catalog or gliner")
+        raise ValueError("FOOTBALLPULSE_ENTITY_PROVIDER must be catalog, gliner, or gliner2")
     embedding_mode = os.getenv("FOOTBALLPULSE_EMBEDDING_PROVIDER", "bge").casefold()
     embedder: EmbeddingAdapter
     if embedding_mode == "bge":
@@ -107,11 +115,20 @@ def create_worker() -> tuple[ArticlePreprocessingWorker, MongoClient[dict[str, o
         )
     else:
         raise ValueError("FOOTBALLPULSE_EMBEDDING_PROVIDER must be bge")
+    min_conf_str = (
+        os.getenv("ENTITY_EXTRACTION_MIN_CONFIDENCE")
+        or os.getenv("FOOTBALLPULSE_ENTITY_DETECTION_THRESHOLD")
+        or "0.5"
+    )
+    detection_threshold = float(min_conf_str)
+    review_threshold = float(os.getenv("FOOTBALLPULSE_ENTITY_REVIEW_THRESHOLD") or "0.75")
     extraction_pipeline = EntityExtractionPipeline(
         extractor=extractor,
         resolver=catalog_service,
         unresolved_repository=PostgresUnresolvedMentionRepository(engine),
         clock=lambda: datetime.now(UTC),
+        detection_threshold=detection_threshold,
+        review_threshold=review_threshold,
     )
     embedding_pipeline = EmbeddingPipeline(
         embedder=embedder,
