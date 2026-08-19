@@ -33,7 +33,7 @@ Tao `.env` tu `.env.example` va dien day du:
 UV_CACHE_DIR=/tmp/footballpulse-uv-cache /home/pmv259/.local/bin/uv sync --all-packages --all-extras --group dev
 ```
 
-## 3. Start local infra
+## 3. Start full local stack
 
 ```bash
 docker compose -f docker-compose.v2.yml up -d --build
@@ -45,65 +45,71 @@ Ky vong:
 - `mongodb` healthy
 - `kafka` healthy
 - `postgres` healthy
+- `api` running
+- `crawler` running
+- `processor` running
+- `publisher` running
 
 Ports mac dinh:
 
 - MongoDB: `127.0.0.1:27117`
 - Kafka: `127.0.0.1:19092`
 - PostgreSQL local: `127.0.0.1:15432`
+- API: `127.0.0.1:8000`
 
-## 4. Crawl live
+Y nghia:
 
-Vi du crawl mot nguon RSS live:
+- `crawler` tu dong crawl live theo vong lap
+- `processor` tu dong xu ly entity va backlog processing
+- `publisher` tu dong day validated records sang PostgreSQL local
+- `api` doc tu PostgreSQL local va phuc vu `/api/v2`
+
+Theo doi log:
 
 ```bash
-PYTHONPATH=packages/pipeline/src:services/crawler-service/src:services/ai-content-service/src:services/publisher-service/src:packages/runtime-config/src:packages/shared/src:packages/event-contracts/src \
-.venv/bin/python -m footballpulse_pipeline crawl --source 'The Guardian Football' --max-articles 1
+docker compose -f docker-compose.v2.yml logs -f crawler
+docker compose -f docker-compose.v2.yml logs -f processor
+docker compose -f docker-compose.v2.yml logs -f publisher
 ```
 
-Da verify:
+Da verify local:
 
-- fetch RSS live duoc
-- fetch article live duoc
-- ghi Mongo `news_metadata`, `news_content`
-- publish Kafka `news.crawled.v1`
+- crawl live ghi duoc `news_metadata`, `news_content`
+- processor ghi duoc `news_entities`
+- publisher publish duoc du lieu validated sang PostgreSQL
+- API smoke pass tren `/api/v2`
 
-Kiem tra nhanh Mongo:
+## 4. Kiem tra crawler / Mongo
 
 ```bash
 .venv/bin/python -c "from pymongo import MongoClient; client=MongoClient('mongodb://127.0.0.1:27117/?directConnection=true', uuidRepresentation='standard'); db=client['footballpulse_v2']; print(db.news_metadata.count_documents({}), db.news_content.count_documents({}))"
 ```
 
-## 5. Process local
+## 5. Kiem tra processor / Mongo
 
-```bash
-.venv/bin/python -m footballpulse_pipeline process --limit 1
-```
-
-Trang thai hien tai:
+Trang thai hien tai trong Docker default:
 
 - consume/process `news.crawled.v1` duoc
 - ghi `news_entities` duoc
-- neu Kaggle duoc cap GPU slot, pipeline se tiep tuc enrichment
-- neu Kaggle dang queue, process co the cho lau ben ngoai local
+- `FOOTBALLPULSE_AI_PROVIDER` cua service `processor` dang de `local_skip`
+  de local `up -d --build` khong bi block boi queue Kaggle
+- khi can chay Kaggle that, chay thu cong process command ngoai compose hoac doi
+  env cua `processor`
 
-Kiem tra nhanh:
+Kiem tra nhanh Mongo:
 
 ```bash
 .venv/bin/python -c "from pymongo import MongoClient; client=MongoClient('mongodb://127.0.0.1:27117/?directConnection=true', uuidRepresentation='standard'); db=client['footballpulse_v2']; print(db.news_entities.count_documents({}), db.news_enrichments.count_documents({}))"
 ```
 
-## 6. Publish read model
+## 6. Kiem tra publisher / PostgreSQL local
 
-Neu Mongo da co `news_enrichments.validation_status = VALIDATED`:
+Publisher trong compose se tu dong publish cac record hop le. Kiem tra nhanh:
 
 ```bash
-.venv/bin/python -m footballpulse_pipeline publish --limit 10
+docker exec -i $(docker compose -f docker-compose.v2.yml ps -q postgres) \
+  psql -U footballpulse -d footballpulse_v2 -c "select count(*) from content_schema.publications;"
 ```
-
-Da verify:
-
-- publish tu Mongo sang PostgreSQL/Supabase duoc
 
 ## 7. Test API v2
 
@@ -151,6 +157,17 @@ set -a
 source .env
 set +a
 .venv/bin/kaggle kernels status pmv259/footballpulse-ai-enrichment
+```
+
+Vi local compose mac dinh dang uu tien full stack on dinh, service `processor`
+khong auto cho Kaggle trong vong lap. Neu muon chay Kaggle that, dung lenh thu
+cong:
+
+```bash
+set -a
+source .env
+set +a
+.venv/bin/python -m footballpulse_pipeline process --limit 10
 ```
 
 Neu muon bo qua tam thoi, van co the test cac phan con lai:
@@ -207,18 +224,12 @@ npm run build
 
 Working directory:
 
-- repo root, nhung runtime su dung `services/api-gateway`
+- repo root
 
 Start command uu tien:
 
 ```bash
-uv run footballpulse-api-v2
-```
-
-Neu can chi ro `PYTHONPATH`:
-
-```bash
-PYTHONPATH=services/api-gateway/src:services/content-service/src:packages/runtime-config/src uv run footballpulse-api-v2
+PYTHONPATH=packages/pipeline/src:packages/runtime-config/src:packages/event-contracts/src:services/api-gateway/src:services/content-service/src:services/ai-content-service/src:services/crawler-service/src:services/intelligence-service/src:services/publisher-service/src python -m footballpulse_api_gateway.runtime_v2
 ```
 
 Env can co:

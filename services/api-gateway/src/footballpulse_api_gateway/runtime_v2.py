@@ -46,25 +46,28 @@ from footballpulse_api_gateway.persistence.processing_failure_read_repository im
 
 
 def database_url(environment: Mapping[str, str]) -> str:
-    if environment.get("SUPABASE_DB_HOST"):
+    supabase_db_host = environment.get("SUPABASE_DB_HOST") or None
+    supabase_database_url = environment.get("SUPABASE_DATABASE_URL") or None
+    footballpulse_database_url = environment.get("FOOTBALLPULSE_DATABASE_URL") or None
+    if supabase_db_host:
         return URL.create(
             "postgresql+psycopg",
             username=environment.get("SUPABASE_DB_USER", "postgres"),
             password=environment.get("SUPABASE_DB_PASSWORD", "postgres"),
-            host=environment.get("SUPABASE_DB_HOST", "127.0.0.1"),
+            host=supabase_db_host,
             port=int(environment.get("SUPABASE_DB_PORT", "5432")),
             database=environment.get("SUPABASE_DB_NAME", "postgres"),
         ).render_as_string(hide_password=False)
-    explicit = environment.get("SUPABASE_DATABASE_URL") or environment.get("FOOTBALLPULSE_DATABASE_URL")
+    explicit = supabase_database_url or footballpulse_database_url
     if explicit:
         return explicit.replace("postgresql://", "postgresql+psycopg://", 1)
     return URL.create(
         "postgresql+psycopg",
-        username=environment.get("SUPABASE_DB_USER", environment.get("FOOTBALLPULSE_POSTGRES_USER", "postgres")),
-        password=environment.get("SUPABASE_DB_PASSWORD", environment.get("FOOTBALLPULSE_POSTGRES_PASSWORD", "postgres")),
-        host=environment.get("SUPABASE_DB_HOST", environment.get("FOOTBALLPULSE_POSTGRES_HOST", "127.0.0.1")),
-        port=int(environment.get("SUPABASE_DB_PORT", environment.get("FOOTBALLPULSE_POSTGRES_PORT", "5432"))),
-        database=environment.get("SUPABASE_DB_NAME", environment.get("FOOTBALLPULSE_POSTGRES_DB", "postgres")),
+        username=environment.get("FOOTBALLPULSE_POSTGRES_USER", "postgres"),
+        password=environment.get("FOOTBALLPULSE_POSTGRES_PASSWORD", "postgres"),
+        host=environment.get("FOOTBALLPULSE_POSTGRES_HOST", "127.0.0.1"),
+        port=int(environment.get("FOOTBALLPULSE_POSTGRES_PORT", "5432")),
+        database=environment.get("FOOTBALLPULSE_POSTGRES_DB", "postgres"),
     ).render_as_string(hide_password=False)
 
 
@@ -150,3 +153,7 @@ def main() -> None:
         port=int(os.getenv("PORT", os.getenv("FOOTBALLPULSE_API_PORT", "8000"))),
         reload=False,
     )
+
+
+if __name__ == "__main__":
+    main()

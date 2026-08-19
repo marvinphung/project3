@@ -87,7 +87,7 @@ Mọi list admin mới dùng shape:
 **Files:**
 - Create: `services/api-gateway/src/footballpulse_api_gateway/persistence/admin_story_read_repository.py`
 - Modify: `services/api-gateway/src/footballpulse_api_gateway/api/editorial_admin.py`
-- Modify: `services/api-gateway/src/footballpulse_api_gateway/runtime.py`
+- Modify: `services/api-gateway/src/footballpulse_api_gateway/runtime_v2.py`
 - Modify: `services/api-gateway/tests/test_editorial_admin_api.py`
 - Modify: `frontend/src/api/client.ts`
 - Modify: `frontend/src/pages/admin/AdminStoryPage.tsx`
@@ -95,7 +95,7 @@ Mọi list admin mới dùng shape:
 1. Write failing API test for `GET /admin/v1/stories?limit=50&offset=0&status=...`, using an in-memory repository fake. Contract item: `id`, `event_type`, `status`, `confidence_score`, `version`, `first_seen_at`, `last_seen_at`, `source_count`.
 2. Add `AdminStoryView`, `AdminStoryPage`, Pydantic response and `AdminStoryReadRepository` protocol. Endpoint is editor-authenticated.
 3. Implement PostgreSQL query against `intelligence_schema.stories`, left-join/aggregate `story_sources`, order by `last_seen_at DESC`, add optional status filter, total query and bounds.
-4. Wire repository in `runtime.py`; test API fake and repository query mapping.
+4. Wire repository in `runtime_v2.py`; test API fake and repository query mapping.
 5. Add `listAdminStories` client function and replace the `stories` constant/filter buttons with server state. “Xem” only links to an existing detail route; otherwise remove it and show the list honestly.
 6. Run focused API tests and frontend build; commit `feat: show real admin stories`.
 
@@ -106,7 +106,7 @@ Mọi list admin mới dùng shape:
 **Files:**
 - Create: `services/api-gateway/src/footballpulse_api_gateway/persistence/admin_publication_read_repository.py`
 - Modify: `services/api-gateway/src/footballpulse_api_gateway/api/editorial_admin.py`
-- Modify: `services/api-gateway/src/footballpulse_api_gateway/runtime.py`
+- Modify: `services/api-gateway/src/footballpulse_api_gateway/runtime_v2.py`
 - Modify: `services/api-gateway/tests/test_editorial_admin_api.py`
 - Modify: `frontend/src/api/client.ts`
 - Modify: `frontend/src/pages/admin/AdminPublishedPage.tsx`
@@ -124,7 +124,7 @@ Mọi list admin mới dùng shape:
 **Files:**
 - Create: `services/api-gateway/src/footballpulse_api_gateway/persistence/processing_failure_read_repository.py`
 - Modify: `services/api-gateway/src/footballpulse_api_gateway/api/editorial_admin.py`
-- Modify: `services/api-gateway/src/footballpulse_api_gateway/runtime.py`
+- Modify: `services/api-gateway/src/footballpulse_api_gateway/runtime_v2.py`
 - Modify: `services/api-gateway/tests/test_editorial_admin_api.py`
 - Modify: `frontend/src/api/client.ts`
 - Modify: `frontend/src/pages/admin/AdminErrorsPage.tsx`

@@ -65,11 +65,22 @@ cp .env.example .env
 UV_CACHE_DIR=/tmp/footballpulse-uv-cache /home/pmv259/.local/bin/uv sync --all-packages --all-extras --group dev
 ```
 
-4. Khởi động hạ tầng local:
+4. Khởi động full stack local production-like:
 
 ```bash
 docker compose -f docker-compose.v2.yml up -d --build
 ```
+
+Lenh nay dung full cac service local chinh cua `version2`:
+
+- `mongodb`
+- `mongodb-init`
+- `kafka`
+- `postgres`
+- `api`
+- `crawler`
+- `processor`
+- `publisher`
 
 5. Xem runbook local:
 
@@ -79,14 +90,15 @@ docker compose -f docker-compose.v2.yml up -d --build
 
 | Command | Mục đích |
 | --- | --- |
-| `python -m footballpulse_pipeline crawl --source 'The Guardian Football' --max-articles 1` | Crawl live một nguồn |
-| `python -m footballpulse_pipeline process --limit 1` | Consume/process backlog local |
-| `python -m footballpulse_pipeline publish --limit 10` | Publish từ Mongo sang Postgres |
+| `docker compose -f docker-compose.v2.yml up -d --build` | Dựng full local production-like stack |
+| `docker compose -f docker-compose.v2.yml logs -f crawler` | Theo dõi vòng crawl live |
+| `docker compose -f docker-compose.v2.yml logs -f processor` | Theo dõi entity/enrichment processing |
+| `docker compose -f docker-compose.v2.yml logs -f publisher` | Theo dõi publish sang PostgreSQL |
 | `python scripts/smoke-v2-api.py` | Smoke API v2 trên DB thật |
-| `docker compose -f docker-compose.v2.yml ps` | Kiểm tra hạ tầng local |
+| `docker compose -f docker-compose.v2.yml ps` | Kiểm tra toàn bộ stack local |
 
-Khi chạy trực tiếp, nên dùng `PYTHONPATH` hoặc cài workspace đầy đủ qua `uv sync`
-để `footballpulse_pipeline` và các packages nội bộ được import đúng.
+Khi can debug thu cong tung buoc, van co the chay `footballpulse_pipeline` truc
+tiep sau khi da `uv sync`, nhung local runtime mac dinh gio la Docker Compose.
 
 ## Cấu trúc repository
 
@@ -147,18 +159,12 @@ hay Kaggle.
 
 Project root:
 
-- `services/api-gateway/`
+- repo root
 
 Recommended start command:
 
 ```bash
-uv run footballpulse-api-v2
-```
-
-Neu Render khong dung workspace root lam runtime context, co the dung:
-
-```bash
-PYTHONPATH=services/api-gateway/src:services/content-service/src:packages/runtime-config/src uv run footballpulse-api-v2
+PYTHONPATH=packages/pipeline/src:packages/runtime-config/src:packages/event-contracts/src:services/api-gateway/src:services/content-service/src:services/ai-content-service/src:services/crawler-service/src:services/intelligence-service/src:services/publisher-service/src python -m footballpulse_api_gateway.runtime_v2
 ```
 
 Env toi thieu:

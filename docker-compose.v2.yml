@@ -1,6 +1,13 @@
 name: footballpulse-v2
 
 services:
+  runtime-base:
+    image: footballpulse-v2-runtime:local
+    build:
+      context: .
+      dockerfile: services/runtime.Dockerfile
+    profiles: ["build-only"]
+
   mongodb:
     image: mongo:7.0.37-jammy
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
@@ -80,6 +87,123 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  api:
+    image: footballpulse-v2-runtime:local
+    build:
+      context: .
+      dockerfile: services/runtime.Dockerfile
+    depends_on:
+      mongodb-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
+      FOOTBALLPULSE_V2_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
+      FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      FOOTBALLPULSE_POSTGRES_HOST: postgres
+      FOOTBALLPULSE_POSTGRES_PORT: 5432
+      FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
+      SUPABASE_DB_HOST: ""
+      SUPABASE_DATABASE_URL: ""
+      PORT: 8000
+    command: ["python", "-m", "footballpulse_api_gateway.runtime_v2"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+
+  crawler:
+    image: footballpulse-v2-runtime:local
+    build:
+      context: .
+      dockerfile: services/runtime.Dockerfile
+    depends_on:
+      mongodb-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
+      FOOTBALLPULSE_V2_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
+      FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      FOOTBALLPULSE_POSTGRES_HOST: postgres
+      FOOTBALLPULSE_POSTGRES_PORT: 5432
+      FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
+      SUPABASE_DB_HOST: ""
+      SUPABASE_DATABASE_URL: ""
+    command:
+      - sh
+      - -c
+      - while true; do python -m footballpulse_pipeline crawl --source "The Guardian Football" --source "BBC Sport Football" --max-articles ${FOOTBALLPULSE_CRAWL_MAX_ARTICLES:-10}; sleep ${FOOTBALLPULSE_V2_CRAWLER_LOOP_SECONDS:-1800}; done
+    restart: unless-stopped
+
+  processor:
+    image: footballpulse-v2-runtime:local
+    build:
+      context: .
+      dockerfile: services/runtime.Dockerfile
+    depends_on:
+      mongodb-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
+      FOOTBALLPULSE_V2_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
+      FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      FOOTBALLPULSE_POSTGRES_HOST: postgres
+      FOOTBALLPULSE_POSTGRES_PORT: 5432
+      FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
+      SUPABASE_DB_HOST: ""
+      SUPABASE_DATABASE_URL: ""
+      FOOTBALLPULSE_AI_PROVIDER: local_skip
+    command:
+      - sh
+      - -c
+      - while true; do python -m footballpulse_pipeline process --limit ${FOOTBALLPULSE_V2_PROCESS_LIMIT:-20}; sleep ${FOOTBALLPULSE_V2_PROCESS_LOOP_SECONDS:-1800}; done
+    restart: unless-stopped
+
+  publisher:
+    image: footballpulse-v2-runtime:local
+    build:
+      context: .
+      dockerfile: services/runtime.Dockerfile
+    depends_on:
+      mongodb-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
+      FOOTBALLPULSE_V2_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
+      FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      FOOTBALLPULSE_POSTGRES_HOST: postgres
+      FOOTBALLPULSE_POSTGRES_PORT: 5432
+      FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
+      SUPABASE_DB_HOST: ""
+      SUPABASE_DATABASE_URL: ""
+    command:
+      - sh
+      - -c
+      - while true; do python -m footballpulse_pipeline publish --limit ${FOOTBALLPULSE_V2_PUBLISH_LIMIT:-50}; sleep ${FOOTBALLPULSE_V2_PUBLISH_LOOP_SECONDS:-900}; done
+    restart: unless-stopped
 
 volumes:
   footballpulse_v2_mongodb_data:
