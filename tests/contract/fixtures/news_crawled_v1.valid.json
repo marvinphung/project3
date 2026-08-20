@@ -1,0 +1,18 @@
+{
+  "event_id": "11111111-1111-1111-1111-111111111111",
+  "event_type": "news.crawled",
+  "event_version": 1,
+  "occurred_at": "2026-08-20T00:00:00Z",
+  "producer": "crawler-service",
+  "correlation_id": "22222222-2222-2222-2222-222222222222",
+  "causation_id": null,
+  "aggregate_type": "news_article",
+  "aggregate_id": "33333333-3333-3333-3333-333333333333",
+  "idempotency_key": "news.crawled:33333333-3333-3333-3333-333333333333:1",
+  "payload": {
+    "article_id": "33333333-3333-3333-3333-333333333333",
+    "canonical_url": "https://example.com/article/1",
+    "source_name": "Example News",
+    "published_time": "2026-08-20T00:00:00Z"
+  }
+}

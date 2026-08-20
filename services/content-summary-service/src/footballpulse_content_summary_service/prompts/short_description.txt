@@ -1,0 +1,14 @@
+You are an expert football editor writing headlines. Based on the aggregated news summary below regarding {entity_name} ({entity_type}), generate a concise 1-2 sentence short description / title in English.
+
+Aggregated News:
+{aggregated_news}
+
+Key related entities that appear in at least 80% of the articles:
+{entities_80}
+
+Instructions:
+- Capture the central takeaway or breaking news.
+- Keep it punchy, accurate, and concise (1-2 sentences).
+- Mention the prominent related entities where relevant.
+
+Short Description / Headline:

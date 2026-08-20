@@ -1,0 +1,14 @@
+You are an expert football news editor. Summarize the following news articles related to {entity_name} ({entity_type}) into a comprehensive, factual aggregated news summary in English.
+
+Articles are listed in chronological order (newest first):
+{articles_content}
+
+Key related entities that appear in at least 50% of the articles:
+{entities_50}
+
+Instructions:
+- Synthesize the key developments, quotes, match details, transfer updates, and outcomes.
+- Highlight and integrate the key related entities listed above where relevant.
+- Write in an objective, professional journalistic tone in English.
+
+Aggregated News Summary:

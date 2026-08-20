@@ -1,3 +1,44 @@
+export type PublicEntitySummary = {
+  id: string
+  entity_type: string
+  canonical_name: string
+  slug: string
+  aliases: string[]
+  mention_count_24h: number
+  last_seen_at?: string | null
+}
+
+export type PublicSourceArticle = {
+  id: string
+  title: string
+  url: string
+  canonical_url: string
+  source_name: string
+  domain_name: string
+  description?: string | null
+  image_url?: string | null
+  published_at?: string | null
+}
+
+export type PublicTimelineItem = {
+  id: string
+  entity_id: string
+  window_start: string
+  window_end: string
+  title: string
+  summary: string
+  article_count: number
+  key_entities_50: string[]
+  key_entities_80: string[]
+  source_articles: PublicSourceArticle[]
+}
+
+export type PublicEntityTimeline = {
+  entity_id: string
+  entity?: PublicEntitySummary | null
+  items: PublicTimelineItem[]
+}
+
 export type PublicArticle = {
   id: string
   slug: string
@@ -433,6 +474,30 @@ export function getEntity(entityType: string, entitySlug: string) {
 
 export function getStory(storyId: string) {
   return request<PublicStory>(`/api/v2/stories/${encodeURIComponent(storyId)}`)
+}
+
+export function getTopEntities(limit = 10, window = '24h') {
+  return request<{ items: PublicEntitySummary[]; limit: number; window: string }>(
+    `/api/v2/entities/top?limit=${encodeURIComponent(String(limit))}&window=${encodeURIComponent(window)}`,
+  )
+}
+
+export function searchEntities(query: string) {
+  return request<{ items: PublicEntitySummary[] }>(
+    `/api/v2/entities/search?q=${encodeURIComponent(query)}`,
+  )
+}
+
+export function getEntityTimeline(entityId: string, limit = 50, offset = 0) {
+  return request<PublicEntityTimeline>(
+    `/api/v2/entities/${encodeURIComponent(entityId)}/timeline?limit=${limit}&offset=${offset}`,
+  )
+}
+
+export function getEntityById(entityId: string) {
+  return request<PublicEntitySummary>(
+    `/api/v2/entities/${encodeURIComponent(entityId)}`,
+  )
 }
 
 export function getArticleSources(slug: string) {

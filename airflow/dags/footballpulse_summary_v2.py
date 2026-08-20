@@ -1,4 +1,4 @@
-"""Version 2 processing orchestration for the local-only pipeline."""
+"""Version 2 content summary orchestration for the local-only pipeline."""
 
 from __future__ import annotations
 
@@ -19,32 +19,32 @@ try:
     }
 
     @dag(
-        dag_id="footballpulse_process",
+        dag_id="footballpulse_summary",
         schedule="*/30 * * * *",
         start_date=pendulum.datetime(2026, 1, 1, tz="Asia/Ho_Chi_Minh"),
         catchup=False,
         max_active_runs=1,
         default_args=DEFAULT_ARGS,
-        tags=["footballpulse", "v2", "process"],
+        tags=["footballpulse", "v2", "summary"],
     )
-    def footballpulse_process():
-        process_task = BashOperator(
-            task_id="process_backlog",
+    def footballpulse_summary():
+        summary_task = BashOperator(
+            task_id="summarize_entity_timelines",
             bash_command=os.environ.get(
-                "FOOTBALLPULSE_PROCESS_COMMAND",
-                "docker compose -f /workspace/docker-compose.v2.yml run --no-deps --rm entities-extraction python -m footballpulse_pipeline process",
+                "FOOTBALLPULSE_SUMMARY_COMMAND",
+                "docker compose -f /workspace/docker-compose.v2.yml run --no-deps --rm content-summary python -m footballpulse_pipeline summary",
             ),
         )
 
-        trigger_summary = TriggerDagRunOperator(
-            task_id="trigger_summary_v2",
-            trigger_dag_id="footballpulse_summary",
+        trigger_publish = TriggerDagRunOperator(
+            task_id="trigger_publish_v2",
+            trigger_dag_id="footballpulse_publish",
             wait_for_completion=False,
             reset_dag_run=True,
         )
 
-        process_task >> trigger_summary
+        summary_task >> trigger_publish
 
-    footballpulse_process_dag = footballpulse_process()
+    footballpulse_summary_dag = footballpulse_summary()
 except ImportError:
-    footballpulse_process_dag = None
+    footballpulse_summary_dag = None

@@ -33,6 +33,7 @@ export const router = createBrowserRouter([
       { path: 'clb/:id', element: <EntityDetailPage kind="club" /> },
       { path: 'hlv', element: <EntityDirectoryPage kind="coach" /> },
       { path: 'hlv/:id', element: <EntityDetailPage kind="coach" /> },
+      { path: 'entity/:id', element: <EntityDetailPage /> },
       { path: 'bai-viet/:id', Component: ArticleDetailPage },
       { path: 'story/:id', Component: StoryPage },
       { path: 'tim-kiem', Component: SearchPage },

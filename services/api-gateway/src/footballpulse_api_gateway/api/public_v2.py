@@ -5,363 +5,262 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.engine import Engine
 
 
-class V2EntityTag(BaseModel):
+class V2EntitySummary(BaseModel):
     id: UUID
     entity_type: str
-    name: str
+    canonical_name: str
     slug: str
+    aliases: list[str] = Field(default_factory=list)
+    mention_count_24h: int = 0
+    last_seen_at: datetime | None = None
 
 
-class V2ArticleResponse(BaseModel):
-    id: UUID
-    slug: str
-    title_en: str
-    title_vi: str
-    excerpt_vi: str | None
-    body_en: str
-    body_vi: str
-    story_id: UUID | None
-    published_at: datetime
-    entities: list[V2EntityTag] = []
-
-
-class V2ArticleListResponse(BaseModel):
-    items: list[V2ArticleResponse]
+class V2TopEntitiesResponse(BaseModel):
+    items: list[V2EntitySummary]
     limit: int
-    offset: int
+    window: str
 
 
-class V2SourceResponse(BaseModel):
-    source_id: UUID
-    source_name: str
-    source_url: str
-    published_at: datetime | None
-    reliability_tier: int
+class V2EntitySearchResponse(BaseModel):
+    items: list[V2EntitySummary]
 
 
-class V2SourceListResponse(BaseModel):
-    items: list[V2SourceResponse]
-
-
-class V2TimelineEntry(BaseModel):
-    story_id: UUID
-    happened_at: datetime
-    summary_en: str
-    summary_vi: str
-    confirmation: str
-
-
-class V2TimelineResponse(BaseModel):
-    items: list[V2TimelineEntry]
-
-
-class V2EntityResponse(BaseModel):
+class V2SourceArticle(BaseModel):
     id: UUID
-    entity_type: str
-    name: str
-    slug: str
-    story_count: int
+    title: str
+    url: str
+    canonical_url: str
+    source_name: str
+    domain_name: str
+    description: str | None = None
+    image_url: str | None = None
+    published_at: datetime | None = None
+
+
+class V2EntityTimelineItem(BaseModel):
+    id: UUID
+    entity_id: UUID
+    window_start: datetime
+    window_end: datetime
+    title: str
+    summary: str
     article_count: int
+    key_entities_50: list[str] = Field(default_factory=list)
+    key_entities_80: list[str] = Field(default_factory=list)
+    source_articles: list[V2SourceArticle] = Field(default_factory=list)
+
+
+class V2EntityTimelineResponse(BaseModel):
+    entity_id: UUID
+    entity: V2EntitySummary | None = None
+    items: list[V2EntityTimelineItem]
 
 
 class V2EntityListResponse(BaseModel):
-    items: list[V2EntityResponse]
+    items: list[V2EntitySummary]
     limit: int
     offset: int
     total: int
 
 
-class V2StoryResponse(BaseModel):
-    id: UUID
-    title_en: str
-    title_vi: str
-    summary_en: str | None
-    summary_vi: str | None
-    event_type: str
-    status: str
-    confirmation: str
-    first_seen_at: datetime
-    last_seen_at: datetime
-    entity_ids: list[UUID]
-
-
-class V2EntityStoriesResponse(BaseModel):
-    entity_type: str
-    entity_slug: str
-    story_ids: list[UUID]
-
-
 def create_public_v2_app(engine: Engine) -> FastAPI:
     app = FastAPI(title="FootballPulse Public API v2", version="2.0.0")
 
-    def entity_tags(connection: sa.Connection, story_id: UUID | None) -> list[V2EntityTag]:
-        if story_id is None:
-            return []
+    @app.get("/api/v2/entities/top", response_model=V2TopEntitiesResponse)
+    async def get_top_entities(
+        window: str = Query("24h"),
+        limit: int = Query(10, ge=1, le=100),
+    ) -> V2TopEntitiesResponse:
         statement = sa.text(
-            """select e.id, e.entity_type::text as entity_type, e.name, e.slug
-            from story_entities se
-            join entities e on e.id = se.entity_id
-            where se.story_id = :story_id
-            order by e.name"""
+            """
+            select id, entity_type::text as entity_type, canonical_name, slug,
+                   aliases, mention_count_24h, last_seen_at
+            from entities
+            order by mention_count_24h desc, canonical_name asc
+            limit :limit
+            """
         )
-        rows = connection.execute(statement, {"story_id": story_id}).mappings().all()
-        return [V2EntityTag.model_validate(row) for row in rows]
+        with engine.connect() as connection:
+            rows = connection.execute(statement, {"limit": limit}).mappings().all()
+            items = [V2EntitySummary.model_validate(dict(row)) for row in rows]
+        return V2TopEntitiesResponse(items=items, limit=limit, window=window)
 
-    @app.get("/api/v2/articles", response_model=V2ArticleListResponse)
-    async def list_articles(
-        limit: int = Query(20, ge=1, le=100),
-        offset: int = Query(0, ge=0),
-        story_id: UUID | None = Query(None),
-        q: str | None = Query(None),
-        entity_type: str | None = Query(None),
-        entity_slug: str | None = Query(None),
-    ) -> V2ArticleListResponse:
-        if (entity_type is None) != (entity_slug is None):
-            raise HTTPException(status_code=422, detail="entity_type and entity_slug must be provided together")
-        query = f"%{q.strip()}%" if q and q.strip() else None
-        conditions = ["p.status = 'PUBLISHED'"]
-        params: dict[str, object] = {
-            "limit": limit,
-            "offset": offset,
-        }
-        if story_id is not None:
-            conditions.append("p.story_id = :story_id")
-            params["story_id"] = story_id
-        if query is not None:
-            conditions.append(
-                """(
-                p.title_vi ilike :query
-                or p.body_vi ilike :query
-                or p.title_en ilike :query
-                or p.body_en ilike :query
-              )"""
-            )
-            params["query"] = query
-        if entity_type is not None and entity_slug is not None:
-            conditions.append(
-                """exists (
-                  select 1
-                  from story_entities se
-                  join entities e on e.id = se.entity_id
-                  where se.story_id = p.story_id
-                    and e.entity_type::text = upper(:entity_type)
-                    and e.slug = :entity_slug
-                )"""
-            )
-            params["entity_type"] = entity_type
-            params["entity_slug"] = entity_slug
+    @app.get("/api/v2/entities/search", response_model=V2EntitySearchResponse)
+    async def search_entities(
+        q: str = Query(..., min_length=1),
+    ) -> V2EntitySearchResponse:
+        search_pattern = f"%{q.strip()}%"
+        exact_query = q.strip()
         statement = sa.text(
-            f"""select p.id, p.slug, p.title_en, p.title_vi, p.excerpt_vi, p.body_en, p.body_vi,
-            p.story_id, p.published_at
-            from publications p
-            where {' and '.join(conditions)}
-            order by p.published_at desc limit :limit offset :offset"""
+            """
+            select id, entity_type::text as entity_type, canonical_name, slug,
+                   aliases, mention_count_24h, last_seen_at
+            from entities
+            where canonical_name ilike :pattern
+               or slug ilike :pattern
+               or :exact = any(aliases)
+               or exists (
+                   select 1 from unnest(aliases) a where a ilike :pattern
+               )
+            order by mention_count_24h desc, canonical_name asc
+            limit 20
+            """
         )
         with engine.connect() as connection:
             rows = connection.execute(
                 statement,
-                params,
+                {"pattern": search_pattern, "exact": exact_query},
             ).mappings().all()
-            items = [
-                V2ArticleResponse.model_validate({**row, "entities": entity_tags(connection, row["story_id"])})
-                for row in rows
+            items = [V2EntitySummary.model_validate(dict(row)) for row in rows]
+        return V2EntitySearchResponse(items=items)
+
+    @app.get("/api/v2/entities/{entity_id}/timeline", response_model=V2EntityTimelineResponse)
+    async def get_entity_timeline(
+        entity_id: UUID,
+        limit: int = Query(50, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+    ) -> V2EntityTimelineResponse:
+        entity_query = sa.text(
+            """
+            select id, entity_type::text as entity_type, canonical_name, slug,
+                   aliases, mention_count_24h, last_seen_at
+            from entities
+            where id = :entity_id
+            """
+        )
+        timeline_query = sa.text(
+            """
+            select id, entity_id, window_start, window_end, title, summary,
+                   article_count, key_entities_50, key_entities_80
+            from entity_timeline_items
+            where entity_id = :entity_id
+            order by window_start desc
+            limit :limit offset :offset
+            """
+        )
+        articles_query = sa.text(
+            """
+            select tia.timeline_item_id, sa.id, sa.title, sa.url, sa.canonical_url,
+                   sa.source_name, sa.domain_name, sa.description, sa.image_url, sa.published_at
+            from timeline_item_articles tia
+            join source_articles sa on sa.id = tia.article_id
+            where tia.timeline_item_id in :item_ids
+            order by tia.position asc
+            """
+        )
+
+        with engine.connect() as connection:
+            entity_row = connection.execute(entity_query, {"entity_id": entity_id}).mappings().one_or_none()
+            entity_info = V2EntitySummary.model_validate(dict(entity_row)) if entity_row else None
+
+            timeline_rows = connection.execute(
+                timeline_query,
+                {"entity_id": entity_id, "limit": limit, "offset": offset},
+            ).mappings().all()
+
+            item_ids = [row["id"] for row in timeline_rows]
+            articles_by_item: dict[UUID, list[V2SourceArticle]] = {iid: [] for iid in item_ids}
+
+            if item_ids:
+                art_rows = connection.execute(
+                    articles_query,
+                    {"item_ids": tuple(item_ids)},
+                ).mappings().all()
+                for a_row in art_rows:
+                    item_id = a_row["timeline_item_id"]
+                    articles_by_item[item_id].append(
+                        V2SourceArticle(
+                            id=a_row["id"],
+                            title=a_row["title"],
+                            url=a_row["url"],
+                            canonical_url=a_row["canonical_url"],
+                            source_name=a_row["source_name"],
+                            domain_name=a_row["domain_name"],
+                            description=a_row["description"],
+                            image_url=a_row["image_url"],
+                            published_at=a_row["published_at"],
+                        )
+                    )
+
+            timeline_items = [
+                V2EntityTimelineItem(
+                    id=row["id"],
+                    entity_id=row["entity_id"],
+                    window_start=row["window_start"],
+                    window_end=row["window_end"],
+                    title=row["title"],
+                    summary=row["summary"],
+                    article_count=row["article_count"],
+                    key_entities_50=row["key_entities_50"] or [],
+                    key_entities_80=row["key_entities_80"] or [],
+                    source_articles=articles_by_item.get(row["id"], []),
+                )
+                for row in timeline_rows
             ]
-        return V2ArticleListResponse(
-            items=items,
-            limit=limit,
-            offset=offset,
+
+        return V2EntityTimelineResponse(
+            entity_id=entity_id,
+            entity=entity_info,
+            items=timeline_items,
         )
 
-    @app.get("/api/v2/articles/{slug}", response_model=V2ArticleResponse)
-    async def get_article(slug: str) -> V2ArticleResponse:
+    @app.get("/api/v2/entities/{entity_id}", response_model=V2EntitySummary)
+    async def get_entity_by_id(entity_id: UUID) -> V2EntitySummary:
         statement = sa.text(
-            """select id, slug, title_en, title_vi, excerpt_vi, body_en, body_vi,
-            story_id, published_at from publications
-            where slug = :slug and status = 'PUBLISHED'"""
+            """
+            select id, entity_type::text as entity_type, canonical_name, slug,
+                   aliases, mention_count_24h, last_seen_at
+            from entities
+            where id = :entity_id
+            """
         )
         with engine.connect() as connection:
-            row = connection.execute(statement, {"slug": slug}).mappings().one_or_none()
+            row = connection.execute(statement, {"entity_id": entity_id}).mappings().one_or_none()
         if row is None:
-            raise HTTPException(status_code=404, detail="article not found")
-        with engine.connect() as connection:
-            return V2ArticleResponse.model_validate(
-                {**row, "entities": entity_tags(connection, row["story_id"])}
-            )
-
-    @app.get("/api/v2/articles/{slug}/sources", response_model=V2SourceListResponse)
-    async def get_article_sources(slug: str) -> V2SourceListResponse:
-        statement = sa.text(
-            """select s.id as source_id, s.name as source_name, s.homepage_url as source_url,
-            a.published_at, s.reliability_tier from story_sources ss
-            join sources s on s.id = ss.source_id join articles a on a.id = ss.article_id
-            join publications p on p.story_id = ss.story_id where p.slug = :slug
-            order by a.published_at desc"""
-        )
-        with engine.connect() as connection:
-            rows = connection.execute(statement, {"slug": slug}).mappings().all()
-        return V2SourceListResponse(items=[V2SourceResponse.model_validate(row) for row in rows])
-
-    @app.get("/api/v2/stories/{story_id}/timeline", response_model=V2TimelineResponse)
-    async def get_story_timeline(
-        story_id: UUID,
-        limit: int = Query(100, ge=1, le=100),
-        offset: int = Query(0, ge=0),
-        confirmation: str | None = Query(None),
-    ) -> V2TimelineResponse:
-        statement = sa.text(
-            """select story_id, happened_at, summary_en, summary_vi, confirmation
-            from timeline_entries where story_id = :story_id
-              and (cast(:confirmation as text) is null or confirmation::text = upper(cast(:confirmation as text)))
-            order by happened_at desc limit :limit offset :offset"""
-        )
-        with engine.connect() as connection:
-            rows = connection.execute(
-                statement,
-                {
-                    "story_id": story_id,
-                    "confirmation": confirmation,
-                    "limit": limit,
-                    "offset": offset,
-                },
-            ).mappings().all()
-        return V2TimelineResponse(items=[V2TimelineEntry.model_validate(row) for row in rows])
+            raise HTTPException(status_code=404, detail="entity not found")
+        return V2EntitySummary.model_validate(dict(row))
 
     @app.get("/api/v2/entities", response_model=V2EntityListResponse)
     async def list_entities(
         type: str | None = Query(None),
         q: str | None = Query(None),
-        limit: int = Query(100, ge=1, le=100),
+        limit: int = Query(50, ge=1, le=100),
         offset: int = Query(0, ge=0),
     ) -> V2EntityListResponse:
-        query = f"%{q.strip()}%" if q and q.strip() else None
+        conditions = ["1=1"]
+        params: dict[str, object] = {"limit": limit, "offset": offset}
+        if type:
+            conditions.append("entity_type::text = upper(:type)")
+            params["type"] = type
+        if q and q.strip():
+            conditions.append(
+                "(canonical_name ilike :pattern or :exact = any(aliases) or exists (select 1 from unnest(aliases) a where a ilike :pattern))"
+            )
+            params["pattern"] = f"%{q.strip()}%"
+            params["exact"] = q.strip()
+
+        where_clause = " and ".join(conditions)
         statement = sa.text(
-            """with published as (
-              select se.entity_id,
-                     count(distinct p.story_id) as story_count,
-                     count(distinct p.id) as article_count
-              from story_entities se
-              join publications p on p.story_id = se.story_id
-              where p.status = 'PUBLISHED'
-              group by se.entity_id
-            )
-            select e.id, e.entity_type::text as entity_type, e.name, e.slug,
-                   published.story_count, published.article_count
-            from entities e
-            join published on published.entity_id = e.id
-            where (cast(:entity_type as text) is null or e.entity_type::text = upper(cast(:entity_type as text)))
-              and (cast(:query as text) is null or e.name ilike cast(:query as text))
-            order by published.article_count desc, e.name asc
-            limit :limit offset :offset"""
+            f"""
+            select id, entity_type::text as entity_type, canonical_name, slug,
+                   aliases, mention_count_24h, last_seen_at
+            from entities
+            where {where_clause}
+            order by mention_count_24h desc, canonical_name asc
+            limit :limit offset :offset
+            """
         )
-        count_statement = sa.text(
-            """with published as (
-              select se.entity_id
-              from story_entities se
-              join publications p on p.story_id = se.story_id
-              where p.status = 'PUBLISHED'
-              group by se.entity_id
-            )
-            select count(*)
-            from entities e
-            join published on published.entity_id = e.id
-            where (cast(:entity_type as text) is null or e.entity_type::text = upper(cast(:entity_type as text)))
-              and (cast(:query as text) is null or e.name ilike cast(:query as text))"""
-        )
-        params = {"entity_type": type, "query": query, "limit": limit, "offset": offset}
+        count_statement = sa.text(f"select count(*) from entities where {where_clause}")
         with engine.connect() as connection:
             rows = connection.execute(statement, params).mappings().all()
             total = connection.execute(count_statement, params).scalar_one()
-        return V2EntityListResponse(
-            items=[V2EntityResponse.model_validate(row) for row in rows],
-            limit=limit,
-            offset=offset,
-            total=total,
-        )
+            items = [V2EntitySummary.model_validate(dict(row)) for row in rows]
 
-    @app.get("/api/v2/entities/{entity_type}/{entity_slug}", response_model=V2EntityResponse)
-    async def get_entity(entity_type: str, entity_slug: str) -> V2EntityResponse:
-        statement = sa.text(
-            """with published as (
-              select se.entity_id,
-                     count(distinct p.story_id) as story_count,
-                     count(distinct p.id) as article_count
-              from story_entities se
-              join publications p on p.story_id = se.story_id
-              where p.status = 'PUBLISHED'
-              group by se.entity_id
-            )
-            select e.id, e.entity_type::text as entity_type, e.name, e.slug,
-                   published.story_count, published.article_count
-            from entities e
-            join published on published.entity_id = e.id
-            where e.entity_type::text = upper(:entity_type) and e.slug = :entity_slug"""
-        )
-        with engine.connect() as connection:
-            row = connection.execute(
-                statement,
-                {"entity_type": entity_type, "entity_slug": entity_slug},
-            ).mappings().one_or_none()
-        if row is None:
-            raise HTTPException(status_code=404, detail="entity not found")
-        return V2EntityResponse.model_validate(row)
-
-    @app.get(
-        "/api/v2/entities/{entity_type}/{entity_slug}/stories",
-        response_model=V2EntityStoriesResponse,
-    )
-    async def get_entity_stories(entity_type: str, entity_slug: str) -> V2EntityStoriesResponse:
-        statement = sa.text(
-            """select distinct p.story_id
-            from publications p
-            join story_entities se on se.story_id = p.story_id
-            join entities e on e.id = se.entity_id
-            where p.status = 'PUBLISHED'
-              and e.entity_type::text = upper(:entity_type)
-              and e.slug = :entity_slug
-            order by p.story_id"""
-        )
-        with engine.connect() as connection:
-            story_ids = [
-                row["story_id"]
-                for row in connection.execute(
-                    statement,
-                    {"entity_type": entity_type, "entity_slug": entity_slug},
-                ).mappings().all()
-            ]
-        return V2EntityStoriesResponse(
-            entity_type=entity_type.upper(),
-            entity_slug=entity_slug,
-            story_ids=story_ids,
-        )
-
-    @app.get("/api/v2/stories/{story_id}", response_model=V2StoryResponse)
-    async def get_story(story_id: UUID) -> V2StoryResponse:
-        statement = sa.text(
-            """select s.id, s.title_en, s.title_vi, s.summary_en, s.summary_vi,
-            s.event_type, s.status::text as status, s.confirmation::text as confirmation,
-            s.first_seen_at, s.last_seen_at
-            from stories s
-            where s.id = :story_id
-              and exists (
-                select 1 from publications p
-                where p.story_id = s.id and p.status = 'PUBLISHED'
-              )"""
-        )
-        entity_statement = sa.text(
-            """select entity_id from story_entities where story_id = :story_id order by entity_id"""
-        )
-        with engine.connect() as connection:
-            row = connection.execute(statement, {"story_id": story_id}).mappings().one_or_none()
-            if row is None:
-                raise HTTPException(status_code=404, detail="story not found")
-            entity_ids = [
-                item["entity_id"]
-                for item in connection.execute(entity_statement, {"story_id": story_id}).mappings().all()
-            ]
-        return V2StoryResponse.model_validate({**row, "entity_ids": entity_ids})
+        return V2EntityListResponse(items=items, limit=limit, offset=offset, total=total)
 
     return app
+

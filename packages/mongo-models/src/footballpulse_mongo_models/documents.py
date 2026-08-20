@@ -8,6 +8,38 @@ from beanie import Document, Indexed
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class EntityAlias(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: str
+    normalized_value: str
+    case_sensitive: bool = False
+
+
+class CanonicalEntity(Document):
+    id: UUID
+    entity_type: str
+    canonical_key: Indexed(str, unique=True)
+    canonical_name: str
+    canonical_name_normalized: str
+    leagues: list[str] = Field(default_factory=list)
+    seasons: list[str] = Field(default_factory=list)
+    aliases: list[EntityAlias] = Field(default_factory=list)
+    alias_values_normalized: list[str] = Field(default_factory=list)
+    status: str = "ACTIVE"
+    source: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Settings:
+        name = "canonical_entities"
+        indexes: ClassVar = [
+            [("entity_type", 1), ("canonical_name_normalized", 1)],
+            [("alias_values_normalized", 1)],
+            [("status", 1), ("updated_at", -1)],
+        ]
+
+
 class EntityMention(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -63,13 +95,15 @@ class NewsMetadata(Document):
 class NewsContent(Document):
     id: UUID
     content: str
+    filtered_content: str | None = None
     cleaned_at: datetime
+    filtered_at: datetime | None = None
     extractor: str
     extraction_status: str
 
     class Settings:
         name = "news_content"
-        indexes: ClassVar = [[("cleaned_at", -1)]]
+        indexes: ClassVar = [[("cleaned_at", -1)], [("filtered_at", -1)]]
 
 
 class NewsEntity(Document):
@@ -84,7 +118,37 @@ class NewsEntity(Document):
         indexes: ClassVar = [
             [("entities.label", 1)],
             [("entities.canonical_entity_id", 1)],
+            [("entities.canonical_name", 1)],
             [("processed_at", -1)],
+        ]
+
+
+class EntityTimelineSummary(Document):
+    id: UUID
+    entity_id: UUID
+    canonical_name: str
+    entity_type: str
+    window_start: datetime
+    window_end: datetime
+    article_ids: list[UUID] = Field(default_factory=list)
+    article_count: int = Field(ge=0)
+    entities_50: list[str] = Field(default_factory=list)
+    entities_80: list[str] = Field(default_factory=list)
+    aggregated_news: str = ""
+    short_description: str = ""
+    status: str = "COMPLETED"
+    error_message: str | None = None
+    published_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Settings:
+        name = "entity_timeline_summaries"
+        indexes: ClassVar = [
+            [("entity_id", 1), ("window_start", -1), ("window_end", -1)],
+            [("status", 1), ("window_start", -1)],
+            [("canonical_name", 1), ("window_start", -1)],
+            [("window_start", -1), ("window_end", -1)],
         ]
 
 

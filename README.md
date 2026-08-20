@@ -3,12 +3,11 @@
 FootballPulse v2 hien tai duoc dinh huong theo flow:
 
 ```text
-crawler
--> entities-extraction-service
--> content-summary-service
--> publish
--> backend-api
--> frontend
+Airflow-managed pipeline:
+crawler -> entities-extraction-service -> content-summary-service -> publish
+
+Serving layer:
+backend-api -> frontend
 ```
 
 Trong repo hien tai, code duoc giu lai cho:
@@ -59,9 +58,9 @@ Neu co mau thuan giua cac docs, uu tien tai lieu tren.
 - doc du lieu can publish tu Mongo
 - materialize sang Supabase PostgreSQL
 
-### 5. Serving
-
-- `backend-api` doc Supabase
+### 5. Serving Layer (Independent from Airflow Pipeline)
+ 
+- `backend-api` doc doc quyen tu PostgreSQL serving read model (khong doc Mongo)
 - `frontend` goi `backend-api`
 - frontend deploy tren Vercel
 - backend deploy tren Render

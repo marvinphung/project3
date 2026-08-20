@@ -3,6 +3,7 @@ name = "footballpulse-pipeline"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "footballpulse-content-summary-service",
     "footballpulse-crawler-service",
     "footballpulse-entities-extraction-service",
     "footballpulse-publisher-service",
@@ -13,6 +14,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+footballpulse-content-summary-service = { workspace = true }
 footballpulse-crawler-service = { workspace = true }
 footballpulse-entities-extraction-service = { workspace = true }
 footballpulse-publisher-service = { workspace = true }

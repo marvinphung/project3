@@ -1,65 +1,116 @@
-import { Link } from 'react-router'
-import { usePublicArticles } from '../api/hooks'
-import { toArticle } from '../api/adapters'
-import { EmptyState, LargeNewsCard, LoadingSkeleton, MediumNewsCard, NewsRow, SectionHeading, EntityChip } from '../components/ui'
-
-import { entitiesFromArticles } from '../api/adapters'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router'
+import { useTopEntities } from '../api/hooks'
+import { EmptyState, LoadingSkeleton, SectionHeading } from '../components/ui'
 
 export default function HomePage() {
-  const remote = usePublicArticles(8)
-  const liveArticles = remote.data?.map(toArticle) ?? []
-  const content = liveArticles
-  const trendingEntities = entitiesFromArticles(remote.data ?? []).slice(0, 8)
-  const hero = content[0]
-  const secondary = content.slice(1, 4)
-  const latest = content.slice(0, 8)
+  const navigate = useNavigate()
+  const [searchQuery, setSearchQuery] = useState('')
+  const topEntities = useTopEntities(10, '24h')
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault()
+    if (searchQuery.trim()) {
+      navigate(`/tim-kiem?q=${encodeURIComponent(searchQuery.trim())}`)
+    }
+  }
+
+  const entityTypeLabels: Record<string, string> = {
+    CLUB: 'CLB',
+    PLAYER: 'Cầu thủ',
+    COACH: 'HLV',
+    COMPETITION: 'Giải đấu',
+  }
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8">
-      {/* Hero */}
-      <section className="mb-12">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-8">
-          {remote.loading ? <LoadingSkeleton /> : remote.error ? <EmptyState message="Chưa thể tải tin nổi bật" sub={remote.error.message} /> : hero ? <LargeNewsCard article={hero} /> : <EmptyState message="Chưa có bài viết được xuất bản" sub="Dữ liệu sẽ xuất hiện sau khi Story được duyệt và publish." />}
-          <div className="flex flex-col gap-5">
-            {secondary.map(a => <MediumNewsCard key={a.id} article={a} />)}
-          </div>
+      {/* Hero & Search Banner */}
+      <section className="mb-10 rounded-2xl bg-gradient-to-r from-[#1E293B] to-[#0F172A] p-8 text-white shadow-xl">
+        <div className="max-w-3xl">
+          <span className="inline-block rounded-full bg-[#78A83D]/20 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-[#78A83D]">
+            Football Intelligence Timeline
+          </span>
+          <h1 className="mt-3 text-3xl font-extrabold sm:text-4xl text-white">
+            Theo dõi diễn biến bóng đá theo từng Entity
+          </h1>
+          <p className="mt-2 text-sm text-gray-300 sm:text-base">
+            Tổng hợp tin tức 3 giờ tự động qua AI cho từng câu lạc bộ, cầu thủ và giải đấu.
+          </p>
+
+          <form onSubmit={handleSearch} className="mt-6 flex max-w-xl gap-2">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Tìm kiếm CLB, cầu thủ, biệt danh (vd: MU, Real, Arsenal)..."
+              className="min-w-0 flex-1 rounded-xl bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#78A83D]"
+            />
+            <button
+              type="submit"
+              className="rounded-xl bg-[#78A83D] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#689332]"
+            >
+              Tìm kiếm
+            </button>
+          </form>
         </div>
       </section>
 
-      {/* Latest + Sidebar */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-10">
-        {/* Main */}
-        <section>
-          <SectionHeading>Tin mới nhất</SectionHeading>
-          <div>
-            {latest.length ? latest.map(a => <NewsRow key={a.id} article={a} />) : <EmptyState message="Chưa có tin mới" />}
-          </div>
-          <div className="mt-8 text-center">
-            <Link
-              to="/tin-moi"
-              className="inline-flex items-center gap-2 px-6 py-2.5 border border-[#E5E7EB] rounded-lg text-sm font-medium text-[#374151] hover:border-[#78A83D] hover:text-[#78A83D] transition-colors"
-            >
-              Xem thêm tin
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </Link>
-          </div>
-        </section>
+      {/* Top 10 Entities in 24h */}
+      <section className="mb-12">
+        <div className="flex items-center justify-between mb-6">
+          <SectionHeading>Top 10 Entities nổi bật (24h qua)</SectionHeading>
+          <span className="text-xs text-gray-500 font-medium">Xếp hạng theo số bài viết 24h</span>
+        </div>
 
-        {/* Sidebar */}
-        <aside className="space-y-6">
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
-            <SectionHeading>Đang được quan tâm</SectionHeading>
-            <div className="flex flex-col gap-2">
-              {trendingEntities.map(e => (
-                <div key={e.id} className="flex items-center gap-2 py-1.5">
-                  <EntityChip entity={e} />
+        {topEntities.loading ? (
+          <LoadingSkeleton />
+        ) : topEntities.error ? (
+          <EmptyState message="Không thể tải danh sách top entities" sub={topEntities.error.message} />
+        ) : !topEntities.data?.length ? (
+          <EmptyState
+            message="Chưa có dữ liệu entity 24h"
+            sub="Dữ liệu timeline sẽ hiển thị sau khi pipeline tổng hợp và xuất bản."
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {topEntities.data.map((entity, idx) => (
+              <Link
+                key={entity.id}
+                to={`/entity/${entity.id}`}
+                className="group flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-sm transition hover:border-[#78A83D] hover:shadow-md"
+              >
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 font-bold text-gray-700 group-hover:bg-[#78A83D]/10 group-hover:text-[#78A83D]">
+                    #{idx + 1}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-bold text-gray-900 group-hover:text-[#78A83D]">
+                        {entity.canonical_name}
+                      </span>
+                      <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                        {entityTypeLabels[entity.entity_type] || entity.entity_type}
+                      </span>
+                    </div>
+                    {entity.aliases?.length > 0 && (
+                      <p className="truncate text-xs text-gray-500 mt-0.5">
+                        {entity.aliases.slice(0, 3).join(', ')}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              ))}
-              {!trendingEntities.length && <p className="text-sm text-[#6B7280]">Chưa có entity từ bài đã xuất bản.</p>}
-            </div>
+                <div className="text-right shrink-0 pl-3">
+                  <span className="block text-lg font-extrabold text-[#78A83D]">
+                    {entity.mention_count_24h}
+                  </span>
+                  <span className="text-[11px] text-gray-400">bài viết / 24h</span>
+                </div>
+              </Link>
+            ))}
           </div>
-        </aside>
-      </div>
+        )}
+      </section>
     </div>
   )
 }
+

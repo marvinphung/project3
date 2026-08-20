@@ -18,8 +18,9 @@ def test_build_app_exposes_public_routes_without_connecting_until_request() -> N
         }
     )
 
-    assert "/api/v2/articles/{slug}" in app.openapi()["paths"]
-    assert "/api/v2/stories/{story_id}/timeline" in app.openapi()["paths"]
+    assert "/api/v2/entities/top" in app.openapi()["paths"]
+    assert "/api/v2/entities/search" in app.openapi()["paths"]
+    assert "/api/v2/entities/{entity_id}/timeline" in app.openapi()["paths"]
     assert "/auth/token" in app.openapi()["paths"]
 
 

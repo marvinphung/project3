@@ -4,11 +4,17 @@ import argparse
 import importlib.util
 import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from confluent_kafka import Consumer
+from footballpulse_content_summary_service.summary_generator import SummaryGenerator
+from footballpulse_content_summary_service.window_planner import (
+    get_latest_closed_3h_window,
+    to_utc,
+)
 from footballpulse_entities_extraction_service.v2_processor import (
     V2EntityProcessor,
     V2NewsCrawledConsumer,
@@ -266,6 +272,36 @@ def _run_process(limit: int) -> int:
     return 0
 
 
+def _run_summary(
+    window_start_str: str | None,
+    window_end_str: str | None,
+    force: bool = False,
+) -> int:
+    mongo = _mongo_client()
+    try:
+        database = mongo[os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse_v2")]
+        if window_start_str and window_end_str:
+            window_start = to_utc(datetime.fromisoformat(window_start_str.replace("Z", "+00:00")))
+            window_end = to_utc(datetime.fromisoformat(window_end_str.replace("Z", "+00:00")))
+        else:
+            window_start, window_end = get_latest_closed_3h_window()
+
+        generator = SummaryGenerator(database=database)
+        summaries = generator.process_window(
+            window_start=window_start,
+            window_end=window_end,
+            force_recompute=force,
+        )
+        print(
+            f"footballpulse_pipeline summary completed: "
+            f"window=[{window_start.isoformat()} -> {window_end.isoformat()}], "
+            f"generated={len(summaries)}"
+        )
+    finally:
+        mongo.close()
+    return 0
+
+
 def _run_publish(limit: int) -> int:
     mongo = _mongo_client()
     engine = _postgres_engine()
@@ -273,17 +309,7 @@ def _run_publish(limit: int) -> int:
     try:
         database = mongo[os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse_v2")]
         publisher = V2Publisher(mongo=database, postgres=engine)
-        cursor = database.news_enrichments.find({"validation_status": "VALIDATED"}).sort(
-            "processed_at", 1
-        )
-        for document in cursor:
-            article_id = document.get("_id")
-            if not isinstance(article_id, UUID):
-                continue
-            if publisher.publish_article(article_id):
-                published += 1
-            if published >= limit:
-                break
+        published = publisher.publish_pending(limit=limit)
     finally:
         mongo.close()
         engine.dispose()
@@ -311,6 +337,11 @@ def main() -> None:
     process = subparsers.add_parser("process")
     process.add_argument("--limit", type=int, default=20)
 
+    summary = subparsers.add_parser("summary")
+    summary.add_argument("--window-start", type=str, default=None)
+    summary.add_argument("--window-end", type=str, default=None)
+    summary.add_argument("--force", action="store_true", default=False)
+
     publish = subparsers.add_parser("publish")
     publish.add_argument("--limit", type=int, default=50)
 
@@ -331,4 +362,6 @@ def main() -> None:
         raise SystemExit(_run_crawl(forwarded))
     if args.command == "process":
         raise SystemExit(_run_process(args.limit))
+    if args.command == "summary":
+        raise SystemExit(_run_summary(args.window_start, args.window_end, args.force))
     raise SystemExit(_run_publish(args.limit))

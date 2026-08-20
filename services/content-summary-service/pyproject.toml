@@ -1,0 +1,18 @@
+[project]
+name = "footballpulse-content-summary-service"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "footballpulse-mongo-models",
+    "footballpulse-runtime-config",
+    "httpx>=0.28,<1",
+    "pymongo>=4.16,<5",
+]
+
+[tool.uv.sources]
+footballpulse-mongo-models = { workspace = true }
+footballpulse-runtime-config = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

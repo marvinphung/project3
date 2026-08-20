@@ -17,13 +17,16 @@ fi
 echo "[1/5] crawler smoke"
 "$python_bin" scripts/smoke-v2-crawler.py
 
-echo "[2/4] entities extraction smoke"
+echo "[2/5] entities extraction smoke"
 "$python_bin" scripts/smoke-v2-processor.py
 
-echo "[3/4] publisher smoke"
+echo "[3/5] content summary smoke"
+"$python_bin" scripts/smoke-v2-summary.py
+
+echo "[4/5] publisher smoke"
 "$python_bin" scripts/smoke-v2-publisher.py
 
-echo "[4/4] api smoke"
+echo "[5/5] api smoke"
 "$python_bin" scripts/smoke-v2-api.py
 
 echo "full flow smoke passed"

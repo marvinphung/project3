@@ -1,4 +1,8 @@
 from footballpulse_mongo_models.documents import (
+    CanonicalEntity,
+    EntityAlias,
+    EntityMention,
+    EntityTimelineSummary,
     NewsContent,
     NewsEmbedding,
     NewsEnrichment,
@@ -7,6 +11,10 @@ from footballpulse_mongo_models.documents import (
 )
 
 __all__ = [
+    "CanonicalEntity",
+    "EntityAlias",
+    "EntityMention",
+    "EntityTimelineSummary",
     "NewsContent",
     "NewsEmbedding",
     "NewsEnrichment",

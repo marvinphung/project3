@@ -41,20 +41,17 @@ Muc tieu moi:
 
 ## High-Level System Flow
 
-Flow muc tieu:
-
 ```text
-(1) crawler
--> (2) entities-extraction-service
--> (3) content-summary-service
--> (4) publish
--> backend-api
--> frontend
+Airflow-managed pipeline:
+(1) crawler -> (2) entities-extraction-service -> (3) content-summary-service -> (4) publish
+
+Serving layer:
+backend-api -> frontend
 ```
 
-Serving layer van giu nguyen:
+Serving layer:
 
-- `backend-api` doc du lieu tu Supabase PostgreSQL
+- `backend-api` doc doc quyen tu Supabase PostgreSQL read model (khong doc Mongo)
 - `frontend` goi `backend-api`
 - `frontend` deploy tren Vercel
 - `backend-api` deploy tren Render
@@ -104,6 +101,26 @@ Mongo output:
 
 Service nay la owner cua runtime entity extraction.
 NER runtime va config cua no phai nam tai boundary nay, khong nam o service khac.
+
+Canonical entity/alias data nam trong Mongo collection `canonical_entities`.
+Alias khong can publish sang PostgreSQL. Pipeline dung aliases de rewrite cac bien
+the trong `clean_content` ve `canonical_name` truoc khi extract/group.
+
+Vi du:
+
+- `MU`
+- `Man United`
+- `Man Utd`
+
+duoc rewrite ve:
+
+```text
+Manchester United
+```
+
+Chi tiet schema xem:
+
+- `docs/version2/mongo-canonical-entities-schema.md`
 
 ### 3. `content-summary-service`
 
@@ -290,14 +307,17 @@ No chua:
 Mongo khong phai serving database cuoi cho frontend production.
 
 ### Supabase PostgreSQL
-
+ 
 Supabase la serving/read database.
-
-No chua:
-
-- du lieu timeline da duoc publish
-- du lieu entity noi bat
-- read model phuc vu backend API
+ 
+No chua toan bo read model day du cho serving layer:
+ 
+- `entities`: canonical entities voi 24h distinct article mention counts, aliases, slugs
+- `source_articles`: metadata day du cua cac bai bao nguon
+- `entity_timeline_items`: cac timeline items duoc tong hop theo entity va 3h window
+- `timeline_item_articles`: quan he N-N mapping giua timeline item va source articles
+ 
+Backend API va frontend chi doc du lieu tu PostgreSQL, hoan toan khong truy van MongoDB.
 
 ## Frontend/Product Expectations
 

@@ -3,23 +3,22 @@
 Tai lieu nay chi mo ta phan code va flow con duoc giu lai trong repo.
 
 Kien truc muc tieu:
-
+ 
 ```text
-(1) crawler
--> (2) entities-extraction-service
--> (3) content-summary-service
--> (4) publish
--> backend-api
--> frontend
+Airflow-managed pipeline:
+(1) crawler -> (2) entities-extraction-service -> (3) content-summary-service -> (4) publish
+
+Serving layer:
+backend-api -> frontend
 ```
-
+ 
 Tai thoi diem hien tai:
-
+ 
 - `crawler` da co code
 - `entities-extraction-service` da co code
 - `publish` da co code
-- `backend-api` va `frontend` giu nguyen
-- `content-summary-service` chua duoc viet lai
+- `backend-api` va `frontend` doc tu PostgreSQL serving read model (khong doc Mongo)
+- `content-summary-service` duoc tich hop vao pipeline Airflow
 
 Tai lieu nguon:
 

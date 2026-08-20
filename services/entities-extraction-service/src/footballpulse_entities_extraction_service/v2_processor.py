@@ -11,6 +11,8 @@ from confluent_kafka import Consumer
 from footballpulse_event_contracts import NewsCrawledEvent
 from pymongo.database import Database
 
+from footballpulse_entities_extraction_service.canonical import CanonicalRegistry
+
 NEWS_CRAWLED_TOPIC = "news.crawled.v1"
 
 EntityPrediction = dict[str, Any]
@@ -19,13 +21,14 @@ MongoDocument = dict[str, Any]
 
 
 class V2EntityProcessor:
-    """Processes article pointers concurrently and upserts one entity document."""
+    """Processes article pointers, replaces aliases with canonical names, and extracts canonical entities."""
 
     def __init__(
         self,
         *,
         database: Database[MongoDocument],
         extractor: EntityExtractor,
+        registry: CanonicalRegistry | None = None,
         workers: int = 6,
     ) -> None:
         if workers < 1:
@@ -33,20 +36,59 @@ class V2EntityProcessor:
         self._database = database
         self._extractor = extractor
         self._workers = workers
+        self._registry = registry or self._load_registry()
+
+    def _load_registry(self) -> CanonicalRegistry:
+        docs = list(self._database.canonical_entities.find({"status": "ACTIVE"}))
+        return CanonicalRegistry(docs)
 
     def process_article(self, article_id: UUID) -> UUID:
-        content = self._database.news_content.find_one({"_id": article_id})
-        if content is None or not isinstance(content.get("content"), str):
+        content_doc = self._database.news_content.find_one({"_id": article_id})
+        if content_doc is None or not isinstance(content_doc.get("content"), str):
             raise ValueError(f"article content not found for {article_id}")
-        entities = self._extractor(content["content"])
+
+        raw_content = content_doc["content"]
+        filtered_content = self._registry.replace_aliases(raw_content)
+        now = datetime.now(UTC)
+
+        # Persist filtered_content to news_content
+        self._database.news_content.update_one(
+            {"_id": article_id},
+            {"$set": {"filtered_content": filtered_content, "filtered_at": now}},
+        )
+
+        # Run extraction on filtered_content
+        raw_entities = self._extractor(filtered_content)
+        canonicalized_entities: list[dict[str, Any]] = []
+
+        for entity in raw_entities:
+            text = str(entity.get("text", ""))
+            label = str(entity.get("label", "club"))
+            score = float(entity.get("score", 1.0))
+            start = int(entity.get("start", 0))
+            end = int(entity.get("end", 0))
+
+            can_id, can_name = self._registry.resolve_entity(text, label)
+            canonicalized_entities.append(
+                {
+                    "label": label.upper(),
+                    "text": text,
+                    "score": score,
+                    "start": start,
+                    "end": end,
+                    "canonical_entity_id": can_id,
+                    "canonical_name": can_name,
+                }
+            )
+
         self._database.news_entities.replace_one(
             {"_id": article_id},
             {
                 "_id": article_id,
-                "entities": entities,
+                "entities": canonicalized_entities,
                 "model_name": os.getenv("NER_MODEL_NAME", "gliner2"),
                 "model_version": os.getenv("FOOTBALLPULSE_GLINER_MODEL", "fastino/gliner2-large-v1"),
-                "processed_at": datetime.now(UTC),
+                "processed_at": now,
             },
             upsert=True,
         )

@@ -120,6 +120,58 @@ export function useArticleSources(slug: string): QueryState<PublicArticleSource[
   return state
 }
 
+export function useTopEntities(limit = 10, window = '24h'): QueryState<PublicEntitySummary[]> {
+  const [state, setState] = useState<QueryState<PublicEntitySummary[]>>({ data: null, loading: true, error: null })
+  useEffect(() => {
+    let active = true
+    setState({ data: null, loading: true, error: null })
+    getTopEntities(limit, window)
+      .then((res) => active && setState({ data: res.items, loading: false, error: null }))
+      .catch((err) => active && setState({ data: null, loading: false, error: toApiError(err) }))
+    return () => { active = false }
+  }, [limit, window])
+  return state
+}
+
+export function useEntitySearch(query: string): QueryState<PublicEntitySummary[]> {
+  const [state, setState] = useState<QueryState<PublicEntitySummary[]>>({ data: null, loading: Boolean(query.trim()), error: null })
+  useEffect(() => {
+    const q = query.trim()
+    if (!q) {
+      setState({ data: [], loading: false, error: null })
+      return
+    }
+    let active = true
+    setState({ data: null, loading: true, error: null })
+    searchEntities(q)
+      .then((res) => active && setState({ data: res.items, loading: false, error: null }))
+      .catch((err) => active && setState({ data: null, loading: false, error: toApiError(err) }))
+    return () => { active = false }
+  }, [query])
+  return state
+}
+
+export function useEntityTimeline(entityId: string, limit = 50, offset = 0): QueryState<PublicEntityTimeline> {
+  const [state, setState] = useState<QueryState<PublicEntityTimeline>>({ data: null, loading: Boolean(entityId), error: null })
+  useEffect(() => {
+    if (!entityId) {
+      setState({ data: null, loading: false, error: new ApiError(404, 'ENTITY_NOT_FOUND', 'Không tìm thấy entity') })
+      return
+    }
+    let active = true
+    setState({ data: null, loading: true, error: null })
+    getEntityTimeline(entityId, limit, offset)
+      .then((data) => active && setState({ data, loading: false, error: null }))
+      .catch((err) => active && setState({ data: null, loading: false, error: toApiError(err) }))
+    return () => { active = false }
+  }, [entityId, limit, offset])
+  return state
+}
+
+export function useEntityDetail(entityId: string): QueryState<PublicEntitySummary> {
+  return useRemoteValue(entityId, getEntityById)
+}
+
 function useRemoteValue<T>(id: string, loader: (id: string) => Promise<T>): QueryState<T> {
   const [state, setState] = useState<QueryState<T>>({ data: null, loading: true, error: null })
   useEffect(() => {

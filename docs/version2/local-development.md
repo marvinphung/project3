@@ -3,12 +3,11 @@
 Local development hien tai phai duoc hieu theo source-of-truth moi:
 
 ```text
-crawler
--> entities-extraction-service
--> content-summary-service
--> publish
--> backend-api
--> frontend
+Airflow-managed pipeline:
+crawler -> entities-extraction-service -> content-summary-service -> publish
+
+Serving layer:
+backend-api -> frontend
 ```
 
 Tai lieu nguon:

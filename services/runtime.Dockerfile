@@ -15,9 +15,10 @@ RUN pip install --no-cache-dir \
       /workspace/packages/shared \
       /workspace/services/crawler-service \
       /workspace/services/entities-extraction-service \
+      /workspace/services/content-summary-service \
       /workspace/services/publisher-service \
       /workspace/services/api-gateway
 
 COPY scripts /workspace/scripts
 
-ENV PYTHONPATH=/workspace/packages/pipeline/src:/workspace/packages/fetch-artifacts/src:/workspace/packages/event-contracts/src:/workspace/packages/mongo-models/src:/workspace/packages/runtime-config/src:/workspace/packages/shared/src:/workspace/services/crawler-service/src:/workspace/services/entities-extraction-service/src:/workspace/services/publisher-service/src:/workspace/services/api-gateway/src
+ENV PYTHONPATH=/workspace/packages/pipeline/src:/workspace/packages/fetch-artifacts/src:/workspace/packages/event-contracts/src:/workspace/packages/mongo-models/src:/workspace/packages/runtime-config/src:/workspace/packages/shared/src:/workspace/services/crawler-service/src:/workspace/services/entities-extraction-service/src:/workspace/services/content-summary-service/src:/workspace/services/publisher-service/src:/workspace/services/api-gateway/src

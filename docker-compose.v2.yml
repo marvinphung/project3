@@ -169,6 +169,29 @@ services:
     command: ["python", "-m", "footballpulse_pipeline", "process", "--limit", "100"]
     restart: "no"
 
+  content-summary:
+    image: footballpulse-v2-runtime:local
+    build:
+      context: .
+      dockerfile: services/runtime.Dockerfile
+    depends_on:
+      mongodb-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
+      FOOTBALLPULSE_V2_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
+      FOOTBALLPULSE_POSTGRES_HOST: postgres
+      FOOTBALLPULSE_POSTGRES_PORT: 5432
+      FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
+      SUPABASE_DB_HOST: ""
+      SUPABASE_DATABASE_URL: ""
+    command: ["python", "-m", "footballpulse_pipeline", "summary"]
+    restart: "no"
+
   publisher:
     image: footballpulse-v2-runtime:local
     build:
@@ -217,6 +240,7 @@ services:
       AIRFLOW__API_AUTH__JWT_SECRET: "footballpulse-v2-airflow-jwt-secret-key-32chars!"
       FOOTBALLPULSE_CRAWL_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm crawler python -m footballpulse_pipeline crawl
       FOOTBALLPULSE_PROCESS_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm entities-extraction python -m footballpulse_pipeline process
+      FOOTBALLPULSE_SUMMARY_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm content-summary python -m footballpulse_pipeline summary
       FOOTBALLPULSE_PUBLISH_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm publisher python -m footballpulse_pipeline publish
     command: ["bash", "-c", "airflow db migrate"]
     volumes:

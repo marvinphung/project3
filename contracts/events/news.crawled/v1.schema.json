@@ -1,30 +1,128 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "NewsCrawledEvent",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["event_id", "event_type", "event_version", "occurred_at", "producer", "correlation_id", "causation_id", "aggregate_type", "aggregate_id", "idempotency_key", "payload"],
-  "properties": {
-    "event_id": {"type": "string", "format": "uuid"},
-    "event_type": {"const": "news.crawled"},
-    "event_version": {"const": 1},
-    "occurred_at": {"type": "string", "format": "date-time"},
-    "producer": {"const": "crawler-service"},
-    "correlation_id": {"type": "string", "format": "uuid"},
-    "causation_id": {"anyOf": [{"type": "string", "format": "uuid"}, {"type": "null"}]},
-    "aggregate_type": {"const": "news_article"},
-    "aggregate_id": {"type": "string", "format": "uuid"},
-    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 256},
-    "payload": {
-      "type": "object",
+  "$defs": {
+    "NewsCrawledPayload": {
       "additionalProperties": false,
-      "required": ["article_id", "canonical_url", "source_name", "published_time"],
+      "description": "Mongo pointer published after the v2 crawler write succeeds.",
       "properties": {
-        "article_id": {"type": "string", "format": "uuid"},
-        "canonical_url": {"type": "string", "format": "uri"},
-        "source_name": {"type": "string", "minLength": 1, "maxLength": 200},
-        "published_time": {"anyOf": [{"type": "string", "format": "date-time"}, {"type": "null"}]}
-      }
+        "article_id": {
+          "format": "uuid",
+          "title": "Article Id",
+          "type": "string"
+        },
+        "canonical_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Canonical Url",
+          "type": "string"
+        },
+        "source_name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Source Name",
+          "type": "string"
+        },
+        "published_time": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Published Time"
+        }
+      },
+      "required": [
+        "article_id",
+        "canonical_url",
+        "source_name",
+        "published_time"
+      ],
+      "title": "NewsCrawledPayload",
+      "type": "object"
     }
-  }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "news.crawled",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "event_version": {
+      "const": 1,
+      "title": "Event Version",
+      "type": "integer"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "producer": {
+      "const": "crawler-service",
+      "title": "Producer",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "causation_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Causation Id"
+    },
+    "aggregate_type": {
+      "const": "news_article",
+      "title": "Aggregate Type",
+      "type": "string"
+    },
+    "aggregate_id": {
+      "format": "uuid",
+      "title": "Aggregate Id",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/NewsCrawledPayload"
+    }
+  },
+  "required": [
+    "event_id",
+    "event_type",
+    "event_version",
+    "occurred_at",
+    "producer",
+    "correlation_id",
+    "causation_id",
+    "aggregate_type",
+    "aggregate_id",
+    "idempotency_key",
+    "payload"
+  ],
+  "title": "NewsCrawledEvent",
+  "type": "object"
 }

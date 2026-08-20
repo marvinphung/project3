@@ -1,0 +1,1091 @@
+{
+  "season": "2026-27",
+  "leagues": {
+    "Premier League": [
+      {
+        "club": "Arsenal",
+        "alias": [
+          "Arsenal FC",
+          "AFC",
+          "The Gunners",
+          "Gunners"
+        ]
+      },
+      {
+        "club": "Aston Villa",
+        "alias": [
+          "Aston Villa FC",
+          "Villa",
+          "AVFC",
+          "The Villans",
+          "Villans"
+        ]
+      },
+      {
+        "club": "AFC Bournemouth",
+        "alias": [
+          "Bournemouth",
+          "Bournemouth FC",
+          "The Cherries",
+          "Cherries"
+        ]
+      },
+      {
+        "club": "Brentford",
+        "alias": [
+          "Brentford FC",
+          "BFC",
+          "The Bees",
+          "Bees"
+        ]
+      },
+      {
+        "club": "Brighton & Hove Albion",
+        "alias": [
+          "Brighton",
+          "Brighton and Hove Albion",
+          "BHAFC",
+          "The Seagulls",
+          "Seagulls"
+        ]
+      },
+      {
+        "club": "Chelsea",
+        "alias": [
+          "Chelsea FC",
+          "CFC",
+          "The Blues",
+          "Blues"
+        ]
+      },
+      {
+        "club": "Coventry City",
+        "alias": [
+          "Coventry",
+          "Coventry City FC",
+          "CCFC",
+          "The Sky Blues",
+          "Sky Blues"
+        ]
+      },
+      {
+        "club": "Crystal Palace",
+        "alias": [
+          "Crystal Palace FC",
+          "Palace",
+          "CPFC",
+          "The Eagles",
+          "Eagles"
+        ]
+      },
+      {
+        "club": "Everton",
+        "alias": [
+          "Everton FC",
+          "EFC",
+          "The Toffees",
+          "Toffees"
+        ]
+      },
+      {
+        "club": "Fulham",
+        "alias": [
+          "Fulham FC",
+          "FFC",
+          "The Cottagers",
+          "Cottagers"
+        ]
+      },
+      {
+        "club": "Hull City",
+        "alias": [
+          "Hull",
+          "Hull City AFC",
+          "The Tigers",
+          "Tigers"
+        ]
+      },
+      {
+        "club": "Ipswich Town",
+        "alias": [
+          "Ipswich",
+          "Ipswich Town FC",
+          "ITFC",
+          "The Tractor Boys",
+          "Tractor Boys"
+        ]
+      },
+      {
+        "club": "Leeds United",
+        "alias": [
+          "Leeds",
+          "Leeds United FC",
+          "LUFC",
+          "The Whites"
+        ]
+      },
+      {
+        "club": "Liverpool",
+        "alias": [
+          "Liverpool FC",
+          "LFC",
+          "The Reds"
+        ]
+      },
+      {
+        "club": "Manchester City",
+        "alias": [
+          "Man City",
+          "Manchester City FC",
+          "MCFC",
+          "The Citizens",
+          "Citizens"
+        ]
+      },
+      {
+        "club": "Manchester United",
+        "alias": [
+          "MU",
+          "Man United",
+          "Man Utd",
+          "Manchester United FC",
+          "MUFC",
+          "The Red Devils",
+          "Red Devils"
+        ]
+      },
+      {
+        "club": "Newcastle United",
+        "alias": [
+          "Newcastle",
+          "Newcastle United FC",
+          "NUFC",
+          "The Magpies",
+          "Magpies"
+        ]
+      },
+      {
+        "club": "Nottingham Forest",
+        "alias": [
+          "Nott'm Forest",
+          "Nottingham Forest FC",
+          "Forest",
+          "NFFC",
+          "The Tricky Trees",
+          "Tricky Trees"
+        ]
+      },
+      {
+        "club": "Sunderland",
+        "alias": [
+          "Sunderland AFC",
+          "SAFC",
+          "The Black Cats",
+          "Black Cats"
+        ]
+      },
+      {
+        "club": "Tottenham Hotspur",
+        "alias": [
+          "Tottenham",
+          "Spurs",
+          "Tottenham Hotspur FC",
+          "THFC",
+          "The Lilywhites"
+        ]
+      }
+    ],
+    "La Liga": [
+      {
+        "club": "Athletic Club",
+        "alias": [
+          "Athletic Bilbao",
+          "Athletic Club Bilbao",
+          "Bilbao",
+          "Athletic",
+          "Los Leones"
+        ]
+      },
+      {
+        "club": "Atlético de Madrid",
+        "alias": [
+          "Atletico Madrid",
+          "Atlético Madrid",
+          "Atletico de Madrid",
+          "Atleti",
+          "Los Colchoneros",
+          "Colchoneros"
+        ]
+      },
+      {
+        "club": "CA Osasuna",
+        "alias": [
+          "Osasuna",
+          "Club Atlético Osasuna",
+          "Club Atletico Osasuna",
+          "Los Rojillos"
+        ]
+      },
+      {
+        "club": "Celta Vigo",
+        "alias": [
+          "Celta",
+          "RC Celta",
+          "RC Celta de Vigo",
+          "Real Club Celta de Vigo",
+          "Os Celestes"
+        ]
+      },
+      {
+        "club": "Deportivo Alavés",
+        "alias": [
+          "Alavés",
+          "Alaves",
+          "Deportivo Alaves",
+          "Deportivo Alavés",
+          "Babazorros"
+        ]
+      },
+      {
+        "club": "Elche CF",
+        "alias": [
+          "Elche",
+          "Elche Club de Fútbol",
+          "Elche Club de Futbol",
+          "Los Franjiverdes"
+        ]
+      },
+      {
+        "club": "FC Barcelona",
+        "alias": [
+          "Barcelona",
+          "Barça",
+          "Barca",
+          "FCB",
+          "Blaugrana",
+          "Los Culés",
+          "Culés"
+        ]
+      },
+      {
+        "club": "Getafe CF",
+        "alias": [
+          "Getafe",
+          "Getafe Club de Fútbol",
+          "Getafe Club de Futbol",
+          "Los Azulones",
+          "Azulones"
+        ]
+      },
+      {
+        "club": "Levante UD",
+        "alias": [
+          "Levante",
+          "Levante Unión Deportiva",
+          "Levante Union Deportiva",
+          "Granotas"
+        ]
+      },
+      {
+        "club": "Málaga CF",
+        "alias": [
+          "Málaga",
+          "Malaga",
+          "Malaga CF",
+          "Málaga Club de Fútbol",
+          "Malaga Club de Futbol"
+        ]
+      },
+      {
+        "club": "Racing Santander",
+        "alias": [
+          "Real Racing Club",
+          "Real Racing Club de Santander",
+          "Racing de Santander",
+          "Racing",
+          "R. Racing Club"
+        ]
+      },
+      {
+        "club": "Rayo Vallecano",
+        "alias": [
+          "Rayo",
+          "Rayo Vallecano de Madrid",
+          "Los Franjirrojos",
+          "Franjirrojos"
+        ]
+      },
+      {
+        "club": "RC Deportivo",
+        "alias": [
+          "Deportivo La Coruña",
+          "Deportivo de La Coruña",
+          "Deportivo La Coruna",
+          "Deportivo de La Coruna",
+          "Dépor",
+          "Depor"
+        ]
+      },
+      {
+        "club": "RCD Espanyol",
+        "alias": [
+          "Espanyol",
+          "Espanyol de Barcelona",
+          "RCD Espanyol de Barcelona",
+          "Periquitos"
+        ]
+      },
+      {
+        "club": "Real Betis",
+        "alias": [
+          "Betis",
+          "Real Betis Balompié",
+          "Real Betis Balompie",
+          "Béticos",
+          "Beticos",
+          "Verdiblancos"
+        ]
+      },
+      {
+        "club": "Real Madrid",
+        "alias": [
+          "Real Madrid CF",
+          "Real Madrid C.F.",
+          "RMA",
+          "Los Blancos",
+          "Blancos",
+          "Los Merengues",
+          "Merengues"
+        ]
+      },
+      {
+        "club": "Real Sociedad",
+        "alias": [
+          "Real Sociedad de Fútbol",
+          "Real Sociedad de Futbol",
+          "La Real",
+          "Txuri-Urdin"
+        ]
+      },
+      {
+        "club": "Sevilla FC",
+        "alias": [
+          "Sevilla",
+          "Sevilla Fútbol Club",
+          "Sevilla Futbol Club",
+          "Sevillistas",
+          "Los Nervionenses"
+        ]
+      },
+      {
+        "club": "Valencia CF",
+        "alias": [
+          "Valencia",
+          "Valencia Club de Fútbol",
+          "Valencia Club de Futbol",
+          "Los Che"
+        ]
+      },
+      {
+        "club": "Villarreal CF",
+        "alias": [
+          "Villarreal",
+          "Villarreal Club de Fútbol",
+          "Villarreal Club de Futbol",
+          "Yellow Submarine",
+          "El Submarino Amarillo"
+        ]
+      }
+    ],
+    "Serie A": [
+      {
+        "club": "Atalanta",
+        "alias": [
+          "Atalanta BC",
+          "Atalanta B.C.",
+          "La Dea"
+        ]
+      },
+      {
+        "club": "Bologna",
+        "alias": [
+          "Bologna FC",
+          "Bologna FC 1909",
+          "Bologna F.C. 1909",
+          "Rossoblù",
+          "Rossoblu"
+        ]
+      },
+      {
+        "club": "Cagliari",
+        "alias": [
+          "Cagliari Calcio",
+          "Gli Isolani",
+          "Isolani"
+        ]
+      },
+      {
+        "club": "Como",
+        "alias": [
+          "Como 1907",
+          "Como 1907 FC",
+          "I Lariani",
+          "Lariani"
+        ]
+      },
+      {
+        "club": "Fiorentina",
+        "alias": [
+          "ACF Fiorentina",
+          "A.C.F. Fiorentina",
+          "La Viola",
+          "Viola"
+        ]
+      },
+      {
+        "club": "Frosinone",
+        "alias": [
+          "Frosinone Calcio",
+          "I Canarini",
+          "Canarini"
+        ]
+      },
+      {
+        "club": "Genoa",
+        "alias": [
+          "Genoa CFC",
+          "Genoa C.F.C.",
+          "Il Grifone",
+          "Grifone"
+        ]
+      },
+      {
+        "club": "Inter Milan",
+        "alias": [
+          "Inter",
+          "Internazionale",
+          "FC Internazionale Milano",
+          "Inter Milano",
+          "Nerazzurri"
+        ]
+      },
+      {
+        "club": "Juventus",
+        "alias": [
+          "Juventus FC",
+          "Juve",
+          "Bianconeri",
+          "La Vecchia Signora",
+          "The Old Lady"
+        ]
+      },
+      {
+        "club": "Lazio",
+        "alias": [
+          "SS Lazio",
+          "S.S. Lazio",
+          "Biancocelesti",
+          "Le Aquile"
+        ]
+      },
+      {
+        "club": "Lecce",
+        "alias": [
+          "US Lecce",
+          "U.S. Lecce",
+          "Salentini",
+          "Giallorossi"
+        ]
+      },
+      {
+        "club": "AC Milan",
+        "alias": [
+          "Milan",
+          "A.C. Milan",
+          "Milan FC",
+          "Rossoneri"
+        ]
+      },
+      {
+        "club": "Monza",
+        "alias": [
+          "AC Monza",
+          "A.C. Monza",
+          "Monza Calcio",
+          "Biancorossi"
+        ]
+      },
+      {
+        "club": "Napoli",
+        "alias": [
+          "SSC Napoli",
+          "S.S.C. Napoli",
+          "Partenopei",
+          "Azzurri"
+        ]
+      },
+      {
+        "club": "Parma",
+        "alias": [
+          "Parma Calcio",
+          "Parma Calcio 1913",
+          "Crociati"
+        ]
+      },
+      {
+        "club": "Roma",
+        "alias": [
+          "AS Roma",
+          "A.S. Roma",
+          "Giallorossi",
+          "La Lupa"
+        ]
+      },
+      {
+        "club": "Sassuolo",
+        "alias": [
+          "US Sassuolo",
+          "U.S. Sassuolo Calcio",
+          "Sassuolo Calcio",
+          "Neroverdi"
+        ]
+      },
+      {
+        "club": "Torino",
+        "alias": [
+          "Torino FC",
+          "Torino F.C.",
+          "Toro",
+          "Granata"
+        ]
+      },
+      {
+        "club": "Udinese",
+        "alias": [
+          "Udinese Calcio",
+          "Friulani",
+          "Zebrette"
+        ]
+      },
+      {
+        "club": "Venezia",
+        "alias": [
+          "Venezia FC",
+          "Venezia F.C.",
+          "Lagunari",
+          "Arancioneroverdi"
+        ]
+      }
+    ],
+    "Bundesliga": [
+      {
+        "club": "FC Bayern München",
+        "alias": [
+          "Bayern Munich",
+          "Bayern",
+          "FC Bayern",
+          "FCB",
+          "Die Roten"
+        ]
+      },
+      {
+        "club": "VfB Stuttgart",
+        "alias": [
+          "Stuttgart",
+          "VfB",
+          "VFB Stuttgart",
+          "Die Schwaben"
+        ]
+      },
+      {
+        "club": "Borussia Dortmund",
+        "alias": [
+          "Dortmund",
+          "BVB",
+          "BVB Dortmund",
+          "Die Schwarzgelben",
+          "Schwarzgelben"
+        ]
+      },
+      {
+        "club": "Hamburger SV",
+        "alias": [
+          "Hamburg",
+          "HSV",
+          "Hamburger Sport-Verein",
+          "Die Rothosen"
+        ]
+      },
+      {
+        "club": "RB Leipzig",
+        "alias": [
+          "Leipzig",
+          "RBL",
+          "RasenBallsport Leipzig",
+          "Die Roten Bullen",
+          "Roten Bullen"
+        ]
+      },
+      {
+        "club": "Borussia Mönchengladbach",
+        "alias": [
+          "Borussia Monchengladbach",
+          "Mönchengladbach",
+          "Monchengladbach",
+          "Gladbach",
+          "BMG",
+          "Die Fohlen"
+        ]
+      },
+      {
+        "club": "SC Freiburg",
+        "alias": [
+          "Freiburg",
+          "Sport-Club Freiburg",
+          "SCF"
+        ]
+      },
+      {
+        "club": "Werder Bremen",
+        "alias": [
+          "SV Werder Bremen",
+          "Bremen",
+          "Werder",
+          "SVW"
+        ]
+      },
+      {
+        "club": "FC Augsburg",
+        "alias": [
+          "Augsburg",
+          "FCA"
+        ]
+      },
+      {
+        "club": "FC Schalke 04",
+        "alias": [
+          "Schalke",
+          "Schalke 04",
+          "S04",
+          "Die Königsblauen",
+          "Die Konigsblauen"
+        ]
+      },
+      {
+        "club": "1. FSV Mainz 05",
+        "alias": [
+          "Mainz",
+          "Mainz 05",
+          "FSV Mainz",
+          "FSV Mainz 05",
+          "Die Nullfünfer",
+          "Die Nullfunfer"
+        ]
+      },
+      {
+        "club": "SC Paderborn 07",
+        "alias": [
+          "Paderborn",
+          "SC Paderborn",
+          "SCP07",
+          "SCP"
+        ]
+      },
+      {
+        "club": "1. FC Union Berlin",
+        "alias": [
+          "Union Berlin",
+          "Union",
+          "Eisern Union",
+          "Die Eisernen"
+        ]
+      },
+      {
+        "club": "Eintracht Frankfurt",
+        "alias": [
+          "Frankfurt",
+          "Eintracht",
+          "SGE",
+          "Die Adler"
+        ]
+      },
+      {
+        "club": "1. FC Köln",
+        "alias": [
+          "FC Köln",
+          "FC Koln",
+          "1. FC Koln",
+          "Köln",
+          "Koln",
+          "Cologne",
+          "Effzeh"
+        ]
+      },
+      {
+        "club": "TSG Hoffenheim",
+        "alias": [
+          "Hoffenheim",
+          "TSG 1899 Hoffenheim",
+          "1899 Hoffenheim",
+          "TSG"
+        ]
+      },
+      {
+        "club": "SV Elversberg",
+        "alias": [
+          "Elversberg",
+          "SVE",
+          "Sportvereinigung Elversberg"
+        ]
+      },
+      {
+        "club": "Bayer 04 Leverkusen",
+        "alias": [
+          "Bayer Leverkusen",
+          "Leverkusen",
+          "Bayer 04",
+          "B04",
+          "Die Werkself",
+          "Werkself"
+        ]
+      }
+    ],
+    "Ligue 1": [
+      {
+        "club": "Angers SCO",
+        "alias": [
+          "Angers",
+          "SCO Angers",
+          "Le SCO"
+        ]
+      },
+      {
+        "club": "AJ Auxerre",
+        "alias": [
+          "Auxerre",
+          "AJA",
+          "Association de la Jeunesse Auxerroise"
+        ]
+      },
+      {
+        "club": "Stade Brestois 29",
+        "alias": [
+          "Brest",
+          "Stade Brestois",
+          "SB29"
+        ]
+      },
+      {
+        "club": "Le Havre AC",
+        "alias": [
+          "Le Havre",
+          "HAC",
+          "Le Havre Athletic Club"
+        ]
+      },
+      {
+        "club": "Le Mans FC",
+        "alias": [
+          "Le Mans",
+          "LMFC"
+        ]
+      },
+      {
+        "club": "RC Lens",
+        "alias": [
+          "Lens",
+          "Racing Club de Lens",
+          "RCL",
+          "Sang et Or",
+          "Les Sang et Or"
+        ]
+      },
+      {
+        "club": "LOSC Lille",
+        "alias": [
+          "Lille",
+          "LOSC",
+          "Lille OSC",
+          "Les Dogues",
+          "Dogues"
+        ]
+      },
+      {
+        "club": "FC Lorient",
+        "alias": [
+          "Lorient",
+          "FCL",
+          "Les Merlus",
+          "Merlus"
+        ]
+      },
+      {
+        "club": "Olympique Lyonnais",
+        "alias": [
+          "Lyon",
+          "OL",
+          "Olympique Lyon",
+          "Les Gones",
+          "Gones"
+        ]
+      },
+      {
+        "club": "Olympique de Marseille",
+        "alias": [
+          "Marseille",
+          "OM",
+          "Olympique Marseille",
+          "Les Phocéens",
+          "Les Phoceens"
+        ]
+      },
+      {
+        "club": "AS Monaco",
+        "alias": [
+          "Monaco",
+          "ASM",
+          "Association Sportive de Monaco",
+          "Les Monégasques",
+          "Les Monegasques"
+        ]
+      },
+      {
+        "club": "OGC Nice",
+        "alias": [
+          "Nice",
+          "OGCN",
+          "Olympique Gymnaste Club de Nice",
+          "Les Aiglons",
+          "Aiglons"
+        ]
+      },
+      {
+        "club": "Paris FC",
+        "alias": [
+          "PFC",
+          "Paris Football Club"
+        ]
+      },
+      {
+        "club": "Paris Saint-Germain",
+        "alias": [
+          "PSG",
+          "Paris Saint Germain",
+          "Paris SG",
+          "Les Parisiens"
+        ]
+      },
+      {
+        "club": "Stade Rennais FC",
+        "alias": [
+          "Rennes",
+          "Stade Rennais",
+          "SRFC",
+          "Rouge et Noir",
+          "Les Rouge et Noir"
+        ]
+      },
+      {
+        "club": "RC Strasbourg Alsace",
+        "alias": [
+          "Strasbourg",
+          "RC Strasbourg",
+          "Racing Strasbourg",
+          "RCSA"
+        ]
+      },
+      {
+        "club": "Toulouse FC",
+        "alias": [
+          "Toulouse",
+          "TFC",
+          "TéFéCé",
+          "TeFeCe"
+        ]
+      },
+      {
+        "club": "ESTAC Troyes",
+        "alias": [
+          "Troyes",
+          "ESTAC",
+          "Espérance Sportive Troyes Aube Champagne",
+          "Esperance Sportive Troyes Aube Champagne"
+        ]
+      }
+    ],
+    "Liga Portugal": [
+      {
+        "club": "Estoril Praia",
+        "alias": [
+          "Estoril",
+          "GD Estoril Praia",
+          "G.D. Estoril Praia",
+          "Canarinhos"
+        ]
+      },
+      {
+        "club": "FC Famalicão",
+        "alias": [
+          "Famalicão",
+          "Famalicao",
+          "Famalicão FC",
+          "Famalicao FC",
+          "FCF"
+        ]
+      },
+      {
+        "club": "Marítimo",
+        "alias": [
+          "Maritimo",
+          "CS Marítimo",
+          "CS Maritimo",
+          "C.S. Marítimo",
+          "Marítimo M.",
+          "Maritimo M."
+        ]
+      },
+      {
+        "club": "Casa Pia AC",
+        "alias": [
+          "Casa Pia",
+          "Casa Pia Atlético Clube",
+          "Casa Pia Atletico Clube",
+          "Gansos"
+        ]
+      },
+      {
+        "club": "Vitória SC",
+        "alias": [
+          "Vitória Guimarães",
+          "Vitoria Guimaraes",
+          "Vitória de Guimarães",
+          "Vitoria de Guimaraes",
+          "Guimarães",
+          "Guimaraes",
+          "Conquistadores"
+        ]
+      },
+      {
+        "club": "FC Arouca",
+        "alias": [
+          "Arouca",
+          "Futebol Clube de Arouca"
+        ]
+      },
+      {
+        "club": "Estrela da Amadora",
+        "alias": [
+          "Estrela Amadora",
+          "CF Estrela da Amadora",
+          "C.F. Estrela da Amadora",
+          "Estrela"
+        ]
+      },
+      {
+        "club": "Sporting CP",
+        "alias": [
+          "Sporting",
+          "Sporting Lisbon",
+          "Sporting Clube de Portugal",
+          "SCP",
+          "Leões",
+          "Leoes"
+        ]
+      },
+      {
+        "club": "FC Porto",
+        "alias": [
+          "Porto",
+          "FCP",
+          "Futebol Clube do Porto",
+          "Dragões",
+          "Dragoes"
+        ]
+      },
+      {
+        "club": "FC Alverca",
+        "alias": [
+          "Alverca",
+          "Futebol Clube de Alverca"
+        ]
+      },
+      {
+        "club": "Gil Vicente FC",
+        "alias": [
+          "Gil Vicente",
+          "Gil Vicente Futebol Clube",
+          "Gilistas"
+        ]
+      },
+      {
+        "club": "Rio Ave FC",
+        "alias": [
+          "Rio Ave",
+          "Rio Ave Futebol Clube",
+          "Vilacondenses"
+        ]
+      },
+      {
+        "club": "SL Benfica",
+        "alias": [
+          "Benfica",
+          "S.L. Benfica",
+          "Sport Lisboa e Benfica",
+          "Encarnados",
+          "Águias",
+          "Aguias"
+        ]
+      },
+      {
+        "club": "Académico de Viseu",
+        "alias": [
+          "Académico",
+          "Academico",
+          "Académico Viseu",
+          "Academico Viseu",
+          "Académico de Viseu FC",
+          "Academico de Viseu FC"
+        ]
+      },
+      {
+        "club": "Moreirense FC",
+        "alias": [
+          "Moreirense",
+          "Moreirense Futebol Clube",
+          "Cónegos",
+          "Conegos"
+        ]
+      },
+      {
+        "club": "SC Braga",
+        "alias": [
+          "Braga",
+          "Sporting Braga",
+          "Sporting Clube de Braga",
+          "S.C. Braga",
+          "Arsenalistas"
+        ]
+      },
+      {
+        "club": "Santa Clara",
+        "alias": [
+          "CD Santa Clara",
+          "C.D. Santa Clara",
+          "Clube Desportivo Santa Clara",
+          "Açorianos",
+          "Acorianos"
+        ]
+      },
+      {
+        "club": "CD Nacional",
+        "alias": [
+          "Nacional",
+          "Nacional da Madeira",
+          "Clube Desportivo Nacional",
+          "C.D. Nacional",
+          "Alvinegros"
+        ]
+      }
+    ]
+  }
+}
