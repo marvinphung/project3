@@ -32,7 +32,7 @@ try:
             task_id="process_backlog",
             bash_command=os.environ.get(
                 "FOOTBALLPULSE_PROCESS_COMMAND",
-                "docker compose -f /workspace/docker-compose.v2.yml run --rm processor python -m footballpulse_pipeline process",
+                "docker compose -f /workspace/docker-compose.v2.yml run --no-deps --rm processor python -m footballpulse_pipeline process",
             ),
         )
 

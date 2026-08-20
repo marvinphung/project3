@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
-"""Run one real RSS/sitemap/HTML crawl window against the local stores.
+"""Run real RSS/sitemap/HTML crawl pipeline in 2 decoupled steps.
 
-This is intentionally a small operational runner until Airflow owns scheduling.
-It discovers links from the configured catalog, fetches bounded HTML, writes the
-raw/cleaned evidence artifact, and ingests article versions into MongoDB.
+Step 1 (Discovery & Seeding):
+- Fetches RSS feeds and sitemaps from priority sources in domain-sources-reference.md
+- Filters articles published within the last 30 days (and BBC /articles/ constraint)
+- Generates deterministic UUID (_id) from canonical URL
+- Deduplicates against MongoDB news_metadata and seeds new metadata records
+
+Step 2 (Content Extraction & Parallel Crawl):
+- Finds all news_metadata records that do not yet exist in news_content
+- Fetches article HTML in parallel with bounded concurrency
+- Extracts cleaned text using Trafilatura -> BeautifulSoup -> Playwright fallback
+- Stores extracted text into news_content and updates news_metadata.content_hash
+- Publishes lightweight pointer to Kafka (news.crawled.v1)
 """
 
 from __future__ import annotations
@@ -12,47 +21,45 @@ import argparse
 import asyncio
 import logging
 import os
-import re
 import sys
 import time
-import uuid
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from bs4 import BeautifulSoup
 from confluent_kafka import Producer
 from pymongo import MongoClient
 from pymongo.database import Database
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "crawler-service" / "src"))
 sys.path.insert(0, str(ROOT / "packages" / "event-contracts" / "src"))
 sys.path.insert(0, str(ROOT / "packages" / "runtime-config" / "src"))
 sys.path.insert(0, str(ROOT / "packages" / "shared" / "src"))
 
-from footballpulse_crawler_service.application.v2_article_pipeline import V2ArticlePipeline
 from footballpulse_crawler_service.discovery.fetcher import RssFetcher, create_http_client
 from footballpulse_crawler_service.discovery.runner import DiscoveryJob
 from footballpulse_crawler_service.discovery.security import UrlSafetyPolicy
 from footballpulse_crawler_service.discovery.service import RssDiscovery
 from footballpulse_crawler_service.discovery.v2_policy import (
+    DEFAULT_MAX_AGE_DAYS,
     V2_BOOTSTRAP_FETCH_LIMIT,
     V2_CANDIDATE_LIMIT,
     V2_SCHEDULED_FETCH_LIMIT,
-    select_new_candidates,
+    is_within_age_limit,
 )
-from footballpulse_crawler_service.domain.source import NewSource, SourceType
+from footballpulse_crawler_service.domain.source import SourceType
 from footballpulse_crawler_service.extraction.fetcher import HtmlFetcher
 from footballpulse_crawler_service.extraction.processor import ArticleContentProcessor
 from footballpulse_crawler_service.extraction.service import ExtractedArticle, HtmlExtractionService
 from footballpulse_crawler_service.messaging.v2 import V2NewsCrawledPublisher
 from footballpulse_crawler_service.persistence.mongo_v2 import V2MongoArticleWriter
-from footballpulse_runtime_config import bind_log_context, configure_logging
+from footballpulse_runtime_config import configure_logging
 from footballpulse_runtime_config import log_event as structured_log_event
-from footballpulse_shared import canonicalize_news_url
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,40 +69,110 @@ class CatalogSource:
     source_type: SourceType
     domains: tuple[str, ...]
     enabled_by_default: bool = True
+    requires_article_path: bool = False
 
 
+# Source catalog based on docs/version2/domain-sources-reference.md
 CATALOG: tuple[CatalogSource, ...] = (
+    # --- Priority RSS/Sitemap Sources (Enabled by default) ---
+    # BBC Sport Football (All 8 feeds from reference doc, requires /articles/ path)
     CatalogSource(
-        "BBC Sport Football",
+        "BBC Sport - Premier League",
+        "https://feeds.bbci.co.uk/sport/football/premier-league/rss.xml",
+        SourceType.RSS,
+        ("bbci.co.uk", "bbc.co.uk", "bbc.com"),
+        enabled_by_default=True,
+        requires_article_path=True,
+    ),
+    CatalogSource(
+        "BBC Sport - Champions League",
+        "https://feeds.bbci.co.uk/sport/football/champions-league/rss.xml",
+        SourceType.RSS,
+        ("bbci.co.uk", "bbc.co.uk", "bbc.com"),
+        enabled_by_default=True,
+        requires_article_path=True,
+    ),
+    CatalogSource(
+        "BBC Sport - Europa League",
+        "https://feeds.bbci.co.uk/sport/football/europa-league/rss.xml",
+        SourceType.RSS,
+        ("bbci.co.uk", "bbc.co.uk", "bbc.com"),
+        enabled_by_default=True,
+        requires_article_path=True,
+    ),
+    CatalogSource(
+        "BBC Sport - FA Cup",
+        "https://feeds.bbci.co.uk/sport/football/fa-cup/rss.xml",
+        SourceType.RSS,
+        ("bbci.co.uk", "bbc.co.uk", "bbc.com"),
+        enabled_by_default=True,
+        requires_article_path=True,
+    ),
+    CatalogSource(
+        "BBC Sport - League Cup",
+        "https://feeds.bbci.co.uk/sport/football/league-cup/rss.xml",
+        SourceType.RSS,
+        ("bbci.co.uk", "bbc.co.uk", "bbc.com"),
+        enabled_by_default=True,
+        requires_article_path=True,
+    ),
+    CatalogSource(
+        "BBC Sport - World Cup",
+        "https://feeds.bbci.co.uk/sport/football/world-cup/rss.xml",
+        SourceType.RSS,
+        ("bbci.co.uk", "bbc.co.uk", "bbc.com"),
+        enabled_by_default=True,
+        requires_article_path=True,
+    ),
+    CatalogSource(
+        "BBC Sport - European",
+        "https://feeds.bbci.co.uk/sport/football/european/rss.xml",
+        SourceType.RSS,
+        ("bbci.co.uk", "bbc.co.uk", "bbc.com"),
+        enabled_by_default=True,
+        requires_article_path=True,
+    ),
+    CatalogSource(
+        "BBC Sport - Football RSS",
         "https://feeds.bbci.co.uk/sport/football/rss.xml",
         SourceType.RSS,
-        ("bbci.co.uk", "bbc.co.uk"),
+        ("bbci.co.uk", "bbc.co.uk", "bbc.com"),
+        enabled_by_default=True,
+        requires_article_path=True,
     ),
+    # The Guardian Football
     CatalogSource(
         "The Guardian Football",
         "https://www.theguardian.com/football/rss",
         SourceType.RSS,
         ("theguardian.com",),
+        enabled_by_default=True,
     ),
-    CatalogSource("ESPN Soccer", "https://www.espn.com/soccer/", SourceType.HTML, ("espn.com",)),
+    # The Athletic (NYTimes)
     CatalogSource(
-        "Transfermarkt",
-        "https://www.transfermarkt.co.uk/aktuell/newsarchiv",
-        SourceType.HTML,
-        ("transfermarkt.co.uk",),
+        "The Athletic Football",
+        "https://www.nytimes.com/athletic/rss/football/",
+        SourceType.RSS,
+        ("nytimes.com",),
+        enabled_by_default=True,
     ),
+    # The Telegraph Football (Sitemap)
     CatalogSource(
-        "Sky Sports Football Sitemap",
-        "https://www.skysports.com/sitemap_news_football.xml",
+        "The Telegraph Football",
+        "https://www.telegraph.co.uk/football/sitemap-0.xml",
         SourceType.SITEMAP,
-        ("skysports.com",),
+        ("telegraph.co.uk",),
+        enabled_by_default=True,
     ),
+    # The Independent Football
     CatalogSource(
-        "Sky Sports Football",
-        "https://www.skysports.com/football",
-        SourceType.HTML,
-        ("skysports.com",),
+        "The Independent Football",
+        "https://www.independent.co.uk/sport/football/rss",
+        SourceType.RSS,
+        ("independent.co.uk",),
+        enabled_by_default=True,
     ),
+    # --- Sources without RSS/Sitemap (Disabled/Opt-in per reference doc) ---
     CatalogSource(
         "Reuters Soccer",
         "https://www.reuters.com/sports/soccer/",
@@ -104,21 +181,60 @@ CATALOG: tuple[CatalogSource, ...] = (
         enabled_by_default=False,
     ),
     CatalogSource(
-        "Associated Press Soccer", "https://apnews.com/hub/soccer", SourceType.HTML, ("apnews.com",)
+        "ESPN Soccer",
+        "https://www.espn.com/soccer/",
+        SourceType.HTML,
+        ("espn.com",),
+        enabled_by_default=False,
+    ),
+    CatalogSource(
+        "Sky Sports Football",
+        "https://www.skysports.com/football",
+        SourceType.HTML,
+        ("skysports.com",),
+        enabled_by_default=False,
+    ),
+    CatalogSource(
+        "Transfermarkt",
+        "https://www.transfermarkt.co.uk/aktuell/newsarchiv",
+        SourceType.HTML,
+        ("transfermarkt.co.uk",),
+        enabled_by_default=False,
+    ),
+    CatalogSource(
+        "Associated Press Soccer",
+        "https://apnews.com/hub/soccer",
+        SourceType.HTML,
+        ("apnews.com",),
+        enabled_by_default=False,
     ),
     CatalogSource(
         "Premier League",
         "https://www.premierleague.com/en/news",
         SourceType.HTML,
         ("premierleague.com",),
+        enabled_by_default=False,
     ),
-    CatalogSource("UEFA News", "https://www.uefa.com/news-media/", SourceType.HTML, ("uefa.com",)),
-    CatalogSource("FIFA News", "https://www.fifa.com/sitemap", SourceType.SITEMAP, ("fifa.com",)),
+    CatalogSource(
+        "UEFA News",
+        "https://www.uefa.com/news-media/",
+        SourceType.HTML,
+        ("uefa.com",),
+        enabled_by_default=False,
+    ),
+    CatalogSource(
+        "FIFA News",
+        "https://www.fifa.com/sitemap",
+        SourceType.SITEMAP,
+        ("fifa.com",),
+        enabled_by_default=False,
+    ),
     CatalogSource(
         "FIFA World Cup News",
         "https://www.fifa.com/sitemap?scope=worldcup2026",
         SourceType.SITEMAP,
         ("fifa.com",),
+        enabled_by_default=False,
     ),
 )
 
@@ -126,7 +242,9 @@ LOGGER = logging.getLogger("footballpulse.crawler")
 BROWSER_LISTING_SOURCES = frozenset(
     {"ESPN Soccer", "Transfermarkt", "Reuters Soccer", "Premier League"}
 )
-BROWSER_ARTICLE_SOURCES = BROWSER_LISTING_SOURCES | frozenset({"FIFA News", "FIFA World Cup News"})
+BROWSER_ARTICLE_SOURCES = BROWSER_LISTING_SOURCES | frozenset(
+    {"The Athletic Football", "The Telegraph Football", "FIFA News", "FIFA World Cup News"}
+)
 
 
 def select_sources(source_names: list[str] | None) -> list[CatalogSource]:
@@ -146,7 +264,7 @@ class RenderedPage:
 
 
 class BrowserRenderer:
-    """Render only allowlisted public pages that require a real browser."""
+    """Render allowlisted public pages that require a real browser."""
 
     def __init__(self, safety_policy: UrlSafetyPolicy) -> None:
         self._safety_policy = safety_policy
@@ -248,23 +366,13 @@ def mongo_connection_url() -> str:
     )
 
 
-
-@dataclass(frozen=True, slots=True)
-class LocalSourceRecord:
-    name: str
-    rss_url: str
-    allowed_domains: tuple[str, ...]
-    source_type: SourceType
-    id: UUID
-
-
-@dataclass(frozen=True, slots=True)
-class LocalBatchRecord:
-    id: UUID
-
-
-def _is_article_url(source: CatalogSource, url: str) -> bool:
+def _is_valid_article_url(source: CatalogSource, url: str) -> bool:
+    """Check if URL matches source-specific article patterns."""
     path = urlsplit(url).path.lower().rstrip("/")
+    if source.requires_article_path:
+        return "/articles/" in path
+    if "bbc" in source.name.lower():
+        return "/articles/" in path
     if source.name == "ESPN Soccer":
         return "/soccer/story/_/id/" in path
     if source.name == "Transfermarkt":
@@ -302,30 +410,78 @@ def article_links_from_html(
         if not (host == domain or host.endswith(f".{domain}")):
             continue
         normalized = value.split("#", 1)[0]
-        if _is_article_url(source, normalized) and normalized not in links:
+        if _is_valid_article_url(source, normalized) and normalized not in links:
             links.append(normalized)
         if len(links) >= limit:
             break
     return links
 
 
-async def _sitemap_links(item: CatalogSource, source, client, safety, limit: int) -> list[str]:
-    fetcher = RssFetcher(client=client, safety_policy=safety, max_response_bytes=5 * 1024 * 1024)
-    listing = await fetcher.fetch(source.rss_url, allowed_domains=tuple(source.allowed_domains))
-    host = urlsplit(source.rss_url).hostname.lower().rstrip(".")
-    direct = article_links_from_html(listing.content, listing.final_url, host, limit, item)
-    if direct:
-        return direct
+async def _sitemap_entries(
+    item: CatalogSource, client, safety: UrlSafetyPolicy, limit: int, max_age_days: int
+) -> list[tuple[str, str, datetime | None, str | None, str | None]]:
+    """Parse sitemap XML and return list of (url, title, published_at, description, image_url)."""
+    fetcher = RssFetcher(client=client, safety_policy=safety, max_response_bytes=10 * 1024 * 1024)
+    listing = await fetcher.fetch(item.url, allowed_domains=item.domains)
     soup = BeautifulSoup(listing.content, "lxml-xml")
-    child_urls = [node.get_text(strip=True) for node in soup.find_all("loc")]
-    results: list[str] = []
-    for child_url in child_urls[:100]:
-        child = await fetcher.fetch(child_url, allowed_domains=tuple(source.allowed_domains))
-        for url in article_links_from_html(child.content, child.final_url, "fifa.com", limit, item):
-            if url not in results:
-                results.append(url)
-            if len(results) >= limit:
-                return results
+
+    # Check for sitemap index
+    sitemap_locs = [node.get_text(strip=True) for node in soup.find_all("sitemap")]
+    if sitemap_locs:
+        results = []
+        for sitemap_node in soup.find_all("sitemap")[:10]:
+            loc = sitemap_node.find("loc")
+            if not loc:
+                continue
+            child_url = loc.get_text(strip=True)
+            try:
+                child = await fetcher.fetch(child_url, allowed_domains=item.domains)
+                child_soup = BeautifulSoup(child.content, "lxml-xml")
+                for url_node in child_soup.find_all("url"):
+                    url_loc = url_node.find("loc")
+                    if not url_loc:
+                        continue
+                    url = url_loc.get_text(strip=True)
+                    if not _is_valid_article_url(item, url):
+                        continue
+                    lastmod_node = url_node.find("lastmod")
+                    published_at = None
+                    if lastmod_node:
+                        with suppress(Exception):
+                            published_at = datetime.fromisoformat(
+                                lastmod_node.get_text(strip=True)
+                            ).astimezone(UTC)
+                    if not is_within_age_limit(published_at, max_days=max_age_days):
+                        continue
+                    title = url.rsplit("/", 1)[-1].replace("-", " ")[:500] or url
+                    results.append((url, title, published_at, None, None))
+                    if len(results) >= limit:
+                        return results
+            except Exception:
+                continue
+        return results
+
+    results = []
+    for url_node in soup.find_all("url"):
+        loc = url_node.find("loc")
+        if not loc:
+            continue
+        url = loc.get_text(strip=True)
+        if not _is_valid_article_url(item, url):
+            continue
+        lastmod_node = url_node.find("lastmod")
+        published_at = None
+        if lastmod_node:
+            with suppress(Exception):
+                published_at = datetime.fromisoformat(
+                    lastmod_node.get_text(strip=True)
+                ).astimezone(UTC)
+        if not is_within_age_limit(published_at, max_days=max_age_days):
+            continue
+        title = url.rsplit("/", 1)[-1].replace("-", " ")[:500] or url
+        results.append((url, title, published_at, None, None))
+        if len(results) >= limit:
+            break
     return results
 
 
@@ -350,308 +506,445 @@ async def _browser_article(
     )
 
 
-async def crawl_source(
-    item: CatalogSource,
-    source,
-    batch,
-    pipeline: V2ArticlePipeline,
-    database: Database[dict[str, object]],
-    client,
-    safety,
-    renderer,
-    max_articles,
-    candidate_limit: int,
-):
-    allowed = tuple(source.allowed_domains)
-    links: list[tuple[str, str, str | None, datetime | None]] = []
-    if item.source_type is SourceType.RSS:
-        rss = RssDiscovery(fetcher=RssFetcher(client=client, safety_policy=safety))
-        record = await rss.discover(DiscoveryJob(str(source.id), source.rss_url, allowed))
-        links = [
-            (entry.url, entry.title, entry.guid, entry.published_at)
-            for entry in record.feed.entries[:candidate_limit]
-        ]
-    elif item.source_type is SourceType.SITEMAP:
-        for url in await _sitemap_links(item, source, client, safety, candidate_limit):
-            links.append((url, url.rsplit("/", 1)[-1].replace("-", " ")[:500] or url, None, None))
-    else:
-        if renderer is not None and item.name in BROWSER_LISTING_SOURCES:
-            listing = await renderer.fetch(
-                source.rss_url, allowed_domains=allowed, expand_listing=True
-            )
-        else:
-            listing = await HtmlFetcher(client=client, safety_policy=safety).fetch(
-                source.rss_url, allowed_domains=allowed
-            )
-        host = urlsplit(source.rss_url).hostname.lower().rstrip(".")
-        for url in article_links_from_html(
-            listing.content, listing.final_url, host, candidate_limit, item
-        ):
-            links.append((url, url.rsplit("/", 1)[-1].replace("-", " ")[:500] or url, None, None))
-        if item.name == "Premier League":
-            # DOM also contains a small set of stale promotional links. The
-            # content API responses are the authoritative current listing.
-            links.clear()
-            for api_url in listing.related_urls:
-                match = re.search(r"/TEXT/en/(\d+)", api_url, re.IGNORECASE)
-                if match is None:
-                    continue
-                url = f"https://www.premierleague.com/en/news/{match.group(1)}"
-                if all(existing[0] != url for existing in links):
-                    links.append((url, f"Premier League article {match.group(1)}", None, None))
-                if len(links) >= candidate_limit:
-                    break
+# =========================================================================
+# STEP 1: Discovery & URL Seeding into news_metadata
+# =========================================================================
 
-    if not links:
-        raise RuntimeError("source listing contained no usable article URLs")
-    candidate_metadata = {
-        canonicalize_news_url(url): (rss_title, guid, published_at)
-        for url, rss_title, guid, published_at in links
-    }
-    candidates = select_new_candidates(
-        [url for url, *_rest in links],
-        exists=lambda article_id: database.news_metadata.find_one({"_id": article_id}, {"_id": 1}) is not None,
-        candidate_limit=candidate_limit,
-        fetch_limit=max_articles,
-    )
-    links = [
-        (candidate.url, *candidate_metadata[candidate.url])
-        for candidate in candidates
-        if candidate.url in candidate_metadata
-    ]
-    if not links:
-        log_event("source_skipped_no_new_candidates", source=item.name, batch_id=batch.id)
-        return 0, 0, 0
-    fetched = failed = 0
-    log_event("source_discovered", source=item.name, batch_id=batch.id, count=len(links))
-    extractor = HtmlExtractionService(fetcher=HtmlFetcher(client=client, safety_policy=safety))
-    for article_number, (url, rss_title, guid, published_at) in enumerate(links, start=1):
-        article_started = time.monotonic()
-        log_event(
-            "article_fetch_started",
-            source=item.name,
-            batch_id=batch.id,
-            article_number=article_number,
-            article_total=len(links),
-            url=url,
+
+@dataclass(frozen=True, slots=True)
+class DiscoveredCandidate:
+    url: str
+    title: str
+    published_at: datetime | None
+    description: str | None
+    image_url: str | None
+    source_name: str
+
+
+async def discover_source_entries(
+    item: CatalogSource,
+    client,
+    safety: UrlSafetyPolicy,
+    candidate_limit: int,
+    max_age_days: int = DEFAULT_MAX_AGE_DAYS,
+) -> list[DiscoveredCandidate]:
+    """Fetch RSS or Sitemap and parse entries with 30-day filter and domain constraints."""
+    candidates: list[DiscoveredCandidate] = []
+
+    if item.source_type is SourceType.RSS:
+        rss = RssDiscovery(
+            fetcher=RssFetcher(client=client, safety_policy=safety),
+            max_entries_per_feed=candidate_limit,
         )
-        try:
-            try:
-                article = await extractor.fetch_and_extract(
-                    DiscoveryJob(item.name, url, allowed)
-                )
-            except Exception as static_error:
-                if renderer is None or item.name not in BROWSER_ARTICLE_SOURCES:
-                    raise
-                log_event(
-                    "browser_fallback",
-                    source=item.name,
-                    url=url,
-                    reason_type=type(static_error).__name__,
-                    reason=str(static_error),
-                )
-                article = await _browser_article(
-                    renderer, source_key=item.name, url=url, allowed=allowed
-                )
-            if (
-                article.extraction.status.value == "FAILED"
-                and renderer is not None
-                and item.name in BROWSER_ARTICLE_SOURCES
-            ):
-                log_event(
-                    "browser_fallback", source=item.name, url=url, reason_type="ExtractionFailed"
-                )
-                article = await _browser_article(
-                    renderer, source_key=item.name, url=url, allowed=allowed
-                )
-            if article.extraction.status.value == "FAILED":
-                failed += 1
-                log_event(
-                    "article_failed",
-                    source=item.name,
-                    batch_id=batch.id,
-                    url=url,
-                    error_type="ExtractionFailed",
-                    error=",".join(article.extraction.diagnostics),
-                )
+        job = DiscoveryJob(item.name, item.url, item.domains)
+        record = await rss.discover(job)
+        for entry in record.feed.entries:
+            if not _is_valid_article_url(item, entry.url):
                 continue
-            if article.extraction.title is None:
-                article = replace(article, extraction=replace(article.extraction, title=rss_title))
-            log_event(
-                "article_extraction_completed",
-                source=item.name,
-                batch_id=batch.id,
-                url=url,
-                extractor=article.extraction.extractor,
-                html_bytes=len(article.raw_html),
-                text_chars=len(article.extraction.text or ""),
+            if not is_within_age_limit(entry.published_at, max_days=max_age_days):
+                continue
+            candidates.append(
+                DiscoveredCandidate(
+                    url=entry.url,
+                    title=entry.title,
+                    published_at=entry.published_at,
+                    description=entry.description,
+                    image_url=entry.image_url,
+                    source_name=item.name,
+                )
             )
-            article_id = pipeline.persist_and_publish(article)
-            if article_id is None:
-                failed += 1
-                log_event(
-                    "article_failed",
-                    source=item.name,
-                    batch_id=batch.id,
+    elif item.source_type is SourceType.SITEMAP:
+        entries = await _sitemap_entries(item, client, safety, candidate_limit, max_age_days)
+        for url, title, published_at, desc, img in entries:
+            candidates.append(
+                DiscoveredCandidate(
                     url=url,
-                    error_type="MongoWriteRejected",
-                    error="crawler v2 writer rejected article payload",
+                    title=title,
+                    published_at=published_at,
+                    description=desc,
+                    image_url=img,
+                    source_name=item.name,
                 )
-                continue
-            fetched += 1
+            )
+    else:
+        # Fallback for HTML sources (when explicitly selected)
+        listing = await HtmlFetcher(client=client, safety_policy=safety).fetch(
+            item.url, allowed_domains=item.domains
+        )
+        host = urlsplit(item.url).hostname.lower().rstrip(".")
+        links = article_links_from_html(
+            listing.content, listing.final_url, host, candidate_limit, item
+        )
+        for url in links:
+            candidates.append(
+                DiscoveredCandidate(
+                    url=url,
+                    title=url.rsplit("/", 1)[-1].replace("-", " ")[:500] or url,
+                    published_at=None,
+                    description=None,
+                    image_url=None,
+                    source_name=item.name,
+                )
+            )
+
+    return candidates
+
+
+async def run_step1_discovery(
+    sources: list[CatalogSource],
+    writer: V2MongoArticleWriter,
+    client,
+    safety: UrlSafetyPolicy,
+    candidate_limit: int,
+    max_age_days: int = DEFAULT_MAX_AGE_DAYS,
+) -> tuple[int, int, int]:
+    """Run Step 1: Discover URLs, filter 30-day window, deduplicate and seed news_metadata."""
+    log_event("step1_discovery_started", source_count=len(sources), max_age_days=max_age_days)
+    total_discovered = 0
+    total_existing = 0
+    total_seeded = 0
+
+    async def _discover_and_seed(source: CatalogSource) -> None:
+        nonlocal total_discovered, total_existing, total_seeded
+        try:
+            entries = await discover_source_entries(
+                source, client, safety, candidate_limit, max_age_days=max_age_days
+            )
+            discovered_count = len(entries)
+            seeded_count = 0
+            existing_count = 0
+            for candidate in entries:
+                article_id = writer.seed_metadata(
+                    url=candidate.url,
+                    source_name=candidate.source_name,
+                    title=candidate.title,
+                    published_time=candidate.published_at,
+                    description=candidate.description,
+                    image_url=candidate.image_url,
+                )
+                if article_id is not None:
+                    seeded_count += 1
+                else:
+                    existing_count += 1
+
+            total_discovered += discovered_count
+            total_existing += existing_count
+            total_seeded += seeded_count
             log_event(
-                "article_processed",
-                source=item.name,
-                batch_id=batch.id,
-                url=url,
-                article_id=article_id,
-                status="SUCCESS",
-                duration_ms=round((time.monotonic() - article_started) * 1000),
+                "step1_source_seeded",
+                source=source.name,
+                discovered=discovered_count,
+                seeded=seeded_count,
+                existing=existing_count,
             )
         except Exception as exc:
-            failed += 1
             log_event(
-                "article_failed",
-                source=item.name,
-                batch_id=batch.id,
-                url=url,
+                "step1_source_discovery_failed",
+                source=source.name,
                 error_type=type(exc).__name__,
                 error=str(exc),
-                duration_ms=round((time.monotonic() - article_started) * 1000),
             )
-    return len(links), fetched, failed
+
+    await asyncio.gather(*(_discover_and_seed(s) for s in sources))
+    log_event(
+        "step1_discovery_completed",
+        total_discovered=total_discovered,
+        total_seeded=total_seeded,
+        total_existing=total_existing,
+    )
+    return total_discovered, total_existing, total_seeded
+
+
+# =========================================================================
+# STEP 2: Content Extraction & Parallel Crawl into news_content
+# =========================================================================
+
+
+async def extract_and_save_article(
+    doc: dict[str, object],
+    writer: V2MongoArticleWriter,
+    extractor: HtmlExtractionService,
+    renderer: BrowserRenderer | None,
+    safety: UrlSafetyPolicy,
+    kafka_publisher: V2NewsCrawledPublisher | None,
+    allowed_domains: tuple[str, ...],
+) -> bool:
+    """Fetch article content using primary/fallback extractors and persist to news_content."""
+    article_id = doc["_id"]
+    if not isinstance(article_id, UUID):
+        article_id = UUID(str(article_id))
+
+    url = str(doc.get("url") or doc.get("canonical_url", ""))
+    source_name = str(doc.get("source_name", "Unknown"))
+    if not url:
+        return False
+
+    started = time.monotonic()
+    try:
+        article: ExtractedArticle | None = None
+        try:
+            article = await extractor.fetch_and_extract(
+                DiscoveryJob(source_name, url, allowed_domains)
+            )
+        except Exception as static_error:
+            if renderer is not None and (
+                source_name in BROWSER_ARTICLE_SOURCES
+                or "nytimes.com" in url
+                or "telegraph.co.uk" in url
+            ):
+                log_event(
+                    "step2_browser_fallback",
+                    source=source_name,
+                    url=url,
+                    reason=type(static_error).__name__,
+                )
+                article = await _browser_article(
+                    renderer, source_key=source_name, url=url, allowed=allowed_domains
+                )
+            else:
+                raise
+
+        if (
+            article.extraction.status.value == "FAILED"
+            and renderer is not None
+            and (source_name in BROWSER_ARTICLE_SOURCES or "nytimes.com" in url)
+        ):
+            article = await _browser_article(
+                renderer, source_key=source_name, url=url, allowed=allowed_domains
+            )
+
+        if article.extraction.status.value == "FAILED" or not article.extraction.text:
+            log_event(
+                "step2_article_extraction_failed",
+                source=source_name,
+                url=url,
+                diagnostics=",".join(article.extraction.diagnostics),
+            )
+            return False
+
+        saved = writer.write_content(
+            article_id=article_id,
+            content_text=article.extraction.text,
+            extractor=article.extraction.extractor.value if article.extraction.extractor else "UNKNOWN",
+            extraction_status=article.extraction.status.value,
+            title=article.extraction.title,
+        )
+
+        if saved and kafka_publisher is not None:
+            with suppress(Exception):
+                kafka_publisher.publish(article_id=article_id, canonical_url=article.final_url)
+
+        log_event(
+            "step2_article_extracted",
+            source=source_name,
+            article_id=article_id,
+            url=url,
+            extractor=article.extraction.extractor,
+            text_length=len(article.extraction.text),
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
+        return True
+    except Exception as exc:
+        log_event(
+            "step2_article_error",
+            source=source_name,
+            article_id=article_id,
+            url=url,
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
+        return False
+
+
+async def run_step2_extraction(
+    writer: V2MongoArticleWriter,
+    client,
+    safety: UrlSafetyPolicy,
+    renderer: BrowserRenderer | None,
+    kafka_producer: Producer | None,
+    max_articles: int,
+    concurrency: int = 6,
+    source_names: list[str] | None = None,
+) -> tuple[int, int, int]:
+    """Run Step 2: Query unextracted metadata records and crawl content in parallel."""
+    unextracted = writer.get_unextracted_articles(
+        limit=max_articles,
+        source_names=tuple(source_names) if source_names else None,
+    )
+    if not unextracted:
+        log_event("step2_no_unextracted_articles")
+        return 0, 0, 0
+
+    log_event(
+        "step2_extraction_started",
+        count=len(unextracted),
+        concurrency=concurrency,
+    )
+    extractor = HtmlExtractionService(fetcher=HtmlFetcher(client=client, safety_policy=safety))
+    semaphore = asyncio.Semaphore(concurrency)
+
+    source_domain_map = {s.name: s.domains for s in CATALOG}
+    default_domains = (
+        "bbci.co.uk",
+        "bbc.co.uk",
+        "bbc.com",
+        "theguardian.com",
+        "nytimes.com",
+        "telegraph.co.uk",
+        "independent.co.uk",
+    )
+
+    success_count = 0
+    fail_count = 0
+
+    async def _extract_worker(doc: dict[str, object]) -> None:
+        nonlocal success_count, fail_count
+        source_name = str(doc.get("source_name", ""))
+        allowed_domains = source_domain_map.get(source_name, default_domains)
+        publisher = (
+            V2NewsCrawledPublisher(kafka_producer, source_name=source_name)
+            if kafka_producer is not None
+            else None
+        )
+        async with semaphore:
+            ok = await extract_and_save_article(
+                doc=doc,
+                writer=writer,
+                extractor=extractor,
+                renderer=renderer,
+                safety=safety,
+                kafka_publisher=publisher,
+                allowed_domains=allowed_domains,
+            )
+            if ok:
+                success_count += 1
+            else:
+                fail_count += 1
+
+    await asyncio.gather(*(_extract_worker(doc) for doc in unextracted))
+    log_event(
+        "step2_extraction_completed",
+        total=len(unextracted),
+        succeeded=success_count,
+        failed=fail_count,
+    )
+    return len(unextracted), success_count, fail_count
+
+
+# =========================================================================
+# Main Execution Pipeline
+# =========================================================================
 
 
 async def main_async(args: argparse.Namespace) -> int:
     selected = select_sources(args.source)
-    if not selected:
+    if not selected and args.step in {"all", "1", "discovery"}:
         raise SystemExit("No matching source. Use --list-sources to see catalog names.")
+
     mongo_url = mongo_connection_url()
     mongo_client: MongoClient[dict[str, object]] = MongoClient(
         mongo_url,
         uuidRepresentation="standard",
     )
     database: Database[dict[str, object]] = mongo_client[
-        os.getenv("FOOTBALLPULSE_V2_MONGODB_DB", os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse_v2"))
+        os.getenv(
+            "FOOTBALLPULSE_V2_MONGODB_DB",
+            os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse_v2"),
+        )
     ]
-    kafka_producer = Producer(
-        {
-            "bootstrap.servers": os.getenv(
-                "FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS",
-                "127.0.0.1:19092",
-            )
-        }
-    )
+
+    kafka_producer = None
+    try:
+        kafka_producer = Producer(
+            {
+                "bootstrap.servers": os.getenv(
+                    "FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS",
+                    "127.0.0.1:19092",
+                )
+            }
+        )
+    except Exception:
+        kafka_producer = None
+
     writer = V2MongoArticleWriter(database)
     safety = UrlSafetyPolicy()
+
     browser_enabled = os.getenv("FOOTBALLPULSE_BROWSER_FALLBACK", "true").lower() in {
         "1",
         "true",
         "yes",
     }
-    needs_browser = any(
-        item.name in BROWSER_LISTING_SOURCES or item.name in BROWSER_ARTICLE_SOURCES
-        for item in selected
-    )
-    renderer = BrowserRenderer(safety) if browser_enabled and needs_browser else None
+    renderer = BrowserRenderer(safety) if browser_enabled else None
     if renderer is not None:
         try:
             await renderer.start()
-        except Exception as exc:
+        except Exception:
             renderer = None
-    started = time.monotonic()
+
     fetch_limit = (
         V2_BOOTSTRAP_FETCH_LIMIT
         if os.getenv("FOOTBALLPULSE_CRAWL_MODE", "scheduled").casefold() == "bootstrap"
         else V2_SCHEDULED_FETCH_LIMIT
     )
     max_articles = min(args.max_articles, fetch_limit)
-    log_event(
-        "crawl_run_started",
-        source_count=len(selected),
-        max_articles_per_source=max_articles,
-        browser_fallback=renderer is not None,
-    )
-    source_semaphore = asyncio.Semaphore(
-        int(os.getenv("FOOTBALLPULSE_V2_SOURCE_CONCURRENCY", "4"))
-    )
+    step = getattr(args, "step", "all")
+    concurrency = getattr(args, "concurrency", 6)
+    max_age_days = getattr(args, "max_age_days", DEFAULT_MAX_AGE_DAYS)
 
-    async def _crawl_single_source(item: CatalogSource) -> None:
-        async with source_semaphore:
-            pipeline = V2ArticlePipeline(
-                mongo=writer,
-                kafka=V2NewsCrawledPublisher(kafka_producer, source_name=item.name),
-            )
-            source = LocalSourceRecord(
-                name=item.name,
-                rss_url=item.url,
-                allowed_domains=item.domains,
-                source_type=item.source_type,
-                id=uuid.uuid5(uuid.NAMESPACE_URL, item.url),
-            )
-            batch = LocalBatchRecord(id=uuid.uuid4())
-            log_event(
-                "source_started",
-                source=item.name,
-                url=item.url,
-                source_id=source.id,
-                batch_id=batch.id,
-            )
-            discovered = fetched = failed = 0
-            source_started = time.monotonic()
-            with bind_log_context(correlation_id=str(batch.id), batch_id=str(batch.id)):
-                try:
-                    discovered, fetched, failed = await crawl_source(
-                        item,
-                        source,
-                        batch,
-                        pipeline,
-                        database,
-                        client,
-                        safety,
-                        renderer,
-                        max_articles,
-                        V2_CANDIDATE_LIMIT,
-                    )
-                    status = "COMPLETED" if failed == 0 else "PARTIAL"
-                except asyncio.CancelledError:
-                    log_event("source_aborted", source=item.name, batch_id=batch.id)
-                    raise
-                except Exception as exc:
-                    discovered = 1
-                    failed = 1
-                    log_event(
-                        "source_failed",
-                        source=item.name,
-                        batch_id=batch.id,
-                        error_type=type(exc).__name__,
-                        error=str(exc),
-                    )
-                    status = "FAILED"
-            log_event(
-                "source_completed",
-                source=item.name,
-                batch_id=batch.id,
-                status=status,
-                discovered=discovered,
-                fetched=fetched,
-                failed=failed,
-                duration_ms=round((time.monotonic() - source_started) * 1000),
-            )
+    started = time.monotonic()
+    log_event(
+        "crawl_pipeline_started",
+        step=step,
+        source_count=len(selected),
+        max_articles=max_articles,
+        concurrency=concurrency,
+    )
 
     try:
-        async with create_http_client(max_connections=20) as client:
-            await asyncio.gather(*(_crawl_single_source(item) for item in selected))
+        async with create_http_client(max_connections=30) as client:
+            # Execute Step 1: Discovery & Seeding
+            if step in {"all", "1", "discovery"}:
+                print("\n=== Running Step 1: Discovery & Metadata Seeding (Last 30 Days) ===")
+                disc, exist, seeded = await run_step1_discovery(
+                    sources=selected,
+                    writer=writer,
+                    client=client,
+                    safety=safety,
+                    candidate_limit=V2_CANDIDATE_LIMIT,
+                    max_age_days=max_age_days,
+                )
+                print(
+                    f"Step 1 finished: discovered={disc}, already_in_db={exist}, newly_seeded={seeded}"
+                )
+
+            # Execute Step 2: Content Extraction & Parallel Crawling
+            if step in {"all", "2", "content"}:
+                print("\n=== Running Step 2: Parallel Content Extraction & Storage ===")
+                total_req, ok_count, fail_count = await run_step2_extraction(
+                    writer=writer,
+                    client=client,
+                    safety=safety,
+                    renderer=renderer,
+                    kafka_producer=kafka_producer,
+                    max_articles=max_articles * max(1, len(selected)),
+                    concurrency=concurrency,
+                    source_names=[s.name for s in selected] if args.source else None,
+                )
+                print(
+                    f"Step 2 finished: unextracted_targeted={total_req}, succeeded={ok_count}, failed={fail_count}"
+                )
+
     finally:
         if renderer is not None:
             await renderer.close()
-        kafka_producer.flush(10)
+        if kafka_producer is not None:
+            kafka_producer.flush(5)
         mongo_client.close()
         log_event(
-            "crawl_run_completed",
-            source_count=len(selected),
+            "crawl_pipeline_completed",
             duration_ms=round((time.monotonic() - started) * 1000),
         )
+
     return 0
 
 
@@ -663,17 +956,36 @@ def main() -> int:
     )
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--step",
+        choices=["all", "1", "2", "discovery", "content"],
+        default="all",
+        help="Pipeline step to run: '1'/'discovery', '2'/'content', or 'all' (default: all)",
+    )
+    parser.add_argument(
         "--source",
         action="append",
-        help="catalog source name; repeatable; default: enabled sources (Reuters is opt-in)",
+        help="Catalog source name; repeatable; default: enabled RSS/Sitemap sources",
     )
-    parser.add_argument("--max-articles", type=int, default=10)
+    parser.add_argument("--max-articles", type=int, default=20)
+    parser.add_argument(
+        "--concurrency", type=int, default=6, help="Parallel worker concurrency for Step 2"
+    )
+    parser.add_argument(
+        "--max-age-days",
+        type=int,
+        default=DEFAULT_MAX_AGE_DAYS,
+        help="Maximum article age in days from pubDate (default: 30)",
+    )
     parser.add_argument("--list-sources", action="store_true")
     args = parser.parse_args()
+
     if args.list_sources:
+        print("=== FootballPulse Crawler Sources ===")
         for item in CATALOG:
-            print(f"{item.name}\t{item.source_type.value}\t{item.url}")
+            status = "ENABLED" if item.enabled_by_default else "DISABLED (no RSS/Sitemap or opt-in)"
+            print(f"[{status}] {item.name} | {item.source_type.value} | {item.url}")
         return 0
+
     return asyncio.run(main_async(args))
 
 

@@ -34,6 +34,7 @@ from footballpulse_ai_content_service.v2_enrichment_sink import V2EnrichmentSink
 ROOT = Path(__file__).resolve().parents[4]
 SOURCE_NAMESPACE = UUID("9f8620af-3c33-49d8-a1c5-0fefadad86f7")
 ENTITY_NAMESPACE = UUID("d20a9b22-3d7a-4f45-b19c-814dc1de279b")
+MAX_CANONICAL_ENTITIES = 200
 MongoDocument = dict[str, Any]
 
 
@@ -159,9 +160,25 @@ def build_v2_inputs(
         raw_entities = entity_document.get("entities", []) if isinstance(entity_document, dict) else []
         canonical_entities: list[CanonicalEntityInput] = []
         seen_entity_ids: set[UUID] = set()
+        candidates: list[tuple[float, str, str, dict[str, object]]] = []
         for entity in raw_entities if isinstance(raw_entities, list) else []:
             if not isinstance(entity, dict):
                 continue
+            label = _entity_type(entity.get("label"))
+            canonical_name = entity.get("canonical_name") or entity.get("text")
+            if label is None or not isinstance(canonical_name, str) or not canonical_name.strip():
+                continue
+            score = entity.get("score", 0.0)
+            if not isinstance(score, (int, float)):
+                score = 0.0
+            candidates.append((float(score), label.value, canonical_name.casefold().strip(), entity))
+
+        # GLiNER can emit one unique false positive per occurrence/context. Keep the
+        # strongest deterministic candidates so the enrichment contract remains
+        # bounded without letting document order decide which entities survive.
+        for _, _, _, entity in sorted(candidates, key=lambda item: (-item[0], item[1], item[2]))[
+            :MAX_CANONICAL_ENTITIES
+        ]:
             label = _entity_type(entity.get("label"))
             canonical_name = entity.get("canonical_name") or entity.get("text")
             if label is None or not isinstance(canonical_name, str) or not canonical_name.strip():

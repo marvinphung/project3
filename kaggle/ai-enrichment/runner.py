@@ -366,7 +366,17 @@ def process_article(
                     predicate=claim_value.get("predicate"),
                 )
                 continue
-            claim = normalize_claim_evidence(claim_value, chunk_text)
+            try:
+                claim = normalize_claim_evidence(claim_value, chunk_text)
+            except ValueError as error:
+                # A malformed evidence span invalidates only this claim, not the
+                # article. Keep the batch productive while preserving grounding.
+                log_progress(
+                    "claim_dropped_invalid_evidence",
+                    article_version_id=article["article_version_id"],
+                    reason=str(error)[:200],
+                )
+                continue
             local_start = claim["evidence_start"]
             local_end = claim["evidence_end"]
             claim["evidence_start"] = start + local_start

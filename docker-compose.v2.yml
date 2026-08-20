@@ -140,8 +140,7 @@ services:
       FOOTBALLPULSE_POSTGRES_PORT: 5432
       FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
       SUPABASE_DB_HOST: ""
-      SUPABASE_DATABASE_URL: ""
-    command: ["python", "-m", "footballpulse_pipeline", "crawl", "--source", "The Guardian Football", "--source", "BBC Sport Football", "--max-articles", "100"]
+    command: ["python", "-m", "footballpulse_pipeline", "crawl", "--max-articles", "100"]
     restart: "no"
 
   processor:

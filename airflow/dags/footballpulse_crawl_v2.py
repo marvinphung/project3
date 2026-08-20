@@ -32,7 +32,7 @@ try:
             task_id="crawl_sources",
             bash_command=os.environ.get(
                 "FOOTBALLPULSE_CRAWL_COMMAND",
-                "docker compose -f /workspace/docker-compose.v2.yml run --rm crawler python -m footballpulse_pipeline crawl",
+                "docker compose -f /workspace/docker-compose.v2.yml run --no-deps --rm crawler python -m footballpulse_pipeline crawl",
             ),
             env={"FOOTBALLPULSE_CRAWL_MODE": "scheduled"},
         )

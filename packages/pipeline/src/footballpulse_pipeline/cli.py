@@ -299,7 +299,14 @@ def main() -> None:
 
     crawl = subparsers.add_parser("crawl")
     crawl.add_argument("--source", action="append")
-    crawl.add_argument("--max-articles", type=int, default=10)
+    crawl.add_argument("--max-articles", type=int, default=20)
+    crawl.add_argument(
+        "--step",
+        choices=["all", "1", "2", "discovery", "content"],
+        default="all",
+    )
+    crawl.add_argument("--concurrency", type=int, default=6)
+    crawl.add_argument("--max-age-days", type=int, default=30)
     crawl.add_argument("--list-sources", action="store_true")
 
     process = subparsers.add_parser("process")
@@ -316,6 +323,12 @@ def main() -> None:
         for source_name in args.source or []:
             forwarded.extend(["--source", source_name])
         forwarded.extend(["--max-articles", str(args.max_articles)])
+        if args.step != "all":
+            forwarded.extend(["--step", args.step])
+        if args.concurrency != 6:
+            forwarded.extend(["--concurrency", str(args.concurrency)])
+        if args.max_age_days != 30:
+            forwarded.extend(["--max-age-days", str(args.max_age_days)])
         raise SystemExit(_run_crawl(forwarded))
     if args.command == "process":
         raise SystemExit(_run_process(args.limit))

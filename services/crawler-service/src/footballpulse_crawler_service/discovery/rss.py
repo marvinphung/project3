@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from urllib.parse import urlsplit, urlunsplit
 
 import feedparser  # type: ignore[import-untyped]
+from bs4 import BeautifulSoup
 
 from footballpulse_crawler_service.domain.source import host_is_allowed, normalize_domain
 
@@ -20,6 +21,8 @@ class RssEntry:
     title: str
     url: str
     published_at: datetime | None
+    description: str | None = None
+    image_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +61,53 @@ def _published_at(entry: object) -> datetime | None:
     return datetime.fromtimestamp(calendar.timegm(value), tz=UTC)
 
 
+def _entry_image_url(candidate: object) -> str | None:
+    # Check media:thumbnail
+    media_thumbnail = getattr(candidate, "media_thumbnail", None) or (
+        candidate.get("media_thumbnail") if isinstance(candidate, dict) else None
+    )
+    if media_thumbnail and isinstance(media_thumbnail, list) and len(media_thumbnail) > 0:
+        thumb = media_thumbnail[0]
+        if isinstance(thumb, dict) and "url" in thumb:
+            return str(thumb["url"]).strip()
+
+    # Check media:content
+    media_content = getattr(candidate, "media_content", None) or (
+        candidate.get("media_content") if isinstance(candidate, dict) else None
+    )
+    if media_content and isinstance(media_content, list) and len(media_content) > 0:
+        med = media_content[0]
+        if isinstance(med, dict) and "url" in med:
+            return str(med["url"]).strip()
+
+    # Check enclosures
+    enclosures = getattr(candidate, "enclosures", None) or (
+        candidate.get("enclosures") if isinstance(candidate, dict) else None
+    )
+    if enclosures and isinstance(enclosures, list) and len(enclosures) > 0:
+        enc = enclosures[0]
+        if isinstance(enc, dict) and "href" in enc:
+            return str(enc["href"]).strip()
+
+    return None
+
+
+def _entry_description(candidate: object) -> str | None:
+    summary = getattr(candidate, "summary", None) or (
+        candidate.get("summary") if isinstance(candidate, dict) else None
+    )
+    if summary and isinstance(summary, str):
+        cleaned = BeautifulSoup(summary, "html.parser").get_text(" ", strip=True)
+        return cleaned[:1000] if cleaned else None
+    description = getattr(candidate, "description", None) or (
+        candidate.get("description") if isinstance(candidate, dict) else None
+    )
+    if description and isinstance(description, str):
+        cleaned = BeautifulSoup(description, "html.parser").get_text(" ", strip=True)
+        return cleaned[:1000] if cleaned else None
+    return None
+
+
 def parse_rss(
     payload: bytes,
     *,
@@ -86,6 +136,8 @@ def parse_rss(
                 title=title[:500],
                 url=url,
                 published_at=_published_at(candidate),
+                description=_entry_description(candidate),
+                image_url=_entry_image_url(candidate),
             )
         )
 

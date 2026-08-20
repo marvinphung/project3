@@ -31,7 +31,7 @@ try:
             task_id="publish_read_model",
             bash_command=os.environ.get(
                 "FOOTBALLPULSE_PUBLISH_COMMAND",
-                "docker compose -f /workspace/docker-compose.v2.yml run --rm publisher python -m footballpulse_pipeline publish",
+                "docker compose -f /workspace/docker-compose.v2.yml run --no-deps --rm publisher python -m footballpulse_pipeline publish",
             ),
         )
 
