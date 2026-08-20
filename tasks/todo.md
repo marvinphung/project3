@@ -17,8 +17,8 @@
 
 - [x] Task 6: Scaffold content-summary-service.
 - [x] Task 7: Implement UTC 3-hour window planning.
-- [x] Task 8: Implement entity frequency threshold calculation.
-- [x] Task 9: Implement two-call LLM summary generation.
+- [x] Task 8: Implement top-entity and top-article selection.
+- [x] Task 9: Implement one-call LLM title/content generation.
 - [x] Task 10: Persist summary records idempotently.
 - [x] Checkpoint: Summary records exist per entity/window and skip existing rows.
 

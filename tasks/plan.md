@@ -39,11 +39,10 @@ du lieu sau publish.
 - `content-summary-service` chay batch theo Airflow, khong event-driven theo
   tung article.
 - Neu summary cho `entity + window_start + window_end` da ton tai thi skip.
-- Ke ca window chi co 1 article van tao aggregated news va short description.
+- Ke ca window chi co 1 article van tao title va content.
 - LLM prompts nam trong repo; provider/API/model nam trong `.env`.
 - Khong can luu prompt/model/provider metadata vao DB.
-- LLM dung `clean_content` lam article input; entity lists `>=50%` va `>=80%`
-  dung canonical entity names.
+- LLM dung `clean_content` lam article input.
 - Frontend top 10 lay cac canonical entities xuat hien trong nhieu distinct
   articles nhat trong 24h; moi article tinh toi da 1 lan cho moi entity.
 - Search entity tinh ca `canonical_name` va `aliases`, khong autocomplete. Neu
@@ -118,10 +117,8 @@ lam lai tu dau neu da dung huong.
 - `window_start`, `window_end` UTC.
 - `article_ids`: distinct article IDs trong window.
 - `article_count`.
-- `entities_50`: canonical entity names xuat hien trong >=50% article set.
-- `entities_80`: canonical entity names xuat hien trong >=80% article set.
 - `aggregated_news`: output LLM call 1.
-- `short_description`: output LLM call 2, dung nhu title/headline.
+- `short_description`: title/headline tu output LLM 1-call.
 - `status`: `COMPLETED|FAILED|SKIPPED`.
 - `created_at`, `updated_at`.
 
@@ -166,8 +163,6 @@ Redesign migration de PostgreSQL du data cho backend/frontend ma khong can Mongo
 - `title text not null`.
 - `summary text not null`.
 - `article_count integer not null check (article_count > 0)`.
-- `key_entities_50 text[] not null default '{}'`.
-- `key_entities_80 text[] not null default '{}'`.
 - `created_at`, `updated_at`.
 - Unique: `(entity_id, window_start, window_end)`.
 
@@ -355,7 +350,7 @@ Acceptance criteria:
 - [ ] Player/coach/competition mentions get normalized canonical names even if
       no Mongo canonical entity exists yet.
 - [ ] Per article, duplicate entity mentions do not cause duplicate article
-      counts for ranking/threshold calculations.
+      counts for ranking calculations.
 - [ ] `news_entities` can be used to find all entities in an article without
       re-running NER.
 
@@ -425,8 +420,7 @@ Acceptance criteria:
       that entity.
 - [ ] If summary already exists for `entity_id + window_start + window_end`,
       service skips it.
-- [ ] Window selection uses `news_metadata.published_time` when available, with a
-      documented fallback timestamp.
+- [ ] Window selection uses `news_metadata.crawl_date`.
 
 Verification:
 
@@ -442,22 +436,23 @@ Files likely touched:
 
 Estimated scope: M.
 
-### Task 8: Implement entity frequency threshold calculation
+### Task 8: Implement top-article selection for each entity/window
 
-Description: For each entity/window article set, compute canonical entities that
-appear in >=50% and >=80% of distinct articles.
+Description: For each entity/window article set, select the most relevant
+articles before calling the LLM.
 
 Acceptance criteria:
 
-- [ ] Threshold counts use distinct article count, not mention count.
-- [ ] Each article contributes at most one count per canonical entity.
-- [ ] Threshold entity lists contain canonical names.
-- [ ] Logic handles article_count = 1; both >=50% and >=80% lists include
-      entities present in that article.
+- [ ] Summary scope is limited to top 30 entities by distinct article count in
+      the last 24h.
+- [ ] Each article contributes at most one count per entity for top-30 ranking.
+- [ ] For each entity/window, select at most 5 articles.
+- [ ] Selection ranks by target entity mention count in `filtered_content`, then
+      by newest `crawl_date`.
 
 Verification:
 
-- [ ] Unit tests for 1 article, 2 articles, and mixed duplicate mentions.
+- [ ] Unit tests for top-30 ranking and top-5 article selection.
 
 Dependencies: Task 7.
 
@@ -470,16 +465,17 @@ Estimated scope: S.
 
 ### Task 9: Implement two-call LLM summary generation
 
-Description: Generate aggregated news and short description/title using prompts
-stored in repo. Article input is `clean_content`, sorted newest first.
+Description: Generate timeline title and content using a prompt stored in repo.
+Article input is selected `clean_content`, sorted newest first.
 
 Acceptance criteria:
 
-- [ ] Call 1 input includes all selected `clean_content` values newest first and
-      the >=50% canonical entity names.
-- [ ] Call 1 output is stored as aggregated news.
-- [ ] Call 2 input includes aggregated news and >=80% canonical entity names.
-- [ ] Call 2 output is stored as short description/title.
+- [ ] LLM input includes at most 5 selected `clean_content` values newest first.
+- [ ] LLM is called once per `entity + window`.
+- [ ] LLM output includes `title` and `content`.
+- [ ] `title` is stored as `short_description` for current read-model
+      compatibility.
+- [ ] `content` is stored as `aggregated_news`.
 - [ ] Provider/API/model are configured from `.env`.
 - [ ] No prompt/model/provider metadata is persisted unless needed for runtime
       error details.
@@ -506,8 +502,8 @@ ID or unique key by `entity_id + window_start + window_end`.
 
 Acceptance criteria:
 
-- [ ] Completed records include entity, window, article IDs, threshold entity
-      lists, aggregated news, short description/title, status, timestamps.
+- [ ] Completed records include entity, window, selected article IDs,
+      aggregated news/content, title, status, timestamps.
 - [ ] Re-running the same window skips existing completed summaries.
 - [ ] Failures are stored with enough error info for operations/debugging.
 - [ ] No partial completed record is visible as publishable.
@@ -921,7 +917,7 @@ commands:
 | --- | --- | --- |
 | Alias replacement corrupts normal text | Medium | Use word-boundary/longest-match-first matching and tests for aliases like `City`, `United`, `FC`. |
 | Canonical entity IDs for non-club entities are unstable | High | Define deterministic UUID from `entity_type + normalized canonical_name` when no canonical Mongo entity exists. |
-| Window selection uses wrong timestamp | Medium | Prefer `published_time`; document fallback to `crawl_date` if missing. |
+| Window selection uses wrong timestamp | Medium | Use `crawl_date` consistently for summary buckets. |
 | LLM cost grows because every entity/window with 1 article is summarized | Medium | Keep batch limits and explicit window command args; log article_count per generated item. |
 | PostgreSQL migration breaks old frontend pages | Medium | Migrate frontend/API in same phase set and remove stale story/publication assumptions. |
 | Publish duplicates timeline items | High | Enforce unique `(entity_id, window_start, window_end)` and transactional upserts. |

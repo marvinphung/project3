@@ -34,7 +34,7 @@ Muc tieu moi:
 - trich xuat entity cho moi bai
 - nhom bai bao theo entity trong cua so thoi gian 3 gio
 - dung LLM tao bai tong hop cho tung entity
-- tao short description/title cho timeline item cua entity do
+- tao title va content cho timeline item cua entity do
 - publish du lieu tong hop len Supabase PostgreSQL
 - backend API doc Supabase
 - frontend hien thi entity noi bat va timeline rieng cho tung entity
@@ -127,8 +127,9 @@ Chi tiet schema xem:
 Trach nhiem:
 
 - tao timeline item theo tung entity
-- gom cac bai lien quan trong cua so 3 gio
-- goi LLM 2 lan de tao summary va short description/title
+- gom cac bai lien quan trong cua so 3 gio theo `news_metadata.crawl_date`
+- chi generate timeline cho top 30 entities noi bat nhat trong 24 gio gan nhat
+- goi LLM 1 lan de tao `title` va `content`
 - luu ket qua tong hop vao DB
 
 Service nay khong crawl va khong extract entity.
@@ -189,9 +190,23 @@ Window muc tieu hien tai:
 ```
 
 Moi timeline item duoc tao dua tren cac bai bao cua mot entity trong cua so 3
-gio gan nhat.
+gio gan nhat. Window duoc chia theo UTC va dung `news_metadata.crawl_date` lam
+timestamp bucket. Khong dung `published_time` de chia bucket summary, vi
+`crawl_date` phan anh thoi diem pipeline nhin thay bai bao.
 
 ## Content Summary Service Logic
+
+### Step 0: Select entities to update
+
+Moi lan chay summary, service khong update timeline cho moi entity trong DB.
+
+Service chi lay top 30 entities xuat hien trong nhieu distinct articles nhat
+trong 24 gio gan nhat, tinh theo `news_metadata.crawl_date`. Day la top entity
+cho moi loai entity, gom `PLAYER`, `CLUB`, `COACH`, va `COMPETITION`.
+Moi article chi dong gop toi da 1 count cho moi entity.
+
+Chi cac entities trong top 30 nay moi duoc generate timeline summaries cho
+window dang chay.
 
 ### Step A: Select articles for one entity
 
@@ -199,74 +214,58 @@ Cho mot entity `X`, service se lay:
 
 - tat ca bai bao co chua entity `X`
 - trong `news_entities`
-- va nam trong time window 3 gio gan nhat
+- va nam trong time window 3 gio theo `news_metadata.crawl_date`
+
+De tiet kiem token LLM, service khong gui tat ca bai vao prompt.
+
+Tu candidate articles cua entity `X`, service chon toi da 5 bai co so lan nhac
+entity `X` nhieu nhat trong `news_content.filtered_content`.
+
+Ranking:
+
+1. mention count cua canonical entity `X` trong `filtered_content`, giam dan
+2. `crawl_date`, moi nhat truoc
+
+Neu co it hon 5 bai thi dung tat ca. Neu chi co 1 bai thi van tao title va
+content nhu binh thuong.
 
 Input thuc te cua buoc tong hop duoc tao tu:
 
-- `news_content.content`
-- `news_metadata.published_time` hoac timestamp pipeline phu hop
-- entity distribution trong tap bai cua entity `X`
+- `news_content.content` cho LLM prompt
+- `news_content.filtered_content` de dem so lan nhac target entity
+- `news_metadata.crawl_date` de chia window va sap xep thoi gian
 
-Tat ca bai duoc sap xep theo thu tu moi nhat len truoc.
+Tat ca bai duoc gui vao LLM theo thu tu `crawl_date` moi nhat len truoc.
 
-### Step B: Entity frequency thresholds
-
-Service can tinh tan suat xuat hien entity trong tap bai da chon.
-
-Hai nguong quan trong:
-
-- `>= 50%` so bai
-- `>= 80%` so bai
-
-Nhung nguong nay duoc dung cho 2 LLM calls khac nhau.
-
-### Step C: LLM Call 1 - Aggregated News
+### Step B: LLM Call - Timeline title and content
 
 Input:
 
-- tat ca cleaned content cua cac bai co entity `X`
-- thu tu bai moi nhat len truoc
+- toi da 5 cleaned content cua cac bai co entity `X`, da chon theo mention
+  count trong `filtered_content`
+- thu tu bai theo `crawl_date` moi nhat len truoc
 - prompt bang tieng Anh
-- danh sach entities xuat hien trong `>= 50%` so bai
 
 Output:
 
-- mot ban `aggregated news`
+- `title`: headline ngan gon de hien tren timeline
+- `content`: ban tong hop thong tin tu tap bai cua entity `X`
 
 Y nghia:
 
-- day la ban tong hop thong tin tu tap bai cua entity `X`
-- no phai chua va uu tien cac entities xuat hien trong `>= 50%` so bai
+- `title` la noi dung ngan de UI hien thi tren timeline
+- `content` la noi dung tong hop chi tiet hon cho timeline item
 
-### Step D: LLM Call 2 - Short Description / Title
+### Step C: Persist summary results
 
-Input:
+Sau LLM call, service luu:
 
-- aggregated news vua tao
-- prompt bang tieng Anh
-- danh sach entities xuat hien trong `>= 80%` so bai
-
-Output:
-
-- `short description`
-
-Trong architecture hien tai, `short description` co the duoc xem nhu:
-
+- content/aggregated news
 - title
-- hoac timeline headline
-
-No phai chua cac entities xuat hien trong `>= 80%` so bai.
-
-### Step E: Persist summary results
-
-Sau 2 LLM calls, service luu:
-
-- aggregated news
-- short description/title
 - metadata can thiet de gan voi entity va time window
+- selected `article_ids` da gui vao prompt
 
-Tai lieu nay chua chot ten collection/table cu the cho summary records.
-Dieu do se duoc dinh nghia o docs schema sau.
+Summary records duoc luu vao Mongo collection `entity_timeline_summaries`.
 
 ## Publish Logic
 
@@ -326,8 +325,8 @@ Frontend can nhan duoc tu backend API:
 - danh sach entities noi bat, sap xep theo muc do xuat hien/noi bat
 - timeline rieng cua tung entity
 - timeline item da co:
-  - title hoac short description
-  - aggregated content neu can
+  - title
+  - content tong hop
   - timestamp/time bucket
 
 UI khong hien raw worker details, khong phu thuoc vao Mongo.
@@ -359,7 +358,8 @@ Khi sua cac docs khac:
 2. Khong mo ta stage sau crawler la `ai-content-service` neu dang noi ve target architecture.
 3. Khong dat runtime entity extraction o `intelligence-service` trong docs target.
 4. Moi timeline phai duoc mo ta la timeline theo entity.
-5. Summary generation phai duoc mo ta la flow 2 LLM calls.
+5. Summary generation phai duoc mo ta la flow 1 LLM call tra ve `title` va
+   `content`; khong con dung thresholds `>=50%`/`>=80%`.
 6. Backend API va frontend van giu mo hinh serving:
    - Render backend
    - Vercel frontend
@@ -367,13 +367,10 @@ Khi sua cac docs khac:
 
 ## Out Of Scope For This Document
 
-Tai lieu nay chua chot:
+Tai lieu nay khong mo ta chi tiet:
 
-- schema cu the cua summary/timeline collections trong Mongo
-- schema cu the cua timeline tables trong Supabase
 - prompt text bang tieng Anh cu the
 - retry policy, scheduler policy, va idempotency details
-- exact API contract cho frontend
 
 Nhung moi quyet dinh tiep theo phai tuong thich voi architecture trong tai lieu
 nay.

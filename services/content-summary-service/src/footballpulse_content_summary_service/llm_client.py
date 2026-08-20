@@ -17,11 +17,11 @@ class MockLLMClient:
         self.prefix = prefix
 
     def generate(self, prompt: str) -> str:
-        if "Aggregated News Summary:" in prompt or "news editor" in prompt:
-            return "Summary: Recent developments and match updates regarding the team and key players."
-        if "Short Description / Headline:" in prompt or "headlines" in prompt:
-            return "Key match updates and recent performance overview."
-        return "Generated football intelligence summary."
+        del prompt
+        return (
+            '{"title":"Key match updates and recent performance overview",'
+            '"content":"Recent developments and match updates regarding the team and key players."}'
+        )
 
 
 class OpenAILLMClient:

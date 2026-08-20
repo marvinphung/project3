@@ -4,7 +4,6 @@ from uuid import UUID, uuid4
 
 from footballpulse_content_summary_service.llm_client import MockLLMClient
 from footballpulse_content_summary_service.summary_generator import SummaryGenerator
-from footballpulse_content_summary_service.thresholds import compute_entity_thresholds
 from footballpulse_content_summary_service.window_planner import (
     floor_3h_window,
     get_latest_closed_3h_window,
@@ -21,17 +20,15 @@ class FakeCollection:
 
     def find(self, query: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         results = list(self.docs.values())
-        if query and "$or" in query:
-            # Simple query handling for published_time in window
+        if query and "crawl_date" in query:
             filtered = []
             for d in results:
-                pub = d.get("published_time") or d.get("crawl_date")
-                if pub:
-                    cond = query["$or"][0].get("published_time", {})
-                    gte = cond.get("$gte")
-                    lt = cond.get("$lt")
-                    if gte and lt and gte <= pub < lt:
-                        filtered.append(d)
+                crawl_date = d.get("crawl_date")
+                cond = query["crawl_date"]
+                gte = cond.get("$gte")
+                lt = cond.get("$lt")
+                if crawl_date and gte and lt and gte <= crawl_date < lt:
+                    filtered.append(d)
             return filtered
         if query and "_id" in query and "$in" in query["_id"]:
             allowed = set(query["_id"]["$in"])
@@ -74,27 +71,6 @@ def test_window_planner() -> None:
     assert windows[0] == (datetime(2026, 8, 20, 0, 0, tzinfo=UTC), datetime(2026, 8, 20, 3, 0, tzinfo=UTC))
 
 
-def test_compute_entity_thresholds() -> None:
-    # 1 article: all entities should be >=50% and >=80%
-    single_article = [["Arsenal", "Bukayo Saka", "Mikel Arteta"]]
-    e50, e80 = compute_entity_thresholds(single_article)
-    assert "Arsenal" in e50 and "Arsenal" in e80
-    assert "Bukayo Saka" in e50 and "Bukayo Saka" in e80
-
-    # 3 articles:
-    # Arsenal in 3/3 (100%) -> in e50 and e80
-    # Saka in 2/3 (66.7%) -> in e50, not e80 (0.8 * 3 = 2.4, so 3 needed for 80%)
-    # Chelsea in 1/3 (33.3%) -> in neither
-    multi_articles = [
-        ["Arsenal", "Saka", "Chelsea"],
-        ["Arsenal", "Saka"],
-        ["Arsenal", "Saliba"],
-    ]
-    e50, e80 = compute_entity_thresholds(multi_articles)
-    assert e50 == ["Arsenal", "Saka"]
-    assert e80 == ["Arsenal"]
-
-
 def test_summary_generator_flow() -> None:
     db = FakeDatabase()
     window_start = datetime(2026, 8, 20, 3, 0, tzinfo=UTC)
@@ -110,20 +86,32 @@ def test_summary_generator_flow() -> None:
         {
             "_id": art1_id,
             "title": "Arsenal win thriller",
-            "published_time": datetime(2026, 8, 20, 4, 0, tzinfo=UTC),
+            "crawl_date": datetime(2026, 8, 20, 4, 0, tzinfo=UTC),
         }
     )
     db.news_metadata.insert_one(
         {
             "_id": art2_id,
             "title": "Arsenal press conference",
-            "published_time": datetime(2026, 8, 20, 5, 0, tzinfo=UTC),
+            "crawl_date": datetime(2026, 8, 20, 5, 0, tzinfo=UTC),
         }
     )
 
     # Insert content
-    db.news_content.insert_one({"_id": art1_id, "content": "Arsenal won 3-2 against opponent with Saka shining."})
-    db.news_content.insert_one({"_id": art2_id, "content": "Arsenal manager praises team performance."})
+    db.news_content.insert_one(
+        {
+            "_id": art1_id,
+            "content": "Arsenal won 3-2 against opponent with Saka shining.",
+            "filtered_content": "Arsenal won with Arsenal pressure and Bukayo Saka shining.",
+        }
+    )
+    db.news_content.insert_one(
+        {
+            "_id": art2_id,
+            "content": "Arsenal manager praises team performance.",
+            "filtered_content": "Arsenal manager praises team performance.",
+        }
+    )
 
     # Insert entities
     db.news_entities.insert_one(
@@ -151,6 +139,8 @@ def test_summary_generator_flow() -> None:
     assert len(summaries) == 2
     arsenal_summary = next(s for s in summaries if s["canonical_name"] == "Arsenal")
     assert arsenal_summary["article_count"] == 2
+    assert arsenal_summary["entities_50"] == []
+    assert arsenal_summary["entities_80"] == []
     assert arsenal_summary["status"] == "COMPLETED"
     assert arsenal_summary["aggregated_news"] != ""
     assert arsenal_summary["short_description"] != ""
@@ -158,3 +148,12 @@ def test_summary_generator_flow() -> None:
     # Check idempotency / skip-if-existing
     second_run = generator.process_window(window_start, window_end)
     assert len(second_run) == 2
+
+
+def test_llm_response_parser_accepts_plain_text_fallback() -> None:
+    parsed = SummaryGenerator._parse_llm_timeline_item(
+        "Arsenal comeback defines the window\n\nArsenal produced the main storyline across selected reports."
+    )
+
+    assert parsed["title"] == "Arsenal comeback defines the window"
+    assert parsed["content"].startswith("Arsenal comeback")

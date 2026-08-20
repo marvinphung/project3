@@ -23,9 +23,11 @@ Tai lieu nguon:
 - `frontend`
 - `airflow`
 - `kafka`
+- `content-summary-service`
 
-`content-summary-service` se duoc viet lai sau, nen local runtime hien tai chua co
-stage summary moi.
+`content-summary-service` tao timeline theo top 30 entities trong 24h gan nhat.
+Moi entity/window chi gui toi da 5 `news_content.content` vao LLM, duoc chon
+bang so lan target entity xuat hien trong `news_content.filtered_content`.
 
 ## Sync Workspace
 
@@ -51,6 +53,12 @@ Entities extraction:
 
 ```bash
 python3 -m footballpulse_pipeline process --limit 10
+```
+
+Content summary:
+
+```bash
+python3 -m footballpulse_pipeline summary
 ```
 
 Publisher:

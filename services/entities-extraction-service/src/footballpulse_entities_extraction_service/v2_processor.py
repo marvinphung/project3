@@ -14,6 +14,7 @@ from pymongo.database import Database
 from footballpulse_entities_extraction_service.canonical import CanonicalRegistry
 
 NEWS_CRAWLED_TOPIC = "news.crawled.v1"
+MIN_PERSISTED_ENTITY_SCORE = 0.95
 
 EntityPrediction = dict[str, Any]
 EntityExtractor = Callable[[str], list[EntityPrediction]]
@@ -67,6 +68,8 @@ class V2EntityProcessor:
             score = float(entity.get("score", 1.0))
             start = int(entity.get("start", 0))
             end = int(entity.get("end", 0))
+            if score < MIN_PERSISTED_ENTITY_SCORE:
+                continue
 
             can_id, can_name = self._registry.resolve_entity(text, label)
             canonicalized_entities.append(

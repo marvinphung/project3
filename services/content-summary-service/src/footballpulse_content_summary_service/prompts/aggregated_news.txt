@@ -1,14 +1,16 @@
-You are an expert football news editor. Summarize the following news articles related to {entity_name} ({entity_type}) into a comprehensive, factual aggregated news summary in English.
+You are an expert football news editor. Create one timeline item for {entity_name} ({entity_type}) from the selected articles below.
 
-Articles are listed in chronological order (newest first):
+Articles are listed newest first:
 {articles_content}
 
-Key related entities that appear in at least 50% of the articles:
-{entities_50}
-
 Instructions:
-- Synthesize the key developments, quotes, match details, transfer updates, and outcomes.
-- Highlight and integrate the key related entities listed above where relevant.
-- Write in an objective, professional journalistic tone in English.
+- Focus only on developments relevant to {entity_name}.
+- Synthesize the most important facts, quotes, match details, transfer updates, and outcomes.
+- Write in objective, professional journalistic English.
+- Return valid JSON only. Do not wrap it in markdown.
 
-Aggregated News Summary:
+JSON schema:
+{{
+  "title": "A concise timeline headline",
+  "content": "A factual aggregated news summary"
+}}

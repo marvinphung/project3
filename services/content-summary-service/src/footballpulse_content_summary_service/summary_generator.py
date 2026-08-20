@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
+import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid5
@@ -11,12 +13,13 @@ from footballpulse_runtime_config import log_event
 from pymongo.database import Database
 
 from footballpulse_content_summary_service.llm_client import LLMClient, create_llm_client
-from footballpulse_content_summary_service.thresholds import compute_entity_thresholds
 
 LOGGER = logging.getLogger("footballpulse.content_summary")
 SUMMARY_NAMESPACE = UUID("c384e508-4e31-4e4b-a25e-e4782bbbe528")
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
+TOP_ENTITY_LIMIT = 30
+MAX_ARTICLES_PER_ENTITY = 5
 
 
 def load_prompt_template(filename: str) -> str:
@@ -34,7 +37,8 @@ class ArticleInfo:
     id: UUID
     title: str
     content: str
-    published_time: datetime
+    filtered_content: str
+    crawl_date: datetime
     entities: list[dict[str, Any]]
 
 
@@ -50,7 +54,6 @@ class SummaryGenerator:
         self._database = database
         self._llm = llm_client or create_llm_client()
         self._agg_prompt_tmpl = load_prompt_template("aggregated_news.txt")
-        self._desc_prompt_tmpl = load_prompt_template("short_description.txt")
 
     def process_window(
         self,
@@ -59,16 +62,16 @@ class SummaryGenerator:
         *,
         force_recompute: bool = False,
     ) -> list[dict[str, Any]]:
-        """Processes all entities with articles in [window_start, window_end)."""
+        """Processes top entities with articles crawled in [window_start, window_end)."""
         log_event(LOGGER, "summary_window_started", window_start=window_start.isoformat(), window_end=window_end.isoformat())
 
-        # 1. Query articles in window
-        query = {
-            "$or": [
-                {"published_time": {"$gte": window_start, "$lt": window_end}},
-                {"published_time": None, "crawl_date": {"$gte": window_start, "$lt": window_end}},
-            ]
-        }
+        top_entities = set(self._get_top_entities(window_end))
+        if not top_entities:
+            log_event(LOGGER, "summary_no_top_entities", window_end=window_end.isoformat())
+            return []
+
+        # 1. Query articles in crawl-date window
+        query = {"crawl_date": {"$gte": window_start, "$lt": window_end}}
         metadata_cursor = self._database.news_metadata.find(query)
         metadata_list = list(metadata_cursor)
         if not metadata_list:
@@ -87,9 +90,8 @@ class SummaryGenerator:
             content_doc = contents_map.get(aid, {})
             # LLM prompt uses clean_content (content field)
             clean_content = content_doc.get("content") or meta.get("title", "")
-            pub_time = meta.get("published_time") or meta.get("crawl_date") or datetime.now(UTC)
-            if pub_time.tzinfo is None:
-                pub_time = pub_time.replace(tzinfo=UTC)
+            filtered_content = content_doc.get("filtered_content") or clean_content
+            crawl_date = self._to_utc(meta.get("crawl_date") or datetime.now(UTC))
             ent_doc = entities_map.get(aid, {})
             ents = ent_doc.get("entities", [])
             articles.append(
@@ -97,7 +99,8 @@ class SummaryGenerator:
                     id=aid,
                     title=meta.get("title", ""),
                     content=clean_content,
-                    published_time=pub_time,
+                    filtered_content=filtered_content,
+                    crawl_date=crawl_date,
                     entities=ents,
                 )
             )
@@ -109,16 +112,11 @@ class SummaryGenerator:
         for article in articles:
             seen_entities_in_article = set()
             for mention in article.entities:
-                can_id = mention.get("canonical_entity_id")
-                can_name = mention.get("canonical_name")
-                ent_type = mention.get("label", "CLUB").upper()
-
-                if not can_id or not can_name:
+                ent_key = self._entity_key_from_mention(mention)
+                if ent_key is None:
                     continue
-                if not isinstance(can_id, UUID):
-                    can_id = UUID(str(can_id))
-
-                ent_key = (can_id, can_name, ent_type)
+                if ent_key not in top_entities:
+                    continue
                 if ent_key not in seen_entities_in_article:
                     seen_entities_in_article.add(ent_key)
                     if ent_key not in entity_articles:
@@ -145,40 +143,25 @@ class SummaryGenerator:
                     generated_summaries.append(existing)
                     continue
 
-            # Sort articles newest first
-            sorted_articles = sorted(ent_articles, key=lambda a: a.published_time, reverse=True)
+            selected_articles = self._select_top_articles_for_entity(ent_articles, canonical_name)
+            # LLM sees clean content newest first after the relevance cut.
+            sorted_articles = sorted(selected_articles, key=lambda a: a.crawl_date, reverse=True)
             distinct_article_ids = [a.id for a in sorted_articles]
 
-            # Compute threshold canonical entities
-            article_entities_list = [
-                [m.get("canonical_name", "") for m in a.entities if m.get("canonical_name")]
-                for a in sorted_articles
-            ]
-            entities_50, entities_80 = compute_entity_thresholds(article_entities_list)
-
-            # Format articles content for Call 1
+            # Format articles content for the single LLM call.
             articles_text = "\n\n---\n\n".join(
-                f"Title: {a.title}\nPublished: {a.published_time.isoformat()}\nContent: {a.content}"
+                f"Title: {a.title}\nCrawled: {a.crawl_date.isoformat()}\nContent: {a.content}"
                 for a in sorted_articles
             )
 
-            # LLM Call 1: Aggregated News
-            call1_prompt = self._agg_prompt_tmpl.format(
+            prompt = self._agg_prompt_tmpl.format(
                 entity_name=canonical_name,
                 entity_type=entity_type,
                 articles_content=articles_text,
-                entities_50=", ".join(entities_50) if entities_50 else "None",
             )
-            aggregated_news = self._llm.generate(call1_prompt)
-
-            # LLM Call 2: Short Description / Title
-            call2_prompt = self._desc_prompt_tmpl.format(
-                entity_name=canonical_name,
-                entity_type=entity_type,
-                aggregated_news=aggregated_news,
-                entities_80=", ".join(entities_80) if entities_80 else "None",
-            )
-            short_description = self._llm.generate(call2_prompt)
+            llm_result = self._parse_llm_timeline_item(self._llm.generate(prompt))
+            short_description = llm_result["title"]
+            aggregated_news = llm_result["content"]
 
             now = datetime.now(UTC)
             summary_doc = {
@@ -190,8 +173,8 @@ class SummaryGenerator:
                 "window_end": window_end,
                 "article_ids": distinct_article_ids,
                 "article_count": len(distinct_article_ids),
-                "entities_50": entities_50,
-                "entities_80": entities_80,
+                "entities_50": [],
+                "entities_80": [],
                 "aggregated_news": aggregated_news,
                 "short_description": short_description,
                 "status": "COMPLETED",
@@ -215,3 +198,95 @@ class SummaryGenerator:
             )
 
         return generated_summaries
+
+    def _get_top_entities(self, window_end: datetime) -> list[tuple[UUID, str, str]]:
+        window_end = self._to_utc(window_end)
+        window_start = window_end - timedelta(hours=24)
+        metadata = list(
+            self._database.news_metadata.find(
+                {"crawl_date": {"$gte": window_start, "$lt": window_end}}
+            )
+        )
+        if not metadata:
+            return []
+
+        article_ids = [m["_id"] for m in metadata]
+        entities_map = {e["_id"]: e for e in self._database.news_entities.find({"_id": {"$in": article_ids}})}
+
+        counts: dict[tuple[UUID, str, str], int] = {}
+        for article_id in article_ids:
+            seen_in_article: set[tuple[UUID, str, str]] = set()
+            for mention in entities_map.get(article_id, {}).get("entities", []):
+                entity_key = self._entity_key_from_mention(mention)
+                if entity_key is not None:
+                    seen_in_article.add(entity_key)
+            for entity_key in seen_in_article:
+                counts[entity_key] = counts.get(entity_key, 0) + 1
+
+        return [
+            entity_key
+            for entity_key, _count in sorted(
+                counts.items(),
+                key=lambda item: (-item[1], item[0][1], item[0][2]),
+            )[:TOP_ENTITY_LIMIT]
+        ]
+
+    def _select_top_articles_for_entity(self, articles: list[ArticleInfo], canonical_name: str) -> list[ArticleInfo]:
+        ranked = sorted(
+            articles,
+            key=lambda article: (
+                -self._count_entity_mentions(article.filtered_content, canonical_name),
+                -article.crawl_date.timestamp(),
+            ),
+        )
+        return ranked[:MAX_ARTICLES_PER_ENTITY]
+
+    @staticmethod
+    def _count_entity_mentions(text: str, entity_name: str) -> int:
+        if not text or not entity_name:
+            return 0
+        pattern = re.compile(rf"(?<!\w){re.escape(entity_name)}(?!\w)", re.IGNORECASE)
+        return len(pattern.findall(text))
+
+    @staticmethod
+    def _entity_key_from_mention(mention: dict[str, Any]) -> tuple[UUID, str, str] | None:
+        can_id = mention.get("canonical_entity_id")
+        can_name = mention.get("canonical_name")
+        ent_type = mention.get("label", "CLUB").upper()
+        if not can_id or not can_name:
+            return None
+        if not isinstance(can_id, UUID):
+            can_id = UUID(str(can_id))
+        return can_id, can_name, ent_type
+
+    @staticmethod
+    def _parse_llm_timeline_item(raw_response: str) -> dict[str, str]:
+        text = raw_response.strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+        if not text:
+            raise ValueError("LLM response was empty")
+        try:
+            data = json.loads(text)
+            title = str(data.get("title", "")).strip()
+            content = str(data.get("content", "")).strip()
+        except json.JSONDecodeError:
+            match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+            if match is not None:
+                data = json.loads(match.group(0))
+                title = str(data.get("title", "")).strip()
+                content = str(data.get("content", "")).strip()
+            else:
+                lines = [line.strip(" #") for line in text.splitlines() if line.strip()]
+                title = lines[0][:180] if lines else ""
+                content = text
+        if not title or not content:
+            raise ValueError("LLM response must include non-empty title and content")
+        return {"title": title, "content": content}
+
+    @staticmethod
+    def _to_utc(dt: datetime) -> datetime:
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)

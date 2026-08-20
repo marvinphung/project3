@@ -5,6 +5,9 @@ WORKDIR /workspace
 
 COPY packages /workspace/packages
 COPY services /workspace/services
+COPY docs/europe_top6_clubs_2026_27_aliases.json /workspace/docs/europe_top6_clubs_2026_27_aliases.json
+
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.9.1+cpu"
 
 RUN pip install --no-cache-dir \
       /workspace/packages/event-contracts \
@@ -14,7 +17,7 @@ RUN pip install --no-cache-dir \
       /workspace/packages/runtime-config \
       /workspace/packages/shared \
       /workspace/services/crawler-service \
-      /workspace/services/entities-extraction-service \
+      "/workspace/services/entities-extraction-service[models]" \
       /workspace/services/content-summary-service \
       /workspace/services/publisher-service \
       /workspace/services/api-gateway

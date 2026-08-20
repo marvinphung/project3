@@ -139,6 +139,7 @@ def test_v2_processor_pipeline() -> None:
         if "Vinicius Junior" in text:
             idx = text.find("Vinicius Junior")
             entities.append({"text": "Vinicius Junior", "label": "player", "score": 0.99, "start": idx, "end": idx + 15})
+        entities.append({"text": "won", "label": "competition", "score": 0.94, "start": 12, "end": 15})
         return entities
 
     processor = V2EntityProcessor(database=db, extractor=mock_extractor)  # type: ignore[arg-type]
@@ -157,7 +158,7 @@ def test_v2_processor_pipeline() -> None:
     assert entity_doc is not None
     entities = entity_doc["entities"]
     assert len(entities) == 2
+    assert all(entity["score"] >= 0.95 for entity in entities)
     assert entities[0]["canonical_entity_id"] == club_id
     assert entities[0]["canonical_name"] == "Real Madrid"
     assert entities[1]["canonical_name"] == "Vinicius Junior"
-

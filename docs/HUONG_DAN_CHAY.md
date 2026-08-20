@@ -44,6 +44,9 @@ Bien can co cho local stack:
 - `FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS`
 - `FOOTBALLPULSE_V2_POSTGRES_URL`
 - `NER_MODEL_NAME` hoac `FOOTBALLPULSE_GLINER_MODEL`
+- `FOOTBALLPULSE_LLM_PROVIDER`
+- `FOOTBALLPULSE_LLM_MODEL`
+- provider API key tuong ung, vi du `OPENAI_API_KEY` hoac `GEMINI_API_KEY`
 
 ## 3. Chay Full Stack
 
@@ -93,6 +96,13 @@ docker compose -f docker-compose.v2.yml run --rm entities-extraction \
   python -m footballpulse_pipeline process --limit 10
 ```
 
+Content summary:
+
+```bash
+docker compose -f docker-compose.v2.yml run --rm content-summary \
+  python -m footballpulse_pipeline summary
+```
+
 Publisher:
 
 ```bash
@@ -130,6 +140,12 @@ Entities extraction:
 python3 -m footballpulse_pipeline process --limit 10
 ```
 
+Content summary:
+
+```bash
+python3 -m footballpulse_pipeline summary
+```
+
 Publisher:
 
 ```bash
@@ -165,5 +181,7 @@ curl -s "http://127.0.0.1:8000/api/v2/articles?limit=5"
 ## 7. Luu Y Hien Tai
 
 - `process` hien tai chi con scope entity extraction.
-- `content-summary-service` chua duoc build lai, nen flow tong hop timeline chua co code runtime moi.
-- `publish` va serving layer van la phan duoc giu lai cho phase tiep theo.
+- `content-summary-service` dung `crawl_date` de chia bucket 3h UTC.
+- `content-summary-service` chi generate top 30 entities trong 24h gan nhat.
+- Moi entity/window chi gui toi da 5 clean contents vao LLM, chon theo so lan
+  target entity xuat hien trong `filtered_content`.

@@ -90,20 +90,17 @@ _EXTRACTOR: Any = None
 def _get_extractor() -> Any:
     global _EXTRACTOR
     if _EXTRACTOR is None:
-        try:
-            from footballpulse_entities_extraction_service.adapters.entity_extractors import (
-                GlinerEntityExtractor,
-            )
+        from footballpulse_entities_extraction_service.adapters.entity_extractors import (
+            GlinerEntityExtractor,
+        )
 
-            model_name = (
-                os.getenv("NER_MODEL_NAME")
-                or os.getenv("FOOTBALLPULSE_GLINER_MODEL")
-                or "fastino/gliner2-large-v1"
-            )
-            device = os.getenv("NER_DEVICE") or "cpu"
-            _EXTRACTOR = GlinerEntityExtractor(model_id=model_name, device=device)
-        except Exception:
-            _EXTRACTOR = False
+        model_name = (
+            os.getenv("NER_MODEL_NAME")
+            or os.getenv("FOOTBALLPULSE_GLINER_MODEL")
+            or "fastino/gliner2-large-v1"
+        )
+        device = os.getenv("NER_DEVICE") or "cpu"
+        _EXTRACTOR = GlinerEntityExtractor(model_id=model_name, device=device)
     return _EXTRACTOR
 
 
@@ -159,46 +156,10 @@ def _extract_entities(text: str) -> list[dict[str, object]]:
                 }
                 for p in deduped
             ]
-        except Exception:
-            pass
+        except Exception as exc:
+            raise RuntimeError("entity extraction failed; GLiNER2 model runtime is required") from exc
 
-    entities: list[dict[str, object]] = []
-    seen: set[tuple[str, str, int, int]] = set()
-    rules = {
-        "CLUB": ("FC", "United", "City", "Madrid", "Arsenal", "Liverpool", "Chelsea", "Barcelona"),
-        "PERSON": ("said", "manager", "coach", "forward", "midfielder", "defender"),
-        "COMPETITION": ("Premier League", "Champions League", "World Cup", "La Liga", "Serie A"),
-    }
-    words = text.split()
-    for index, word in enumerate(words):
-        token = word.strip(".,:;!?()[]{}\"'")
-        if len(token) < 3:
-            continue
-        start = text.find(word)
-        end = start + len(word)
-        if token[:1].isupper():
-            label = "PERSON"
-            window = " ".join(words[index : index + 3])
-            for candidate_label, hints in rules.items():
-                if any(hint in window for hint in hints):
-                    label = candidate_label
-                    break
-            key = (label, token, start, end)
-            if key in seen:
-                continue
-            seen.add(key)
-            entities.append(
-                {
-                    "label": label,
-                    "text": token,
-                    "score": 0.75,
-                    "start": start,
-                    "end": end,
-                    "canonical_entity_id": None,
-                    "canonical_name": token,
-                }
-            )
-    return entities
+    raise RuntimeError("entity extraction failed; GLiNER2 extractor is unavailable")
 
 
 def _run_crawl(arguments: list[str]) -> int:
@@ -261,7 +222,27 @@ def _run_process(limit: int) -> int:
                 article_id = document.get("_id")
                 if not isinstance(article_id, UUID):
                     continue
-                processor.process_article(article_id)
+                try:
+                    processor.process_article(article_id)
+                except ValueError as exc:
+                    if "article content not found" not in str(exc):
+                        raise
+                    now = datetime.now(UTC)
+                    database.news_entities.replace_one(
+                        {"_id": article_id},
+                        {
+                            "_id": article_id,
+                            "entities": [],
+                            "model_name": os.getenv("NER_MODEL_NAME", "gliner2"),
+                            "model_version": os.getenv(
+                                "FOOTBALLPULSE_GLINER_MODEL",
+                                "fastino/gliner2-large-v1",
+                            ),
+                            "processed_at": now,
+                            "error": "article_content_not_found",
+                        },
+                        upsert=True,
+                    )
                 processed += 1
                 remaining -= 1
                 if remaining == 0:
