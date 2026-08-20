@@ -15,14 +15,11 @@ def test_build_app_exposes_public_routes_without_connecting_until_request() -> N
     app = build_app(
         {
             "SUPABASE_DATABASE_URL": "postgresql://user:pass@localhost/db",
-            "FOOTBALLPULSE_MONGODB_URL": "mongodb://localhost:27017",
-            "FOOTBALLPULSE_API_ADMIN_TOKEN": "admin-test-token",
         }
     )
 
     assert "/api/v2/articles/{slug}" in app.openapi()["paths"]
     assert "/api/v2/stories/{story_id}/timeline" in app.openapi()["paths"]
-    assert "/admin/v1/articles/{article_id}/publish" in app.openapi()["paths"]
     assert "/auth/token" in app.openapi()["paths"]
 
 

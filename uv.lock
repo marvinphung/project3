@@ -9,8 +9,6 @@ resolution-markers = [
 [manifest]
 members = [
     "footballpulse-api-gateway",
-    "footballpulse-article-service",
-    "footballpulse-content-service",
     "footballpulse-crawler-service",
     "footballpulse-entities-extraction-service",
     "footballpulse-event-contracts",
@@ -421,11 +419,9 @@ dependencies = [
     { name = "alembic" },
     { name = "argon2-cffi" },
     { name = "fastapi" },
-    { name = "footballpulse-content-service" },
     { name = "footballpulse-runtime-config" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pyjwt" },
-    { name = "pymongo" },
     { name = "sqlalchemy" },
     { name = "uvicorn" },
 ]
@@ -435,55 +431,11 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.18,<2" },
     { name = "argon2-cffi", specifier = ">=23,<26" },
     { name = "fastapi", specifier = ">=0.116,<1" },
-    { name = "footballpulse-content-service", editable = "services/content-service" },
     { name = "footballpulse-runtime-config", editable = "packages/runtime-config" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
     { name = "pyjwt", specifier = ">=2.10,<3" },
-    { name = "pymongo", specifier = ">=4.16,<5" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
     { name = "uvicorn", specifier = ">=0.35,<1" },
-]
-
-[[package]]
-name = "footballpulse-article-service"
-version = "0.1.0"
-source = { editable = "services/article-service" }
-dependencies = [
-    { name = "confluent-kafka" },
-    { name = "footballpulse-event-contracts" },
-    { name = "footballpulse-fetch-artifacts" },
-    { name = "footballpulse-runtime-config" },
-    { name = "pydantic" },
-    { name = "pymongo" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "confluent-kafka", specifier = ">=2.15,<3" },
-    { name = "footballpulse-event-contracts", editable = "packages/event-contracts" },
-    { name = "footballpulse-fetch-artifacts", editable = "packages/fetch-artifacts" },
-    { name = "footballpulse-runtime-config", editable = "packages/runtime-config" },
-    { name = "pydantic", specifier = ">=2.12,<3" },
-    { name = "pymongo", specifier = ">=4.16,<5" },
-]
-
-[[package]]
-name = "footballpulse-content-service"
-version = "0.1.0"
-source = { editable = "services/content-service" }
-dependencies = [
-    { name = "alembic" },
-    { name = "footballpulse-runtime-config" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "sqlalchemy" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "alembic", specifier = ">=1.18,<2" },
-    { name = "footballpulse-runtime-config", editable = "packages/runtime-config" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
-    { name = "sqlalchemy", specifier = ">=2.0,<3" },
 ]
 
 [[package]]

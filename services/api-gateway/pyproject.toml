@@ -6,11 +6,9 @@ dependencies = [
     "alembic>=1.18,<2",
     "argon2-cffi>=23,<26",
     "fastapi>=0.116,<1",
-    "footballpulse-content-service",
     "footballpulse-runtime-config",
     "psycopg[binary]>=3.3,<4",
     "PyJWT>=2.10,<3",
-    "pymongo>=4.16,<5",
     "sqlalchemy>=2.0,<3",
     "uvicorn>=0.35,<1",
 ]
@@ -21,7 +19,6 @@ footballpulse-api-gateway = "footballpulse_api_gateway.runtime_v2:main"
 footballpulse-api-v2 = "footballpulse_api_gateway.runtime_v2:main"
 
 [tool.uv.sources]
-footballpulse-content-service = { workspace = true }
 footballpulse-runtime-config = { workspace = true }
 
 [build-system]
