@@ -160,11 +160,29 @@ docker compose -f docker-compose.v2.yml ps
 
 ### Bước 4.2: Chạy Crawler Service (Flow 1 - Ingestion)
 
-Cào tin tức bóng đá từ các nguồn thực tế, lưu vào MongoDB và bắn sự kiện `news.crawled.v1` vào Kafka:
+Crawler hiện tại chạy theo 2 pha:
+
+- `Step 1 - discovery`: đọc RSS/sitemap/listing HTML, lọc theo domain và tuổi bài, rồi seed `news_metadata`.
+- `Step 2 - content`: lấy các record chưa có `news_content`, fetch/extract nội dung, lưu content và chỉ khi thành công mới publish `news.crawled.v1`.
+
+Chạy toàn bộ flow:
 
 ```bash
 docker compose -f docker-compose.v2.yml run --rm crawler \
   python -m footballpulse_pipeline crawl --source "The Guardian Football" --source "BBC Sport Football" --max-articles 5
+```
+
+Một số lệnh debug hữu ích:
+
+```bash
+docker compose -f docker-compose.v2.yml run --rm crawler \
+  python -m footballpulse_pipeline crawl --list-sources
+
+docker compose -f docker-compose.v2.yml run --rm crawler \
+  python -m footballpulse_pipeline crawl --step discovery --max-age-days 30
+
+docker compose -f docker-compose.v2.yml run --rm crawler \
+  python -m footballpulse_pipeline crawl --step content --max-articles 10 --concurrency 6
 ```
 
 ---
@@ -287,11 +305,29 @@ set +a
 ### Bước 5.3: Chạy lần lượt từng Service bằng `python3` theo Pipeline Flow
 
 #### 1️⃣ Bước 1: Chạy & Test Crawler Service bằng `python3`
-Thu thập bài viết và phát event vào Kafka:
+Crawler local hiện chạy theo 2 bước tách biệt trong cùng command:
+
+- `discovery`: seed `news_metadata` cho bài mới từ source catalog.
+- `content`: crawl backlog chưa có `news_content`, extract text và publish `news.crawled.v1` sau khi save content thành công.
 
 ```bash
 python3 -m footballpulse_pipeline crawl --source "The Guardian Football" --source "BBC Sport Football" --max-articles 5
 ```
+
+Chạy riêng từng pha khi cần debug:
+
+```bash
+python3 -m footballpulse_pipeline crawl --list-sources
+python3 -m footballpulse_pipeline crawl --step discovery --max-age-days 30
+python3 -m footballpulse_pipeline crawl --step content --max-articles 10 --concurrency 6
+```
+
+Lưu ý:
+
+- `--max-age-days` mặc định là `30` để bỏ qua bài quá cũ.
+- `--max-articles` áp vào backlog content fetch của Step 2.
+- `FOOTBALLPULSE_CRAWL_MODE=bootstrap` sẽ tăng giới hạn fetch Step 2 từ `100` lên `500`.
+
 *(Hoặc chạy script kiểm tra nhanh crawler: `python3 scripts/smoke-v2-crawler.py`)*
 
 #### 2️⃣ Bước 2: Chạy & Test Processor & AI Enrichment bằng `python3`

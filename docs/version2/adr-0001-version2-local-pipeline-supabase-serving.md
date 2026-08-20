@@ -66,7 +66,7 @@ Supabase PostgreSQL is the product serving database. It stores normalized API-fa
 
 Airflow remains the local orchestrator. The initial DAG boundaries are:
 
-- `footballpulse_crawl`: crawl sources, write MongoDB, publish `news.crawled.v1`.
+- `footballpulse_crawl`: discover candidates, seed `news_metadata`, extract `news_content`, then publish `news.crawled.v1`.
 - `footballpulse_process`: read Kafka or Mongo fallback, enrich data, write MongoDB, publish `news.enriched.v1`.
 - `footballpulse_publish`: read Kafka or Mongo fallback, upsert validated data into Supabase.
 
@@ -85,10 +85,10 @@ Airflow must orchestrate stages only; it must not create one task per article.
 Crawler policy:
 
 - Each source checks up to 500 URL candidates per scheduled run.
-- URL canonicalization and `uuid5(canonical_url)` dedupe happen before HTML fetch.
-- Scheduled runs fetch up to 100 new articles per source.
-- Bootstrap runs may fetch up to 500 new articles per source.
-- Fetching runs in a bounded worker pool with global and per-domain concurrency.
+- URL canonicalization and `uuid5(canonical_url)` dedupe happen before content fetch.
+- Discovery seeds `news_metadata` first; Step 2 only processes records still missing `news_content`.
+- Scheduled mode caps Step 2 fetch budget at 100 per crawl command; bootstrap mode raises that budget to 500.
+- Step 2 fetching runs in a bounded worker pool and may use browser fallback for selected sources/domains.
 
 Processing policy:
 

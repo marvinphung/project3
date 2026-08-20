@@ -28,7 +28,7 @@
 ## 📖 Giới thiệu Dự án
 
 **FootballPulse v2** là hệ thống tin tức bóng đá thông minh theo mô hình **Hybrid Data Platform**:
-- **Tự động thu thập (Ingestion)**: Cào dữ liệu theo thời gian thực từ các hãng thông tấn hàng đầu thế giới (*BBC Sport, The Guardian, Sky Sports, Premier League,...*).
+- **Tự động thu thập (Ingestion)**: Khám phá bài viết mới từ RSS, sitemap hoặc listing HTML; seed metadata vào Mongo trước khi crawl nội dung đầy đủ.
 - **Xử lý sự kiện phân tán (Event-Driven Stream)**: Đẩy thông tin qua Apache Kafka (`news.crawled.v1`) để phân phối đến các worker xử lý bất đồng bộ.
 - **Trích xuất thực thể & Làm giàu dữ liệu bằng AI (AI Enrichment)**: Trích xuất thực thể bóng đá (*CLB, Cầu thủ, Giải đấu*) và kết hợp **Kaggle GPU (Qwen LLM)** để tóm tắt thông tin, kiểm định sự thật và tạo các nhận định đa chiều.
 - **Read Model tối ưu cho Serving**: Dữ liệu đã kiểm định (`VALIDATED`) được materialize sang PostgreSQL (hoặc Supabase) với `pgvector` phục vụ tìm kiếm ngữ nghĩa và Timeline sự kiện.
@@ -47,15 +47,15 @@ flowchart TB
         S2["BBC Sport"]
         S3["Sky Sports"]
         S4["Premier League"]
-        CRAWLER["🕷️ Crawler Engine<br/>(Playwright / BeautifulSoup)"]
+        CRAWLER["🕷️ Crawler Engine<br/>(Discovery + Content Extraction)"]
         S1 & S2 & S3 & S4 --> CRAWLER
     end
 
     subgraph STREAM_RAW["2. Event Stream & Raw Storage"]
         KAFKA["⚡ Apache Kafka<br/>(Topic: news.crawled.v1)"]
         MONGO[("🍃 MongoDB Replica Set<br/>(Raw Metadata & Content)")]
-        CRAWLER -->|Publish Event| KAFKA
-        CRAWLER -->|Persist Raw HTML/Text| MONGO
+        CRAWLER -->|Seed Metadata + Save Content| MONGO
+        CRAWLER -->|Publish Event After Content Save| KAFKA
     end
 
     subgraph ENRICHMENT["3. Processing & AI Enrichment"]
@@ -96,10 +96,13 @@ flowchart TB
 Hệ thống vận hành tuần tự qua 5 giai đoạn cốt lõi:
 
 ```text
-[Nguồn Tin Tức] 
+[Nguồn Tin Tức]
        │
-       ▼ (1. Crawl)
-[MongoDB: news_metadata & news_content] ──(Bắn Event)──► [Kafka: news.crawled.v1]
+       ▼ (1a. Discovery / Metadata Seeding)
+[MongoDB: news_metadata]
+       │
+       ▼ (1b. Content Extraction)
+[MongoDB: news_content] ──(Bắn Event sau khi lưu content)──► [Kafka: news.crawled.v1]
                                                                   │
        ┌──────────────────────────────────────────────────────────┘
        ▼ (2. Process & Entity Extraction)
@@ -116,9 +119,10 @@ Hệ thống vận hành tuần tự qua 5 giai đoạn cốt lõi:
 ```
 
 1. **Giai đoạn 1: Crawl tin tức (Crawler)**
-   - Cào bài báo từ các RSS feeds và trang tin live.
-   - Lưu trữ document gốc vào MongoDB (`news_metadata`, `news_content`).
-   - Phát sự kiện `news.crawled.v1` vào Apache Kafka.
+   - Bước 1 discovery đọc RSS, sitemap hoặc listing HTML để lấy URL ứng viên mới.
+   - Crawler canonicalize URL, sinh `article_id`, lọc trùng và seed metadata vào `news_metadata`.
+   - Bước 2 lấy các record chưa có `news_content`, fetch HTML, extract text và lưu `news_content`.
+   - Chỉ sau khi lưu content thành công mới phát sự kiện `news.crawled.v1` vào Kafka.
 2. **Giai đoạn 2: Trích xuất thực thể (Entity Processing)**
    - Processor consume message từ Kafka.
    - Nhận diện CLB, Cầu thủ, Giải đấu (NER) và lưu vào `news_entities`.

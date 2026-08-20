@@ -130,19 +130,26 @@ Manual run van co script theo thu tu de debug/replay. Day khong phai human revie
 step va khong nam giua flow tu dong:
 
 ```bash
-uv run python -m pipeline.crawler crawl
-uv run python -m pipeline.processor process
-uv run python -m pipeline.publisher publish
+uv run python -m footballpulse_pipeline crawl
+uv run python -m footballpulse_pipeline process
+uv run python -m footballpulse_pipeline publish
 ```
 
-Hoac mot command wrapper:
+Crawler command hien tai co the chay toan bo hoac tung pha rieng:
 
 ```bash
-uv run python -m pipeline run
+uv run python -m footballpulse_pipeline crawl --step discovery
+uv run python -m footballpulse_pipeline crawl --step content
+uv run python -m footballpulse_pipeline crawl --step all
 ```
 
-Wrapper chi goi ba buoc tren theo thu tu. Neu mot buoc fail thi dung, khong tiep
-tuc publish du lieu dang do.
+CLI crawl support:
+
+- `--source` de chon source trong catalog.
+- `--max-articles` de gioi han batch content fetch.
+- `--concurrency` cho Step 2 extraction worker.
+- `--max-age-days` de loc bai theo `published_at`.
+- `--list-sources` de in source catalog hien co.
 
 ## 4. Kafka topics
 
@@ -183,107 +190,89 @@ Mongo theo `_id = article_id`.
 ### Input
 
 ```text
-RSS source config
-MONGODB_URL
-MONGODB_DB
-```
-
-Source config co the la file local:
-
-```yaml
-global:
-  max_urls_per_source: 500
-  max_new_articles_per_source_per_run: 100
-  global_fetch_concurrency: 10
-  per_domain_concurrency: 2
-  request_timeout_seconds: 20
-  min_content_chars: 500
-
-sources:
-  - name: BBC Sport
-    rss_url: https://feeds.bbci.co.uk/sport/football/rss.xml
-    allowed_domains:
-      - bbc.com
-      - bbc.co.uk
-    reliability_tier: 1
+Source catalog (CATALOG trong scripts/run-real-crawl.py)
+FOOTBALLPULSE_V2_MONGODB_URL / FOOTBALLPULSE_MONGODB_URL
+FOOTBALLPULSE_V2_MONGODB_DB / FOOTBALLPULSE_MONGODB_DB
+FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS
+FOOTBALLPULSE_CRAWL_MODE=scheduled|bootstrap
+FOOTBALLPULSE_BROWSER_FALLBACK=true|false
 ```
 
 ### Crawl method
 
-Method mac dinh dua tren `news-aggregator`:
+Pipeline crawl hien tai da tach 2 pha ro rang:
 
 ```text
-RSS -> URL candidates -> dedupe -> async fetch -> extract -> Mongo -> Kafka
+Step 1: discovery -> filter age/domain -> canonicalize URL -> seed news_metadata
+Step 2: query metadata chua co content -> fetch HTML -> extract text -> write news_content -> publish Kafka
 ```
 
 Thu tu uu tien:
 
-1. RSS crawl la primary method.
-2. Source listing crawl chi la fallback cho nguon khong co RSS hoac RSS qua thieu.
-3. Browser scraping chi bat theo source neu async HTTP bi chan.
+1. RSS la primary method cho source `RSS`.
+2. Sitemap duoc ho tro nhu mot source type rieng.
+3. HTML listing duoc dung cho source `HTML` khi can explicit opt-in.
+4. Browser fallback chi duoc bat o Step 2 neu static extraction that bai hoac gap domain can render.
 
-Moi scheduled run:
+### Step 1: Discovery & Metadata Seeding
 
-- Moi source lay toi da `500` URL candidate gan nhat.
-- Crawler canonicalize toan bo URL candidate.
-- Crawler tao `article_id = uuid5(canonical_url)`.
-- Crawler bulk check Mongo `news_metadata._id`.
-- Chi URL chua ton tai moi vao fetch queue.
-- Scheduled run fetch toi da `100` bai moi moi source de tranh burst qua lon.
+- Lay source tu catalog va co the filter bang `--source`.
+- Moi source fetch toi da `500` entries (`V2_CANDIDATE_LIMIT`).
+- RSS parser validate domain, title, URL va giu them `published_at`, `description`, `image_url`.
+- URL duoc canonicalize truoc khi sinh `article_id`.
+- Filter bai theo `published_at` trong cua so `--max-age-days` (mac dinh `30` ngay).
+- `seed_metadata()` chi ghi `news_metadata` neu `_id` chua ton tai.
+- Output cua Step 1 la:
+  - `discovered`: so candidate tim duoc
+  - `existing`: da co trong `news_metadata`
+  - `seeded`: moi duoc dua vao backlog extraction
 
-Bootstrap/backfill local:
+### Step 2: Content Extraction & Event Publish
 
-- Co the dung `--mode bootstrap`.
-- Moi source van check toi da `500` URL.
-- Cho phep fetch toi da `500` bai moi moi source.
-- Nen giu `per_domain_concurrency` thap, mac dinh `1-2`.
+- `get_unextracted_articles()` query `news_metadata` khong co ban ghi tuong ung trong `news_content`.
+- So article duoc xu ly o Step 2 = `min(--max-articles, fetch_limit)` nhan voi so source duoc chon.
+- `fetch_limit` = `100` cho scheduled mode, `500` neu `FOOTBALLPULSE_CRAWL_MODE=bootstrap`.
+- Extraction chay song song theo `--concurrency` (mac dinh `6`).
+- Primary path dung `HtmlFetcher` + `HtmlExtractionService`.
+- Neu static extraction that bai, crawler co the fallback sang browser renderer cho mot so source/domain cu the.
+- `write_content()` chi ghi `news_content` neu text hop le va extraction khong fail.
+- Chi sau khi `write_content()` thanh cong moi publish `news.crawled.v1`.
+- Kafka event van chi chua pointer nhe (`article_id`, `canonical_url`, `source_name`, `published_time`), khong day full content len topic.
 
-Fetch stack nen giong `news-aggregator`:
+### Mongo write model trong crawler
+
+- `news_metadata`: du lieu seed tu discovery, dai dien backlog crawl.
+- `news_content`: noi dung da duoc lam sach sau extraction.
+- Crawler v2 hien tai khong luu crawl state vao `news_*` collections; phan crawl control/state nam ngoai write model nay.
+
+### Fetch va extraction stack
 
 ```text
-curl_cffi -> cloudscraper -> httpx -> aiohttp -> optional Playwright/Patchright
+httpx client -> RSS/Sitemap/HTML fetchers -> HtmlExtractionService
+-> browser fallback (khi can) -> Mongo -> Kafka
 ```
 
-Extraction stack:
+### Replay/debug policy
 
-```text
-trafilatura.bare_extraction()
--> JSON-LD metadata
--> OpenGraph fallback
--> BeautifulSoup fallback
--> noise removal
--> language/content quality gate
-```
+- Chay rieng `--step discovery` de seed lai metadata ma khong fetch content.
+- Chay rieng `--step content` de tiep tuc xu ly backlog `news_metadata` chua co `news_content`.
+- Cac buoc nay idempotent theo `_id = article_id`, nen co the replay an toan.
 
-Parallel crawl policy:
-
-```text
-global_fetch_concurrency: 10
-per_domain_concurrency: 2
-request_timeout_seconds: 20
-```
-
-Neu source bi rate limit, giam `per_domain_concurrency` cua source do xuong `1`
+Neu source bi rate limit, giam `--concurrency`, tat browser fallback neu can,
 hoac tang Airflow crawl interval len 60 phut.
 
 ### Steps
 
-1. Doc RSS sources.
-2. Lay toi da `500` URL candidate moi source tu RSS/listing.
-3. Canonicalize article URL.
-4. Tao `article_id = uuid5(canonical_url)`.
-5. Bulk check `news_metadata` theo `_id`.
-6. Neu da co `_id` thi skip va khong fetch lai article page.
-7. Dua URL moi vao async fetch queue, toi da `100` bai moi/source/run trong
-   scheduled mode.
-8. Fetch HTML article page bang fallback stack.
-9. Extract title/description/published_time/image/tags.
-10. Extract cleaned content bang Trafilatura, fallback BeautifulSoup.
-11. Tinh `content_hash`.
-12. Upsert Mongo:
-    - `news_metadata`
-    - `news_content`
-13. Publish Kafka `news.crawled.v1` neu article moi.
+1. Chon source tu `CATALOG` hoac bang `--source`.
+2. Step 1 fetch RSS, sitemap, hoac HTML listing tuy theo `source_type`.
+3. Validate domain, title, URL; filter `published_at` theo `--max-age-days`.
+4. Canonicalize URL va sinh `article_id`.
+5. `seed_metadata()` chi ghi `news_metadata` neu `_id` chua ton tai.
+6. Step 2 query backlog tu `get_unextracted_articles()`.
+7. Fetch HTML article page va extract noi dung.
+8. Neu can, fallback sang browser renderer cho mot so source/domain.
+9. `write_content()` ghi `news_content` va cap nhat `content_hash` trong `news_metadata`.
+10. Publish Kafka `news.crawled.v1` chi khi content da duoc save thanh cong.
 
 ### Output Mongo
 
@@ -303,7 +292,7 @@ hoac tang Airflow crawl interval len 60 phut.
   "image_url": "https://...",
   "tags": [],
   "article_keywords": [],
-  "content_hash": "sha256",
+  "content_hash": "sha256 or empty string before extraction",
   "language": "en"
 }
 ```
@@ -315,25 +304,22 @@ hoac tang Airflow crawl interval len 60 phut.
   "_id": "article_id",
   "content": "cleaned article text",
   "cleaned_at": "UTC",
-  "extractor": "TRAFILATURA",
+  "extractor": "TRAFILATURA|READABILITY|UNKNOWN",
   "extraction_status": "SUCCESS"
 }
 ```
 
 ### Skip rules
 
-Skip article neu:
+Skip hoac khong publish article neu:
 
-- URL canonical da co trong `news_metadata`.
-- Fetch fail.
-- Extractor khong lay duoc content co ich.
-- Content qua ngan.
-- Language khong phai English neu processor chi ho tro English.
+- URL canonical da co trong `news_metadata` o Step 1.
+- Step 2 khong lay duoc text hop le.
+- Extraction status la `FAILED`.
+- Browser fallback cung that bai.
 
-Khong ghi skip reason vao DB. Neu can xem ly do, doc console log luc chay local.
-
-Forced recrawl chi nen la flag debug ro rang, vi du `--force-url <url>`, va mac
-dinh tat. Flow scheduled cua Airflow khong dung forced recrawl.
+Ly do bo qua nam trong runtime log; crawler khong tao collection skip-state rieng
+trong Mongo write model.
 
 ## 6. `pipeline/processor`
 

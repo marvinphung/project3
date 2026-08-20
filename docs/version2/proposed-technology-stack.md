@@ -237,12 +237,19 @@ Concurrency de xuat:
 ```text
 global_fetch_concurrency: 10
 per_domain_concurrency: 2
-scheduled max_new_articles_per_source_per_run: 100
-bootstrap max_new_articles_per_source_per_run: 500
+scheduled step2_fetch_budget_per_crawl_command: 100
+bootstrap step2_fetch_budget_per_crawl_command: 500
 ```
 
 Browser automation nhu Playwright/Patchright chi bat theo source khi HTTP fallback
 khong du, khong dung mac dinh.
+
+Crawler runtime duoc tach 2 pha:
+
+```text
+Step 1: discovery / metadata seeding
+Step 2: content extraction / Kafka handoff
+```
 
 Kafka topic de xuat:
 

@@ -306,7 +306,7 @@ framework-specific app code
 
 ```text
 Local:
-Airflow -> pipeline/crawler -> Mongo -> Kafka news.crawled.v1
+Airflow -> pipeline/crawler (discovery -> news_metadata, content -> news_content -> Kafka news.crawled.v1)
 Kafka news.crawled.v1 -> pipeline/processor -> Mongo -> Kafka news.enriched.v1
 Kafka news.enriched.v1 -> pipeline/publisher -> Supabase PostgreSQL
 

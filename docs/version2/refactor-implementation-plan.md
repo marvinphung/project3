@@ -7,7 +7,7 @@ architecture:
 
 ```text
 Local:
-Airflow -> crawler -> Mongo -> Kafka news.crawled.v1
+Airflow -> crawler (discovery -> news_metadata, content -> news_content -> Kafka news.crawled.v1)
 Kafka news.crawled.v1 -> processor -> Mongo -> Kafka news.enriched.v1
 Kafka news.enriched.v1 -> publisher -> Supabase PostgreSQL
 
@@ -25,7 +25,7 @@ khong connect Mongo, Kafka, Airflow, Kaggle, GLiNER, hoac local pipeline.
 - Dung `_id = article_id = uuid5(canonical_news_url)` cho tat ca Mongo collection
   va Supabase `articles.id`.
 - Dung Mongo Beanie/Motor/Pydantic giong `news-aggregator`.
-- Crawler moi run check toi da 500 URL candidate moi source, dedupe truoc fetch.
+- Crawler moi run check toi da 500 URL candidate moi source, seed `news_metadata` truoc, roi moi fetch content cho backlog chua co `news_content`.
 - Pipeline chay 100% tu dong, khong co human review step giua crawl/process/publish.
 - Worker pool xu ly song song ben trong crawler, processor, Kaggle adapter, va
   publisher; Airflow khong tao task tung article.
