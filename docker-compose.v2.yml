@@ -143,7 +143,7 @@ services:
     command: ["python", "-m", "footballpulse_pipeline", "crawl", "--max-articles", "100"]
     restart: "no"
 
-  processor:
+  entities-extraction:
     image: footballpulse-v2-runtime:local
     build:
       context: .
@@ -216,7 +216,7 @@ services:
       AIRFLOW__CORE__INTERNAL_API_SECRET_KEY: "footballpulse-v2-airflow-internal-key-32ch!"
       AIRFLOW__API_AUTH__JWT_SECRET: "footballpulse-v2-airflow-jwt-secret-key-32chars!"
       FOOTBALLPULSE_CRAWL_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm crawler python -m footballpulse_pipeline crawl
-      FOOTBALLPULSE_PROCESS_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm processor python -m footballpulse_pipeline process
+      FOOTBALLPULSE_PROCESS_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm entities-extraction python -m footballpulse_pipeline process
       FOOTBALLPULSE_PUBLISH_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm publisher python -m footballpulse_pipeline publish
     command: ["bash", "-c", "airflow db migrate"]
     volumes:

@@ -11,14 +11,14 @@ sys.path.extend(
     [
         str(ROOT / "packages/runtime-config/src"),
         str(ROOT / "packages/shared/src"),
-        str(ROOT / "services/intelligence-service/src"),
+        str(ROOT / "services/entities-extraction-service/src"),
     ]
 )
 
-from footballpulse_intelligence_service.adapters.entity_extractors import (
+from footballpulse_entities_extraction_service.adapters.entity_extractors import (
     GlinerEntityExtractor,
 )
-from footballpulse_intelligence_service.domain.extraction import EntityLabel
+from footballpulse_entities_extraction_service.domain.extraction import EntityLabel
 
 BENCHMARK_INPUTS = [
     (

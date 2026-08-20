@@ -12,12 +12,11 @@ sys.path.extend([
     str(ROOT / "packages/runtime-config/src"),
     str(ROOT / "packages/shared/src"),
     str(ROOT / "packages/event-contracts/src"),
-    str(ROOT / "services/intelligence-service/src"),
-    str(ROOT / "services/ai-content-service/src"),
+    str(ROOT / "services/entities-extraction-service/src"),
     str(ROOT / "packages/pipeline/src"),
 ])
 
-from footballpulse_ai_content_service.v2_processor import V2EntityProcessor
+from footballpulse_entities_extraction_service.v2_processor import V2EntityProcessor
 from footballpulse_pipeline.cli import _extract_entities
 
 def main() -> None:

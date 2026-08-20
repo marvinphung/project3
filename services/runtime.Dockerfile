@@ -14,14 +14,12 @@ RUN pip install --no-cache-dir \
       /workspace/packages/runtime-config \
       /workspace/packages/shared \
       /workspace/services/article-service \
-      /workspace/services/ai-content-service \
       /workspace/services/content-service \
       /workspace/services/crawler-service \
-      /workspace/services/intelligence-service \
+      /workspace/services/entities-extraction-service \
       /workspace/services/publisher-service \
       /workspace/services/api-gateway
 
 COPY scripts /workspace/scripts
-COPY kaggle /workspace/kaggle
 
-ENV PYTHONPATH=/workspace/packages/pipeline/src:/workspace/packages/fetch-artifacts/src:/workspace/packages/event-contracts/src:/workspace/packages/mongo-models/src:/workspace/packages/runtime-config/src:/workspace/packages/shared/src:/workspace/services/article-service/src:/workspace/services/ai-content-service/src:/workspace/services/content-service/src:/workspace/services/crawler-service/src:/workspace/services/intelligence-service/src:/workspace/services/publisher-service/src:/workspace/services/api-gateway/src
+ENV PYTHONPATH=/workspace/packages/pipeline/src:/workspace/packages/fetch-artifacts/src:/workspace/packages/event-contracts/src:/workspace/packages/mongo-models/src:/workspace/packages/runtime-config/src:/workspace/packages/shared/src:/workspace/services/article-service/src:/workspace/services/content-service/src:/workspace/services/crawler-service/src:/workspace/services/entities-extraction-service/src:/workspace/services/publisher-service/src:/workspace/services/api-gateway/src

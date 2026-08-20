@@ -1,0 +1,29 @@
+[project]
+name = "footballpulse-entities-extraction-service"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "confluent-kafka>=2.15,<3",
+    "fastapi>=0.116,<1",
+    "footballpulse-event-contracts",
+    "footballpulse-runtime-config",
+    "pymongo>=4.16,<5",
+    "uvicorn>=0.35,<1",
+]
+
+[project.optional-dependencies]
+models = [
+    "gliner2>=1.3.0,<2",
+]
+
+[tool.uv.sources]
+footballpulse-event-contracts = { workspace = true }
+footballpulse-runtime-config = { workspace = true }
+
+[project.scripts]
+footballpulse-entities-extraction-service-health = "footballpulse_entities_extraction_service.health:main"
+footballpulse-entities-extraction-service = "footballpulse_entities_extraction_service.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

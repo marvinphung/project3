@@ -8,8 +8,6 @@ import pytest
 from footballpulse_event_contracts import (
     ArticleCleanedEvent,
     ArticleDiscoveredEvent,
-    ArticleEnrichedEvent,
-    ArticleEnrichmentFailedEvent,
     event_json_schema,
 )
 from pydantic import BaseModel, TypeAdapter, ValidationError
@@ -28,8 +26,6 @@ def load_json(path: Path) -> dict[str, Any]:
     [
         (ArticleDiscoveredEvent, "article_discovered_v1.valid.json"),
         (ArticleCleanedEvent, "article_cleaned_v1.valid.json"),
-        (ArticleEnrichedEvent, "article_enriched_v1.valid.json"),
-        (ArticleEnrichmentFailedEvent, "article_enrichment_failed_v1.valid.json"),
     ],
 )
 def test_valid_event_fixtures_round_trip(model: type[BaseModel], fixture_name: str) -> None:
@@ -45,8 +41,6 @@ def test_valid_event_fixtures_round_trip(model: type[BaseModel], fixture_name: s
     [
         (ArticleDiscoveredEvent, "article_discovered_v1.invalid.json"),
         (ArticleCleanedEvent, "article_cleaned_v1.invalid.json"),
-        (ArticleEnrichedEvent, "article_enriched_v1.invalid.json"),
-        (ArticleEnrichmentFailedEvent, "article_enrichment_failed_v1.invalid.json"),
     ],
 )
 def test_invalid_event_fixtures_are_rejected(model: type[BaseModel], fixture_name: str) -> None:
@@ -67,8 +61,6 @@ def test_envelope_requires_timezone_aware_timestamp() -> None:
     [
         (ArticleDiscoveredEvent, "article_discovered_v1.valid.json", "raw_html"),
         (ArticleCleanedEvent, "article_cleaned_v1.valid.json", "cleaned_content"),
-        (ArticleEnrichedEvent, "article_enriched_v1.valid.json", "summary_en"),
-        (ArticleEnrichmentFailedEvent, "article_enrichment_failed_v1.valid.json", "raw_output"),
     ],
 )
 def test_event_payload_rejects_unbounded_evidence(
@@ -90,32 +82,10 @@ def test_duplicate_result_requires_matching_reference() -> None:
 
 
 @pytest.mark.parametrize(
-    ("model", "fixture_name"),
-    [
-        (ArticleEnrichedEvent, "article_enriched_v1.valid.json"),
-        (ArticleEnrichmentFailedEvent, "article_enrichment_failed_v1.valid.json"),
-    ],
-)
-def test_enrichment_event_aggregate_matches_payload_article(
-    model: type[BaseModel], fixture_name: str
-) -> None:
-    fixture = load_json(FIXTURES / fixture_name)
-    fixture["aggregate_id"] = "018f8b45-b634-7c81-a47d-9a7c2f3c9999"
-
-    with pytest.raises(ValidationError, match="aggregate"):
-        model.model_validate(fixture)
-
-
-@pytest.mark.parametrize(
     ("model", "schema_path"),
     [
         (ArticleDiscoveredEvent, SCHEMAS / "article.discovered" / "v1.schema.json"),
         (ArticleCleanedEvent, SCHEMAS / "article.cleaned" / "v1.schema.json"),
-        (ArticleEnrichedEvent, SCHEMAS / "article.enriched" / "v1.schema.json"),
-        (
-            ArticleEnrichmentFailedEvent,
-            SCHEMAS / "article.enrichment.failed" / "v1.schema.json",
-        ),
     ],
 )
 def test_committed_json_schema_matches_runtime_model(

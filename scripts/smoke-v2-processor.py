@@ -12,12 +12,12 @@ sys.path.extend(
     [
         str(ROOT / 'packages/event-contracts/src'),
         str(ROOT / 'services/crawler-service/src'),
-        str(ROOT / 'services/ai-content-service/src'),
+        str(ROOT / 'services/entities-extraction-service/src'),
     ]
 )
 
 from footballpulse_crawler_service.messaging.v2 import V2NewsCrawledPublisher
-from footballpulse_ai_content_service.v2_processor import V2EntityProcessor, V2NewsCrawledConsumer
+from footballpulse_entities_extraction_service.v2_processor import V2EntityProcessor, V2NewsCrawledConsumer
 
 
 def extract_entities(text: str) -> list[dict[str, object]]:

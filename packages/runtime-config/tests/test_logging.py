@@ -32,7 +32,7 @@ def test_structured_log_contains_stable_event_and_bound_context() -> None:
 
 def test_structured_log_redacts_nested_secrets() -> None:
     output = StringIO()
-    configure_logging(service="ai-content-service", level="INFO", stream=output, force=True)
+    configure_logging(service="entities-extraction-service", level="INFO", stream=output, force=True)
 
     log_event(
         logging.getLogger("test"),

@@ -6,8 +6,7 @@ from pathlib import Path
 from footballpulse_event_contracts import (
     ArticleCleanedEvent,
     ArticleDiscoveredEvent,
-    ArticleEnrichedEvent,
-    ArticleEnrichmentFailedEvent,
+    NewsCrawledEvent,
     event_json_schema,
 )
 
@@ -15,8 +14,7 @@ ROOT = Path(__file__).parents[1]
 EVENTS = {
     "article.cleaned": ArticleCleanedEvent,
     "article.discovered": ArticleDiscoveredEvent,
-    "article.enriched": ArticleEnrichedEvent,
-    "article.enrichment.failed": ArticleEnrichmentFailedEvent,
+    "news.crawled": NewsCrawledEvent,
 }
 
 

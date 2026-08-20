@@ -9,8 +9,7 @@ from typing import Any
 from uuid import UUID
 
 from confluent_kafka import Consumer
-from footballpulse_ai_content_service.persistence.v2_backlog import V2EnrichmentBacklog
-from footballpulse_ai_content_service.v2_processor import (
+from footballpulse_entities_extraction_service.v2_processor import (
     V2EntityProcessor,
     V2NewsCrawledConsumer,
 )
@@ -18,8 +17,6 @@ from footballpulse_publisher_service.publisher import V2Publisher
 from pymongo import MongoClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
-
-from footballpulse_pipeline.v2_enrichment_runtime import run_v2_kaggle_enrichment
 
 ROOT = Path(__file__).resolve().parents[4]
 REAL_CRAWL_SCRIPT = ROOT / "scripts" / "run-real-crawl.py"
@@ -88,7 +85,7 @@ def _get_extractor() -> Any:
     global _EXTRACTOR
     if _EXTRACTOR is None:
         try:
-            from footballpulse_intelligence_service.adapters.entity_extractors import (
+            from footballpulse_entities_extraction_service.adapters.entity_extractors import (
                 GlinerEntityExtractor,
             )
 
@@ -108,7 +105,7 @@ def _extract_entities(text: str) -> list[dict[str, object]]:
     extractor = _get_extractor()
     if extractor:
         try:
-            from footballpulse_intelligence_service.domain.extraction import (
+            from footballpulse_entities_extraction_service.domain.extraction import (
                 EntityLabel,
                 SourceField,
                 SpanPrediction,
@@ -210,7 +207,6 @@ def _run_crawl(arguments: list[str]) -> int:
 
 def _run_process(limit: int) -> int:
     mongo = _mongo_client()
-    enriched_status = None
     try:
         database = mongo[os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse_v2")]
         consumer = Consumer(
@@ -221,7 +217,7 @@ def _run_process(limit: int) -> int:
                 ),
                 "group.id": os.getenv(
                     "FOOTBALLPULSE_V2_PROCESSOR_GROUP",
-                    "footballpulse-v2-processor",
+                    "footballpulse-v2-entities-extraction",
                 ),
                 "enable.auto.commit": False,
                 "auto.offset.reset": "earliest",
@@ -241,29 +237,32 @@ def _run_process(limit: int) -> int:
 
         # Replay fallback for articles missed by Kafka but still lacking entities.
         if processed < limit:
-            backlog = V2EnrichmentBacklog(database)
             remaining = limit - processed
-            for document in backlog.iter_unenriched():
-                article_id = V2EnrichmentBacklog.article_id(document)
-                if database.news_entities.find_one({"_id": article_id}, {"_id": 1}) is not None:
+            pipeline: list[dict[str, object]] = [
+                {
+                    "$lookup": {
+                        "from": "news_entities",
+                        "localField": "_id",
+                        "foreignField": "_id",
+                        "as": "entity_match",
+                    }
+                },
+                {"$match": {"entity_match": {"$size": 0}}},
+                {"$sort": {"crawl_date": -1, "_id": 1}},
+                {"$limit": remaining},
+            ]
+            for document in database.news_metadata.aggregate(pipeline):
+                article_id = document.get("_id")
+                if not isinstance(article_id, UUID):
                     continue
                 processor.process_article(article_id)
                 processed += 1
                 remaining -= 1
                 if remaining == 0:
                     break
-        enriched_status = run_v2_kaggle_enrichment(
-            database=database,
-            limit=limit,
-            root=Path(os.getenv("FOOTBALLPULSE_AI_BATCH_ROOT", ".footballpulse/ai-batches")),
-        )
     finally:
         mongo.close()
-    status_label = enriched_status.value if enriched_status else "SKIPPED"
-    print(
-        f"footballpulse_pipeline process completed: processed={processed} "
-        f"enrichment_status={status_label}"
-    )
+    print(f"footballpulse_pipeline entities extraction completed: processed={processed}")
     return 0
 
 
