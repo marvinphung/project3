@@ -74,6 +74,21 @@ Services chinh:
 - `publisher`
 - `airflow-*`
 
+Airflow UI:
+
+```text
+http://localhost:8080
+```
+
+DAG chính cần bật/chạy là `footballpulse_pipeline`:
+
+```text
+crawl -> entities_extraction -> content_summary -> publish
+```
+
+Các DAG `footballpulse_crawl`, `footballpulse_process`, `footballpulse_summary`,
+`footballpulse_publish` chỉ để chạy thủ công từng stage khi debug.
+
 Frontend:
 
 ```bash
@@ -169,7 +184,68 @@ API:
 PYTHONPATH=packages/pipeline/src:packages/runtime-config/src:packages/event-contracts/src:services/api-gateway/src:services/crawler-service/src:services/entities-extraction-service/src:services/publisher-service/src python3 -m footballpulse_api_gateway.runtime_v2
 ```
 
-## 6. Kiem Tra Nhanh
+## 6. Deploy Backend Render Va Frontend Vercel
+
+### Backend API tren Render
+
+Backend Render chi doc Supabase PostgreSQL, khong doc PostgreSQL local.
+
+Render service:
+
+- Type: Web Service
+- Runtime: Docker
+- Dockerfile path: `services/runtime.Dockerfile`
+- Start command: `python -m footballpulse_api_gateway.runtime_v2`
+- Health check path: `/health`
+
+Render environment variables toi thieu:
+
+```bash
+PORT=8000
+FOOTBALLPULSE_ENV=production
+FOOTBALLPULSE_LOG_LEVEL=INFO
+FOOTBALLPULSE_TIMEZONE=UTC
+SUPABASE_DATABASE_URL=<Supabase session pooler PostgreSQL URL>
+FOOTBALLPULSE_API_JWT_SECRET=<32+ byte secret>
+FOOTBALLPULSE_API_ADMIN_USERNAME=<admin username>
+FOOTBALLPULSE_API_ADMIN_PASSWORD=<admin password>
+```
+
+Neu khong dung `SUPABASE_DATABASE_URL`, khai bao bo bien tach rieng:
+
+```bash
+SUPABASE_DB_HOST=<pooler host>
+SUPABASE_DB_PORT=5432
+SUPABASE_DB_NAME=postgres
+SUPABASE_DB_USER=<pooler user>
+SUPABASE_DB_PASSWORD=<database password>
+```
+
+### Frontend tren Vercel
+
+Vercel chi goi backend API, khong ket noi truc tiep Supabase.
+
+Vercel project settings:
+
+- Framework preset: Vite
+- Root directory: `frontend`
+- Build command: `npm run build`
+- Output directory: `dist`
+- Config file: `frontend/vercel.json`
+
+Vercel environment variables:
+
+```bash
+VITE_API_BASE_URL=<Render backend public URL>
+```
+
+Vi du:
+
+```bash
+VITE_API_BASE_URL=https://footballpulse-api.onrender.com
+```
+
+## 7. Kiem Tra Nhanh
 
 Mongo:
 
@@ -189,12 +265,15 @@ curl -s http://127.0.0.1:8000/health
 curl -s "http://127.0.0.1:8000/api/v2/articles?limit=5"
 ```
 
-## 7. Luu Y Hien Tai
+## 8. Luu Y Hien Tai
 
 - `process` hien tai chi con scope entity extraction.
 - `content-summary-service` dung `crawl_date` de chia bucket 3h UTC.
 - `content-summary-service` mac dinh backfill cac bucket 3h trong 7 ngay gan
   nhat.
-- `content-summary-service` chi generate top 30 entities trong 24h gan nhat.
+- `content-summary-service` chi generate top 50 entities trong 24h gan nhat.
 - Moi entity/window chi gui toi da 5 clean contents vao LLM, chon theo so lan
   target entity xuat hien trong `filtered_content`.
+- `publish` cap nhat `mention_count_24h` tu toan bo `news_entities`, tinh theo
+  distinct article trong 24h; khong phu thuoc entity da co timeline summary hay
+  chua.

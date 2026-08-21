@@ -21,7 +21,7 @@ LOGGER = logging.getLogger("footballpulse.content_summary")
 SUMMARY_NAMESPACE = UUID("c384e508-4e31-4e4b-a25e-e4782bbbe528")
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
-TOP_ENTITY_LIMIT = 30
+TOP_ENTITY_LIMIT = 50
 MAX_ARTICLES_PER_ENTITY = 5
 DEFAULT_LLM_CALL_TIMEOUT_SECONDS = 45
 

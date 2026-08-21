@@ -6,7 +6,7 @@ import { EmptyState, LoadingSkeleton, SectionHeading } from '../components/ui'
 export default function HomePage() {
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
-  const topEntities = useTopEntities(10, '24h')
+  const topEntities = useTopEntities(100, '24h')
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
@@ -55,10 +55,10 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Top 10 Entities in 24h */}
+      {/* Top 100 Entities in 24h */}
       <section className="mb-12">
         <div className="flex items-center justify-between mb-6">
-          <SectionHeading>Top 10 Entities nổi bật (24h qua)</SectionHeading>
+          <SectionHeading>Top 100 Entities nổi bật (24h qua)</SectionHeading>
           <span className="text-xs text-gray-500 font-medium">Xếp hạng theo số bài viết 24h</span>
         </div>
 
@@ -113,4 +113,3 @@ export default function HomePage() {
     </div>
   )
 }
-

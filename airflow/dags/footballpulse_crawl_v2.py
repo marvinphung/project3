@@ -9,7 +9,6 @@ try:
     import pendulum
     from airflow.decorators import dag
     from airflow.operators.bash import BashOperator
-    from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
     DEFAULT_ARGS = {
         "owner": "footballpulse",
@@ -20,7 +19,7 @@ try:
 
     @dag(
         dag_id="footballpulse_crawl",
-        schedule="*/30 * * * *",
+        schedule=None,
         start_date=pendulum.datetime(2026, 1, 1, tz="Asia/Ho_Chi_Minh"),
         catchup=False,
         max_active_runs=1,
@@ -28,23 +27,15 @@ try:
         tags=["footballpulse", "v2", "crawl"],
     )
     def footballpulse_crawl():
-        crawl_task = BashOperator(
+        BashOperator(
             task_id="crawl_sources",
             bash_command=os.environ.get(
                 "FOOTBALLPULSE_CRAWL_COMMAND",
                 "docker compose -f /workspace/docker-compose.v2.yml run --no-deps --rm crawler python -m footballpulse_pipeline crawl",
             ),
             env={"FOOTBALLPULSE_CRAWL_MODE": "scheduled"},
+            append_env=True,
         )
-
-        trigger_process = TriggerDagRunOperator(
-            task_id="trigger_process_v2",
-            trigger_dag_id="footballpulse_process",
-            wait_for_completion=False,
-            reset_dag_run=True,
-        )
-
-        crawl_task >> trigger_process
 
     footballpulse_crawl_dag = footballpulse_crawl()
 except ImportError:

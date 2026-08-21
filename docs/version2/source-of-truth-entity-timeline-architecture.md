@@ -128,7 +128,7 @@ Trach nhiem:
 
 - tao timeline item theo tung entity
 - gom cac bai lien quan trong cua so 3 gio theo `news_metadata.crawl_date`
-- chi generate timeline cho top 30 entities noi bat nhat trong 24 gio gan nhat
+- chi generate timeline cho top 50 entities noi bat nhat trong 24 gio gan nhat
 - goi LLM 1 lan de tao `title` va `content`
 - luu ket qua tong hop vao DB
 
@@ -209,12 +209,12 @@ Co the chay mot window cu the bang `--window-start` va `--window-end`.
 
 Service khong update timeline cho moi entity trong DB.
 
-Service chi lay top 30 entities xuat hien trong nhieu distinct articles nhat
+Service chi lay top 50 entities xuat hien trong nhieu distinct articles nhat
 trong 24 gio gan nhat, tinh theo `news_metadata.crawl_date`. Day la top entity
 cho moi loai entity, gom `PLAYER`, `CLUB`, `COACH`, va `COMPETITION`.
 Moi article chi dong gop toi da 1 count cho moi entity.
 
-Chi cac entities trong top 30 nay moi duoc generate timeline summaries cho
+Chi cac entities trong top 50 nay moi duoc generate timeline summaries cho
 window dang chay.
 
 ### Step A: Select articles for one entity
@@ -327,11 +327,18 @@ No chua toan bo read model day du cho serving layer:
  
 Backend API va frontend chi doc du lieu tu PostgreSQL, hoan toan khong truy van MongoDB.
 
+`mention_count_24h` phai duoc publish tu Mongo `news_entities` + `news_metadata`
+theo distinct article count trong 24 gio gan nhat. No khong duoc tinh tu
+`entity_timeline_items`, vi frontend can hien top entities ke ca khi entity do
+chua co timeline summary moi.
+
 ## Frontend/Product Expectations
 
 Frontend can nhan duoc tu backend API:
 
 - danh sach entities noi bat, sap xep theo muc do xuat hien/noi bat
+- home page hien toi da top 100 entities trong 24h, ke ca entity chua co
+  timeline summary
 - timeline rieng cua tung entity
 - timeline item da co:
   - title

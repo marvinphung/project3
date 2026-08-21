@@ -1,18 +1,36 @@
 # FootballPulse Airflow V2
 
-Airflow là scheduler và orchestrator trung tâm duy nhất cho FootballPulse Version 2 local pipeline.
+Airflow là orchestrator trung tâm cho pipeline FootballPulse v2.
 
-## 1. V2 DAGs
+## 1. DAG chính
 
-- `footballpulse_crawl` (`*/30 * * * *`):
-  Kích hoạt crawl candidates (tối đa 500 candidate/source, 100 fetch/source theo schedule). Khi hoàn tất sẽ trigger `footballpulse_process`.
-- `footballpulse_process` (`*/30 * * * *`):
-  Xu ly backlog entity extraction. Khi hoàn tất sẽ trigger `footballpulse_publish`.
-- `footballpulse_publish` (`*/15 * * * *`):
-  Publish read model can thiet tu MongoDB len PostgreSQL/Supabase.
+`footballpulse_pipeline` là flow production/local chính:
 
-## 2. Execution model
+```text
+crawl -> entities_extraction -> content_summary -> publish
+```
 
-- Airflow chạy với `LocalExecutor` và metadata database riêng biệt `footballpulse_airflow` trên PostgreSQL container để không ảnh hưởng tới public read model (`footballpulse_v2`).
-- Các worker container (`crawler`, `entities-extraction`, `publisher`) là one-shot commands, được kích hoạt theo lượt bounded run bởi Airflow task (không chạy vòng lặp vô tận độc lập).
-- Tất cả các DAG có `catchup=False`, `max_active_runs=1`, bounded retries (2 lần), timeout rõ ràng.
+Lịch mặc định: `5,35 * * * *` UTC, cấu hình bằng `FOOTBALLPULSE_V2_PIPELINE_SCHEDULE`.
+
+Các task đều chạy one-shot command qua Docker Compose:
+
+- `crawl`: chạy crawler, ghi `news_metadata` và `news_content` vào MongoDB.
+- `entities_extraction`: tạo `filtered_content`, extract canonical entities, ghi `news_entities`.
+- `content_summary`: tạo timeline summary 3h UTC cho top 50 entities trong 24h và backfill 7 ngày.
+- `publish`: đẩy read model sang Supabase PostgreSQL cho backend/frontend.
+
+## 2. DAG stage thủ công
+
+Các DAG sau vẫn tồn tại để debug/chạy riêng từng stage, nhưng `schedule=None` để tránh chạy trùng với flow chính:
+
+- `footballpulse_crawl`
+- `footballpulse_process`
+- `footballpulse_summary`
+- `footballpulse_publish`
+
+## 3. Execution model
+
+- Airflow dùng metadata DB riêng trong volume `footballpulse_v2_airflow_data`.
+- Worker service (`crawler`, `entities-extraction`, `content-summary`, `publisher`) là bounded one-shot commands.
+- `catchup=False`, `max_active_runs=1`, retry 2 lần.
+- Backend API và frontend không nằm trong Airflow flow; chúng là serving layer đọc PostgreSQL/Supabase.

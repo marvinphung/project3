@@ -25,7 +25,7 @@ Tai lieu nguon:
 - `kafka`
 - `content-summary-service`
 
-`content-summary-service` tao timeline theo top 30 entities trong 24h gan nhat.
+`content-summary-service` tao timeline theo top 50 entities trong 24h gan nhat.
 Moi entity/window chi gui toi da 5 `news_content.content` vao LLM, duoc chon
 bang so lan target entity xuat hien trong `news_content.filtered_content`.
 Mac dinh command `summary` backfill cac bucket 3h trong 7 ngay gan nhat va skip

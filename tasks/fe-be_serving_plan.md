@@ -17,7 +17,7 @@ frontend tai `http://192.168.1.4:8443`.
 
 ### Dang hoat dong
 
-- Homepage `/` render duoc top 10 entities.
+- Homepage `/` render duoc top 100 entities.
 - `GET /api/v2/entities/top?limit=10&window=24h` tra `200`.
 - Search `/tim-kiem?q=Arsenal` render duoc ket qua.
 - `GET /api/v2/entities/search?q=Arsenal` tra `200`.
@@ -65,7 +65,7 @@ frontend tai `http://192.168.1.4:8443`.
 
 ### Entity Endpoints
 
-`GET /api/v2/entities/top?window=24h&limit=10`
+`GET /api/v2/entities/top?window=24h&limit=100`
 
 - Return top canonical entities ranked by distinct article count in last 24h.
 - Response fields: `id`, `entity_type`, `canonical_name`, `slug`, `aliases`,
@@ -591,7 +591,7 @@ Description: Verify backend, frontend, and PostgreSQL read model together.
 
 Acceptance criteria:
 
-- [ ] Homepage renders 10 top entities.
+- [ ] Homepage renders 100 top entities.
 - [ ] Clicking a top entity renders timeline.
 - [ ] Searching `Arsenal` returns a result and click opens timeline.
 - [ ] `/tin-moi` renders articles.

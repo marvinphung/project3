@@ -19,7 +19,7 @@ try:
 
     @dag(
         dag_id="footballpulse_publish",
-        schedule="*/15 * * * *",
+        schedule=None,
         start_date=pendulum.datetime(2026, 1, 1, tz="Asia/Ho_Chi_Minh"),
         catchup=False,
         max_active_runs=1,

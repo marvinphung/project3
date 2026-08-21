@@ -39,6 +39,7 @@ class FakeMongoDatabase:
         self.canonical_entities = FakeMongoCollection()
         self.news_metadata = FakeMongoCollection()
         self.news_content = FakeMongoCollection()
+        self.news_entities = FakeMongoCollection()
 
 
 def test_slugify_and_normalize_entity_type() -> None:
@@ -134,3 +135,55 @@ def test_publisher_backfill_articles() -> None:
     count = publisher.backfill_source_articles()
     assert count == 1
     assert conn_mock.execute.call_count >= 2
+
+
+def test_refresh_popularity_upserts_entities_from_news_entities() -> None:
+    mongo = FakeMongoDatabase()
+    postgres_mock = MagicMock()
+    conn_mock = MagicMock()
+    postgres_mock.begin.return_value.__enter__.return_value = conn_mock
+
+    article_id = uuid4()
+    player_id = UUID("22222222-2222-2222-2222-222222222222")
+    crawl_date = datetime.now(UTC)
+
+    mongo.news_metadata.insert_one(
+        {
+            "_id": article_id,
+            "title": "Bukayo Saka update",
+            "crawl_date": crawl_date,
+        }
+    )
+    mongo.news_entities.insert_one(
+        {
+            "_id": article_id,
+            "entities": [
+                {
+                    "canonical_entity_id": player_id,
+                    "canonical_name": "Bukayo Saka",
+                    "label": "PLAYER",
+                },
+                {
+                    "canonical_entity_id": player_id,
+                    "canonical_name": "Bukayo Saka",
+                    "label": "PLAYER",
+                },
+            ],
+        }
+    )
+
+    publisher = V2Publisher(mongo=mongo, postgres=postgres_mock)  # type: ignore[arg-type]
+    publisher.refresh_popularity_scores()
+
+    execute_params: list[dict[str, Any]] = []
+    for call in conn_mock.execute.call_args_list:
+        if len(call.args) <= 1:
+            continue
+        params = call.args[1]
+        if isinstance(params, list):
+            execute_params.extend(params)
+        else:
+            execute_params.append(params)
+    upsert_params = next(params for params in execute_params if params.get("canonical_name") == "Bukayo Saka")
+    assert upsert_params["entity_type"] == "PLAYER"
+    assert upsert_params["mention_count_24h"] == 1
