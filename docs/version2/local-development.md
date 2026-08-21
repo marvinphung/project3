@@ -1,36 +1,22 @@
 # Local Development V2
 
-Local development hien tai phai duoc hieu theo source-of-truth moi:
+Local development follows the current source-of-truth architecture:
 
 ```text
 Airflow-managed pipeline:
-crawler -> entities-extraction-service -> content-summary-service -> publish
+crawler -> entities-extraction -> content-summary -> publish
 
 Serving layer:
-backend-api -> frontend
+frontend -> backend-api -> Supabase PostgreSQL
 ```
 
-Tai lieu nguon:
+Backend API and publisher always use Supabase PostgreSQL for the serving read
+model. There is no local PostgreSQL fallback for backend serving data.
 
-- [source-of-truth-entity-timeline-architecture.md](/home/pmv259/Documents/personal-projects/project3/docs/version2/source-of-truth-entity-timeline-architecture.md)
+## Main References
 
-## What Still Exists In Code
-
-- `crawler`
-- `entities-extraction-service`
-- `publish`
-- `backend-api`
-- `frontend`
-- `airflow`
-- `kafka`
-- `content-summary-service`
-
-`content-summary-service` tao timeline theo quota 24h: top 50 `PLAYER`,
-top 30 `COACH`, top 30 `CLUB`.
-Moi entity/window chi gui toi da 5 `news_content.content` vao LLM, duoc chon
-bang so lan target entity xuat hien trong `news_content.filtered_content`.
-Mac dinh command `summary` backfill cac bucket 3h trong 7 ngay gan nhat va skip
-entity/window da co summary `COMPLETED`.
+- [Architecture source of truth](source-of-truth-entity-timeline-architecture.md)
+- [Deployment and command guide](../DEPLOYMENT.md)
 
 ## Sync Workspace
 
@@ -38,74 +24,55 @@ entity/window da co summary `COMPLETED`.
 uv sync --all-packages --all-extras --group dev
 ```
 
-## Start Infra
+## Start Local Infrastructure
 
 ```bash
 docker compose -f docker-compose.v2.yml up -d mongodb mongodb-init kafka
 ```
 
-## Serving Database Rule
-
-Backend API va publisher bat buoc dung Supabase qua `SUPABASE_DATABASE_URL`
-hoac `SUPABASE_DB_HOST`.
-
-Dieu nay ap dung cho ca local va production:
-
-- backend local doc Supabase
-- backend Render doc Supabase
-- publisher local/Airflow day read model len Supabase
-- repo khong con local PostgreSQL fallback cho serving read model
-
-Frontend local chi khac o API base URL:
+## Run Pipeline With Docker
 
 ```bash
-VITE_API_BASE_URL=http://localhost:8000
+docker compose -f docker-compose.v2.yml run --rm crawler python -m footballpulse_pipeline crawl --max-articles 100
+docker compose -f docker-compose.v2.yml run --rm entities-extraction python -m footballpulse_pipeline process --limit 100
+docker compose -f docker-compose.v2.yml run --rm content-summary python -m footballpulse_pipeline summary --backfill-days 7
+docker compose -f docker-compose.v2.yml run --rm publisher python -m footballpulse_pipeline publish --limit 100
 ```
 
-Frontend tren Vercel dung backend Render:
+## Run Pipeline With uv
 
 ```bash
-VITE_API_BASE_URL=<Render backend public URL>
+uv run python -m footballpulse_pipeline crawl --max-articles 100
+uv run python -m footballpulse_pipeline process --limit 100
+uv run python -m footballpulse_pipeline summary --backfill-days 7
+uv run python -m footballpulse_pipeline publish --limit 100
 ```
 
-## Run Stages
+## Run Serving Locally
 
-Crawler:
+Backend:
 
 ```bash
-python3 -m footballpulse_pipeline crawl --max-articles 10
+uv run python -m footballpulse_api_gateway.runtime_v2
 ```
 
-Entities extraction:
+Frontend:
 
 ```bash
-python3 -m footballpulse_pipeline process --limit 10
+cd frontend
+npm install
+VITE_API_BASE_URL=http://localhost:8000 npm run dev
 ```
 
-Content summary:
+## Content Summary Rule
 
-```bash
-python3 -m footballpulse_pipeline summary
-```
+`content-summary-service` backfills fixed 3-hour UTC buckets by
+`news_metadata.crawl_date`. It generates summaries for entities with the highest
+distinct article count in the previous 24 hours:
 
-Single summary window neu can replay/debug mot bucket cu the:
+- top 50 `PLAYER`
+- top 30 `COACH`
+- top 30 `CLUB`
 
-```bash
-python3 -m footballpulse_pipeline summary \
-  --window-start 2026-08-20T15:00:00Z \
-  --window-end 2026-08-20T18:00:00Z
-```
-
-Publisher:
-
-```bash
-python3 -m footballpulse_pipeline publish --limit 20
-```
-
-Lenh nay publish len Supabase. Neu thieu Supabase env, command se fail fast.
-
-API:
-
-```bash
-PYTHONPATH=packages/pipeline/src:packages/runtime-config/src:packages/event-contracts/src:services/api-gateway/src:services/crawler-service/src:services/entities-extraction-service/src:services/publisher-service/src python3 -m footballpulse_api_gateway.runtime_v2
-```
+For each entity/window, it sends up to 5 selected `news_content.content` values
+to the LLM, ranked by mention count in `news_content.filtered_content`.
