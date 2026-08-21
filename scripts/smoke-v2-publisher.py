@@ -23,9 +23,9 @@ def main() -> None:
     mongo = MongoClient(mongo_url, uuidRepresentation="standard")
     database = mongo[os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse_v2")]
 
-    postgres_url = os.getenv("FOOTBALLPULSE_V2_POSTGRES_URL")
-    if postgres_url:
-        engine = create_engine(postgres_url, pool_pre_ping=True)
+    supabase_url = os.getenv("SUPABASE_DATABASE_URL")
+    if supabase_url:
+        engine = create_engine(supabase_url, pool_pre_ping=True)
     elif os.getenv("SUPABASE_DB_HOST"):
         url = URL.create(
             "postgresql+psycopg",
@@ -37,15 +37,7 @@ def main() -> None:
         )
         engine = create_engine(url, pool_pre_ping=True)
     else:
-        url = URL.create(
-            "postgresql+psycopg",
-            username=os.getenv("FOOTBALLPULSE_POSTGRES_USER", "footballpulse"),
-            password=os.getenv("FOOTBALLPULSE_POSTGRES_PASSWORD", "footballpulse_v2_local"),
-            host=os.getenv("FOOTBALLPULSE_POSTGRES_HOST", "127.0.0.1"),
-            port=int(os.getenv("FOOTBALLPULSE_POSTGRES_PORT", "15432")),
-            database=os.getenv("FOOTBALLPULSE_POSTGRES_DB", "footballpulse_v2"),
-        )
-        engine = create_engine(url, pool_pre_ping=True)
+        raise RuntimeError("Supabase database configuration is required")
 
     publisher = V2Publisher(mongo=database, postgres=engine)
     published = publisher.publish_pending(limit=50)
@@ -61,4 +53,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

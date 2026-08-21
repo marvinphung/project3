@@ -70,25 +70,6 @@ services:
     volumes:
       - footballpulse_v2_kafka_data:/tmp/kraft-combined-logs
 
-  postgres:
-    image: pgvector/pgvector:0.8.5-pg17-bookworm
-    environment:
-      POSTGRES_DB: footballpulse_v2
-      POSTGRES_USER: footballpulse
-      POSTGRES_PASSWORD: footballpulse_v2_local
-    ports:
-      - "127.0.0.1:15432:5432"
-    volumes:
-      - footballpulse_v2_postgres_data:/var/lib/postgresql/data
-      - ./infrastructure/postgres/init/001-enable-vector.sql:/docker-entrypoint-initdb.d/001-enable-vector.sql:ro
-      - ./infrastructure/postgres/init/003-create-airflow-db.sql:/docker-entrypoint-initdb.d/003-create-airflow-db.sql:ro
-      - ./supabase/migrations/202608180001_v2_product_schema.sql:/docker-entrypoint-initdb.d/002-v2-product-schema.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U footballpulse -d footballpulse_v2"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
   api:
     image: footballpulse-v2-runtime:local
     build:
@@ -99,19 +80,18 @@ services:
         condition: service_completed_successfully
       kafka:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
     env_file:
       - .env
     environment:
       FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
       FOOTBALLPULSE_V2_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
       FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      FOOTBALLPULSE_POSTGRES_HOST: postgres
-      FOOTBALLPULSE_POSTGRES_PORT: 5432
-      FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
-      SUPABASE_DB_HOST: ""
-      SUPABASE_DATABASE_URL: ""
+      SUPABASE_DATABASE_URL: ${SUPABASE_DATABASE_URL:-}
+      SUPABASE_DB_HOST: ${SUPABASE_DB_HOST:-}
+      SUPABASE_DB_PORT: ${SUPABASE_DB_PORT:-5432}
+      SUPABASE_DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      SUPABASE_DB_USER: ${SUPABASE_DB_USER:-}
+      SUPABASE_DB_PASSWORD: ${SUPABASE_DB_PASSWORD:-}
       PORT: 8000
     command: ["python", "-m", "footballpulse_api_gateway.runtime_v2"]
     ports:
@@ -128,18 +108,18 @@ services:
         condition: service_completed_successfully
       kafka:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
     env_file:
       - .env
     environment:
       FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
       FOOTBALLPULSE_V2_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
       FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      FOOTBALLPULSE_POSTGRES_HOST: postgres
-      FOOTBALLPULSE_POSTGRES_PORT: 5432
-      FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
-      SUPABASE_DB_HOST: ""
+      SUPABASE_DATABASE_URL: ${SUPABASE_DATABASE_URL:-}
+      SUPABASE_DB_HOST: ${SUPABASE_DB_HOST:-}
+      SUPABASE_DB_PORT: ${SUPABASE_DB_PORT:-5432}
+      SUPABASE_DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      SUPABASE_DB_USER: ${SUPABASE_DB_USER:-}
+      SUPABASE_DB_PASSWORD: ${SUPABASE_DB_PASSWORD:-}
     command: ["python", "-m", "footballpulse_pipeline", "crawl", "--max-articles", "100"]
     restart: "no"
 
@@ -153,19 +133,18 @@ services:
         condition: service_completed_successfully
       kafka:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
     env_file:
       - .env
     environment:
       FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
       FOOTBALLPULSE_V2_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
       FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      FOOTBALLPULSE_POSTGRES_HOST: postgres
-      FOOTBALLPULSE_POSTGRES_PORT: 5432
-      FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
-      SUPABASE_DB_HOST: ""
-      SUPABASE_DATABASE_URL: ""
+      SUPABASE_DATABASE_URL: ${SUPABASE_DATABASE_URL:-}
+      SUPABASE_DB_HOST: ${SUPABASE_DB_HOST:-}
+      SUPABASE_DB_PORT: ${SUPABASE_DB_PORT:-5432}
+      SUPABASE_DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      SUPABASE_DB_USER: ${SUPABASE_DB_USER:-}
+      SUPABASE_DB_PASSWORD: ${SUPABASE_DB_PASSWORD:-}
     command: ["python", "-m", "footballpulse_pipeline", "process", "--limit", "100"]
     restart: "no"
 
@@ -177,18 +156,17 @@ services:
     depends_on:
       mongodb-init:
         condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
     env_file:
       - .env
     environment:
       FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
       FOOTBALLPULSE_V2_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
-      FOOTBALLPULSE_POSTGRES_HOST: postgres
-      FOOTBALLPULSE_POSTGRES_PORT: 5432
-      FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
-      SUPABASE_DB_HOST: ""
-      SUPABASE_DATABASE_URL: ""
+      SUPABASE_DATABASE_URL: ${SUPABASE_DATABASE_URL:-}
+      SUPABASE_DB_HOST: ${SUPABASE_DB_HOST:-}
+      SUPABASE_DB_PORT: ${SUPABASE_DB_PORT:-5432}
+      SUPABASE_DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      SUPABASE_DB_USER: ${SUPABASE_DB_USER:-}
+      SUPABASE_DB_PASSWORD: ${SUPABASE_DB_PASSWORD:-}
     command: ["python", "-m", "footballpulse_pipeline", "summary"]
     restart: "no"
 
@@ -202,19 +180,18 @@ services:
         condition: service_completed_successfully
       kafka:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
     env_file:
       - .env
     environment:
       FOOTBALLPULSE_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
       FOOTBALLPULSE_V2_MONGODB_URL: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
       FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      FOOTBALLPULSE_POSTGRES_HOST: postgres
-      FOOTBALLPULSE_POSTGRES_PORT: 5432
-      FOOTBALLPULSE_V2_POSTGRES_URL: postgresql+psycopg://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_v2
-      SUPABASE_DB_HOST: ""
-      SUPABASE_DATABASE_URL: ""
+      SUPABASE_DATABASE_URL: ${SUPABASE_DATABASE_URL:-}
+      SUPABASE_DB_HOST: ${SUPABASE_DB_HOST:-}
+      SUPABASE_DB_PORT: ${SUPABASE_DB_PORT:-5432}
+      SUPABASE_DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      SUPABASE_DB_USER: ${SUPABASE_DB_USER:-}
+      SUPABASE_DB_PASSWORD: ${SUPABASE_DB_PASSWORD:-}
     command: ["python", "-m", "footballpulse_pipeline", "publish", "--limit", "100"]
     restart: "no"
 
@@ -224,14 +201,11 @@ services:
       context: .
       dockerfile: services/airflow.Dockerfile
     restart: "no"
-    depends_on:
-      postgres:
-        condition: service_healthy
     env_file:
       - .env
     environment: &airflow-env
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://footballpulse:footballpulse_v2_local@postgres:5432/footballpulse_airflow
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-webserver:8080/execution/"
@@ -245,6 +219,7 @@ services:
     command: ["bash", "-c", "airflow db migrate"]
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
+      - footballpulse_v2_airflow_data:/opt/airflow
 
   airflow-dag-processor:
     image: footballpulse-v2-airflow:local
@@ -255,14 +230,13 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
     env_file:
       - .env
     environment: *airflow-env
     command: ["airflow", "dag-processor"]
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
+      - footballpulse_v2_airflow_data:/opt/airflow
 
   airflow-scheduler:
     image: footballpulse-v2-airflow:local
@@ -278,14 +252,13 @@ services:
         condition: service_completed_successfully
       kafka:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
     env_file:
       - .env
     environment: *airflow-env
     command: ["airflow", "scheduler"]
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
+      - footballpulse_v2_airflow_data:/opt/airflow
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/workspace
     healthcheck:
@@ -312,6 +285,7 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
+      - footballpulse_v2_airflow_data:/opt/airflow
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://localhost:8080/health || exit 0"]
       interval: 10s
@@ -322,4 +296,4 @@ services:
 volumes:
   footballpulse_v2_mongodb_data:
   footballpulse_v2_kafka_data:
-  footballpulse_v2_postgres_data:
+  footballpulse_v2_airflow_data:

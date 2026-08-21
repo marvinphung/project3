@@ -54,6 +54,16 @@ class FakeDatabase:
         self.entity_timeline_summaries = FakeCollection()
 
 
+class CountingLLMClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def generate(self, prompt: str) -> str:
+        del prompt
+        self.calls += 1
+        return '{"title":"Timeline title","content":"Timeline content"}'
+
+
 def test_window_planner() -> None:
     dt = datetime(2026, 8, 20, 7, 45, tzinfo=UTC)
     floored = floor_3h_window(dt)
@@ -69,6 +79,13 @@ def test_window_planner() -> None:
     )
     assert len(windows) == 3
     assert windows[0] == (datetime(2026, 8, 20, 0, 0, tzinfo=UTC), datetime(2026, 8, 20, 3, 0, tzinfo=UTC))
+
+
+def test_latest_closed_window_uses_fixed_utc_buckets() -> None:
+    start, end = get_latest_closed_3h_window(datetime(2026, 8, 21, 1, 0, tzinfo=UTC))
+
+    assert start == datetime(2026, 8, 20, 21, 0, tzinfo=UTC)
+    assert end == datetime(2026, 8, 21, 0, 0, tzinfo=UTC)
 
 
 def test_summary_generator_flow() -> None:
@@ -148,6 +165,54 @@ def test_summary_generator_flow() -> None:
     # Check idempotency / skip-if-existing
     second_run = generator.process_window(window_start, window_end)
     assert len(second_run) == 2
+
+
+def test_summary_generator_processes_recent_article_windows_idempotently() -> None:
+    db = FakeDatabase()
+    arsenal_id = UUID("11111111-1111-1111-1111-111111111111")
+    now = datetime(2026, 8, 21, 7, 45, tzinfo=UTC)
+    article_times = [
+        datetime(2026, 8, 20, 4, 0, tzinfo=UTC),
+        datetime(2026, 8, 20, 10, 0, tzinfo=UTC),
+    ]
+
+    for index, crawl_date in enumerate(article_times):
+        article_id = uuid4()
+        db.news_metadata.insert_one(
+            {
+                "_id": article_id,
+                "title": f"Arsenal update {index}",
+                "crawl_date": crawl_date,
+            }
+        )
+        db.news_content.insert_one(
+            {
+                "_id": article_id,
+                "content": "Arsenal clean content.",
+                "filtered_content": "Arsenal filtered content.",
+            }
+        )
+        db.news_entities.insert_one(
+            {
+                "_id": article_id,
+                "entities": [
+                    {"canonical_entity_id": arsenal_id, "canonical_name": "Arsenal", "label": "CLUB"},
+                ],
+            }
+        )
+
+    llm = CountingLLMClient()
+    generator = SummaryGenerator(database=db, llm_client=llm)  # type: ignore[arg-type]
+    first_run = generator.process_recent_windows(days=7, now=now)
+    second_run = generator.process_recent_windows(days=7, now=now)
+
+    assert len(first_run) == 2
+    assert len(second_run) == 2
+    assert llm.calls == 2
+    assert sorted(s["window_start"] for s in first_run) == [
+        datetime(2026, 8, 20, 3, 0, tzinfo=UTC),
+        datetime(2026, 8, 20, 9, 0, tzinfo=UTC),
+    ]
 
 
 def test_llm_response_parser_accepts_plain_text_fallback() -> None:

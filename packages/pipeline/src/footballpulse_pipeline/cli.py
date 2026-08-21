@@ -12,7 +12,6 @@ from uuid import UUID
 from confluent_kafka import Consumer
 from footballpulse_content_summary_service.summary_generator import SummaryGenerator
 from footballpulse_content_summary_service.window_planner import (
-    get_latest_closed_3h_window,
     to_utc,
 )
 from footballpulse_entities_extraction_service.v2_processor import (
@@ -63,7 +62,9 @@ def _mongo_client() -> MongoClient[dict[str, object]]:
 
 
 def _postgres_engine() -> Any:
-    if os.getenv("SUPABASE_DB_HOST"):
+    if supabase_url := os.getenv("SUPABASE_DATABASE_URL"):
+        url = supabase_url
+    elif os.getenv("SUPABASE_DB_HOST"):
         url = URL.create(
             "postgresql+psycopg",
             username=os.environ["SUPABASE_DB_USER"],
@@ -73,14 +74,7 @@ def _postgres_engine() -> Any:
             database=os.environ.get("SUPABASE_DB_NAME", "postgres"),
         )
     else:
-        url = URL.create(
-            "postgresql+psycopg",
-            username=os.getenv("FOOTBALLPULSE_POSTGRES_USER", "footballpulse"),
-            password=os.getenv("FOOTBALLPULSE_POSTGRES_PASSWORD", "footballpulse_v2_local"),
-            host=os.getenv("FOOTBALLPULSE_POSTGRES_HOST", "127.0.0.1"),
-            port=int(os.getenv("FOOTBALLPULSE_POSTGRES_PORT", "15432")),
-            database=os.getenv("FOOTBALLPULSE_POSTGRES_DB", "footballpulse_v2"),
-        )
+        raise RuntimeError("Supabase database configuration is required for publish")
     return create_engine(url, pool_pre_ping=True)
 
 
@@ -257,27 +251,35 @@ def _run_summary(
     window_start_str: str | None,
     window_end_str: str | None,
     force: bool = False,
+    backfill_days: int = 7,
 ) -> int:
     mongo = _mongo_client()
     try:
         database = mongo[os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse_v2")]
+        generator = SummaryGenerator(database=database)
         if window_start_str and window_end_str:
             window_start = to_utc(datetime.fromisoformat(window_start_str.replace("Z", "+00:00")))
             window_end = to_utc(datetime.fromisoformat(window_end_str.replace("Z", "+00:00")))
+            summaries = generator.process_window(
+                window_start=window_start,
+                window_end=window_end,
+                force_recompute=force,
+            )
+            print(
+                f"footballpulse_pipeline summary completed: "
+                f"window=[{window_start.isoformat()} -> {window_end.isoformat()}], "
+                f"generated={len(summaries)}"
+            )
         else:
-            window_start, window_end = get_latest_closed_3h_window()
-
-        generator = SummaryGenerator(database=database)
-        summaries = generator.process_window(
-            window_start=window_start,
-            window_end=window_end,
-            force_recompute=force,
-        )
-        print(
-            f"footballpulse_pipeline summary completed: "
-            f"window=[{window_start.isoformat()} -> {window_end.isoformat()}], "
-            f"generated={len(summaries)}"
-        )
+            summaries = generator.process_recent_windows(
+                days=backfill_days,
+                force_recompute=force,
+            )
+            print(
+                f"footballpulse_pipeline summary completed: "
+                f"backfill_days={backfill_days}, "
+                f"processed={len(summaries)}"
+            )
     finally:
         mongo.close()
     return 0
@@ -324,6 +326,7 @@ def main() -> None:
     summary.add_argument("--window-start", type=str, default=None)
     summary.add_argument("--window-end", type=str, default=None)
     summary.add_argument("--force", action="store_true", default=False)
+    summary.add_argument("--backfill-days", type=int, default=7)
 
     publish = subparsers.add_parser("publish")
     publish.add_argument("--limit", type=int, default=50)
@@ -346,5 +349,5 @@ def main() -> None:
     if args.command == "process":
         raise SystemExit(_run_process(args.limit))
     if args.command == "summary":
-        raise SystemExit(_run_summary(args.window_start, args.window_end, args.force))
+        raise SystemExit(_run_summary(args.window_start, args.window_end, args.force, args.backfill_days))
     raise SystemExit(_run_publish(args.limit))

@@ -42,11 +42,20 @@ Bien can co cho local stack:
 - `FOOTBALLPULSE_MONGODB_URL`
 - `FOOTBALLPULSE_V2_MONGODB_URL`
 - `FOOTBALLPULSE_V2_KAFKA_BOOTSTRAP_SERVERS`
-- `FOOTBALLPULSE_V2_POSTGRES_URL`
+- `SUPABASE_DATABASE_URL` hoac bo `SUPABASE_DB_HOST` / `SUPABASE_DB_USER` /
+  `SUPABASE_DB_PASSWORD`
 - `NER_MODEL_NAME` hoac `FOOTBALLPULSE_GLINER_MODEL`
 - `FOOTBALLPULSE_LLM_PROVIDER`
 - `FOOTBALLPULSE_LLM_MODEL`
 - provider API key tuong ung, vi du `OPENAI_API_KEY` hoac `GEMINI_API_KEY`
+
+Rule serving database:
+
+- backend local va backend Render deu doc Supabase
+- publish local/Airflow deu day read model len Supabase
+- khong dung local PostgreSQL fallback cho serving read model
+- frontend local set `VITE_API_BASE_URL=http://localhost:8000`
+- frontend Vercel set `VITE_API_BASE_URL=<Render backend public URL>`
 
 ## 3. Chay Full Stack
 
@@ -59,7 +68,6 @@ Services chinh:
 
 - `mongodb`
 - `kafka`
-- `postgres`
 - `api`
 - `crawler`
 - `entities-extraction`
@@ -79,7 +87,7 @@ npm run dev
 Ha tang:
 
 ```bash
-docker compose -f docker-compose.v2.yml up -d mongodb mongodb-init kafka postgres
+docker compose -f docker-compose.v2.yml up -d mongodb mongodb-init kafka
 ```
 
 Crawler:
@@ -102,6 +110,9 @@ Content summary:
 docker compose -f docker-compose.v2.yml run --rm content-summary \
   python -m footballpulse_pipeline summary
 ```
+
+Lenh tren mac dinh backfill cac bucket 3h trong 7 ngay gan nhat va skip
+entity/window da co summary `COMPLETED`.
 
 Publisher:
 
@@ -182,6 +193,8 @@ curl -s "http://127.0.0.1:8000/api/v2/articles?limit=5"
 
 - `process` hien tai chi con scope entity extraction.
 - `content-summary-service` dung `crawl_date` de chia bucket 3h UTC.
+- `content-summary-service` mac dinh backfill cac bucket 3h trong 7 ngay gan
+  nhat.
 - `content-summary-service` chi generate top 30 entities trong 24h gan nhat.
 - Moi entity/window chi gui toi da 5 clean contents vao LLM, chon theo so lan
   target entity xuat hien trong `filtered_content`.

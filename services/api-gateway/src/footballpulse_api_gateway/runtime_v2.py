@@ -20,11 +20,10 @@ from footballpulse_api_gateway.persistence.identity_repository import PostgresUs
 
 
 def database_url(environment: Mapping[str, str]) -> str:
-    if environment.get("FOOTBALLPULSE_V2_POSTGRES_URL"):
-        return environment["FOOTBALLPULSE_V2_POSTGRES_URL"]
     supabase_db_host = environment.get("SUPABASE_DB_HOST") or None
     supabase_database_url = environment.get("SUPABASE_DATABASE_URL") or None
-    footballpulse_database_url = environment.get("FOOTBALLPULSE_DATABASE_URL") or None
+    if supabase_database_url:
+        return supabase_database_url.replace("postgresql://", "postgresql+psycopg://", 1)
     if supabase_db_host:
         return URL.create(
             "postgresql+psycopg",
@@ -34,17 +33,7 @@ def database_url(environment: Mapping[str, str]) -> str:
             port=int(environment.get("SUPABASE_DB_PORT", "5432")),
             database=environment.get("SUPABASE_DB_NAME", "postgres"),
         ).render_as_string(hide_password=False)
-    explicit = supabase_database_url or footballpulse_database_url
-    if explicit:
-        return explicit.replace("postgresql://", "postgresql+psycopg://", 1)
-    return URL.create(
-        "postgresql+psycopg",
-        username=environment.get("FOOTBALLPULSE_POSTGRES_USER", "footballpulse"),
-        password=environment.get("FOOTBALLPULSE_POSTGRES_PASSWORD", "footballpulse_v2_local"),
-        host=environment.get("FOOTBALLPULSE_POSTGRES_HOST", "127.0.0.1"),
-        port=int(environment.get("FOOTBALLPULSE_POSTGRES_PORT", "15432")),
-        database=environment.get("FOOTBALLPULSE_POSTGRES_DB", "footballpulse_v2"),
-    ).render_as_string(hide_password=False)
+    raise RuntimeError("Supabase database configuration is required")
 
 
 def _bootstrap_user(

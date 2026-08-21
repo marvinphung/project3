@@ -198,7 +198,16 @@ timestamp bucket. Khong dung `published_time` de chia bucket summary, vi
 
 ### Step 0: Select entities to update
 
-Moi lan chay summary, service khong update timeline cho moi entity trong DB.
+Moi lan chay summary mac dinh se quet cac bucket 3 gio trong 7 ngay gan nhat,
+dua tren `news_metadata.crawl_date`.
+
+Neu mot bucket/window chua co summary thi service tao summary cho bucket do.
+Neu summary cua entity/window da ton tai voi status `COMPLETED` thi service skip,
+tru khi chay voi che do force recompute.
+
+Co the chay mot window cu the bang `--window-start` va `--window-end`.
+
+Service khong update timeline cho moi entity trong DB.
 
 Service chi lay top 30 entities xuat hien trong nhieu distinct articles nhat
 trong 24 gio gan nhat, tinh theo `news_metadata.crawl_date`. Day la top entity
@@ -269,20 +278,20 @@ Summary records duoc luu vao Mongo collection `entity_timeline_summaries`.
 
 ## Publish Logic
 
-### Initial publish
+### Initial/backfill summary before publish
 
-Lan publish dau tien can tao du lieu timeline cho cac moc:
+Truoc khi publish, `content-summary-service` can tao summary cho cac bucket 3
+gio trong 7 ngay gan nhat. Command mac dinh:
 
-```text
-0h, 3h, 6h, 12h, 15h, 18h, 21h
+```bash
+python -m footballpulse_pipeline summary
 ```
 
-Moi moc se dung:
+Command nay chi tao phan con thieu; cac entity/window da co summary `COMPLETED`
+se duoc skip.
 
-- time window 3 gio
-- du lieu summary/entity timeline tuong ung
-
-Muc tieu la tao bo timeline co san trong PostgreSQL de backend va frontend doc.
+Muc tieu la tao bo timeline co san trong Mongo `entity_timeline_summaries`, sau
+do publish materialize sang PostgreSQL de backend va frontend doc.
 
 ### Incremental publish
 

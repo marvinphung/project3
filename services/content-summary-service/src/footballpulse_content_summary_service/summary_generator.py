@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import signal
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -13,6 +15,7 @@ from footballpulse_runtime_config import log_event
 from pymongo.database import Database
 
 from footballpulse_content_summary_service.llm_client import LLMClient, create_llm_client
+from footballpulse_content_summary_service.window_planner import floor_3h_window, get_latest_closed_3h_window
 
 LOGGER = logging.getLogger("footballpulse.content_summary")
 SUMMARY_NAMESPACE = UUID("c384e508-4e31-4e4b-a25e-e4782bbbe528")
@@ -20,6 +23,11 @@ SUMMARY_NAMESPACE = UUID("c384e508-4e31-4e4b-a25e-e4782bbbe528")
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 TOP_ENTITY_LIMIT = 30
 MAX_ARTICLES_PER_ENTITY = 5
+DEFAULT_LLM_CALL_TIMEOUT_SECONDS = 45
+
+
+class LLMCallTimeoutError(TimeoutError):
+    pass
 
 
 def load_prompt_template(filename: str) -> str:
@@ -30,6 +38,28 @@ def load_prompt_template(filename: str) -> str:
 def deterministic_summary_id(entity_id: UUID, window_start: datetime, window_end: datetime) -> UUID:
     key = f"{entity_id}:{window_start.isoformat()}:{window_end.isoformat()}"
     return uuid5(SUMMARY_NAMESPACE, key)
+
+
+def _llm_call_timeout_seconds() -> int:
+    raw_value = os.getenv("FOOTBALLPULSE_LLM_CALL_TIMEOUT_SECONDS")
+    if raw_value is None:
+        return DEFAULT_LLM_CALL_TIMEOUT_SECONDS
+    return max(1, int(raw_value))
+
+
+def _generate_with_hard_timeout(llm: LLMClient, prompt: str) -> str:
+    timeout = _llm_call_timeout_seconds()
+
+    def _raise_timeout(_signum: int, _frame: object) -> None:
+        raise LLMCallTimeoutError(f"LLM call exceeded {timeout} seconds")
+
+    previous_handler = signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.alarm(timeout)
+    try:
+        return llm.generate(prompt)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,7 +189,34 @@ class SummaryGenerator:
                 entity_type=entity_type,
                 articles_content=articles_text,
             )
-            llm_result = self._parse_llm_timeline_item(self._llm.generate(prompt))
+            print(
+                "summary_llm_started "
+                f"window_start={window_start.isoformat()} "
+                f"entity={canonical_name} "
+                f"articles={len(distinct_article_ids)}",
+                flush=True,
+            )
+            try:
+                llm_result = self._parse_llm_timeline_item(
+                    _generate_with_hard_timeout(self._llm, prompt)
+                )
+            except Exception as exc:
+                log_event(
+                    LOGGER,
+                    "summary_llm_failed",
+                    window_start=window_start.isoformat(),
+                    entity=canonical_name,
+                    error_type=type(exc).__name__,
+                    error=str(exc)[:500],
+                )
+                print(
+                    "summary_llm_failed "
+                    f"window_start={window_start.isoformat()} "
+                    f"entity={canonical_name} "
+                    f"error={type(exc).__name__}",
+                    flush=True,
+                )
+                continue
             short_description = llm_result["title"]
             aggregated_news = llm_result["content"]
 
@@ -198,6 +255,49 @@ class SummaryGenerator:
             )
 
         return generated_summaries
+
+    def process_recent_windows(
+        self,
+        *,
+        days: int = 7,
+        now: datetime | None = None,
+        force_recompute: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Processes 3-hour crawl-date windows with articles in the recent lookback."""
+        if days < 1:
+            raise ValueError("days must be positive")
+
+        _latest_start, latest_end = get_latest_closed_3h_window(now)
+        lookback_start = latest_end - timedelta(days=days)
+        metadata = self._database.news_metadata.find(
+            {"crawl_date": {"$gte": lookback_start, "$lt": latest_end}}
+        )
+        window_starts = sorted(
+            {
+                floor_3h_window(crawl_date)
+                for document in metadata
+                if (crawl_date := document.get("crawl_date")) is not None
+            }
+        )
+
+        summaries: list[dict[str, Any]] = []
+        for window_start in window_starts:
+            window_end = window_start + timedelta(hours=3)
+            summaries.extend(
+                self.process_window(
+                    window_start=window_start,
+                    window_end=window_end,
+                    force_recompute=force_recompute,
+                )
+            )
+        log_event(
+            LOGGER,
+            "summary_recent_windows_completed",
+            days=days,
+            windows=len(window_starts),
+            summaries=len(summaries),
+        )
+        return summaries
 
     def _get_top_entities(self, window_end: datetime) -> list[tuple[UUID, str, str]]:
         window_end = self._to_utc(window_end)

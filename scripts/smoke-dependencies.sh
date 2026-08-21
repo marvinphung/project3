@@ -9,9 +9,9 @@ if [[ -f .env ]]; then
   environment_file=".env"
 fi
 
-compose=(docker compose --env-file "$environment_file" --profile core)
+compose=(docker compose --env-file "$environment_file" -f docker-compose.v2.yml)
 
-"${compose[@]}" up -d --wait kafka mongodb postgres redis
+"${compose[@]}" up -d --wait kafka mongodb
 "${compose[@]}" run --rm mongodb-init
 
 "${compose[@]}" exec -T kafka /opt/kafka/bin/kafka-topics.sh \
@@ -33,14 +33,5 @@ if (!smokeDb.transactions.findOne({_id: "wp11"}).verified) { quit(1); }
 smokeDb.transactions.deleteOne({_id: "wp11"});
 print("MongoDB transaction committed");
 '
-
-"${compose[@]}" exec -T postgres psql \
-  --username "${FOOTBALLPULSE_POSTGRES_USER:-footballpulse}" \
-  --dbname "${FOOTBALLPULSE_POSTGRES_DB:-footballpulse}" \
-  --tuples-only \
-  --command "SELECT extversion FROM pg_extension WHERE extname = 'vector';"
-
-"${compose[@]}" exec -T redis sh -c \
-  'REDISCLI_AUTH="$FOOTBALLPULSE_REDIS_PASSWORD" redis-cli ping'
 
 "${compose[@]}" ps

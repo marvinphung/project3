@@ -40,7 +40,10 @@ export default function EntityDetailPage({ kind }: { kind?: EntityKind }) {
     try {
       const s = new Date(start)
       const e = new Date(end)
-      return `${s.toLocaleDateString('vi-VN')} ${s.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - ${e.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} (UTC)`
+      const date = s.toLocaleDateString('vi-VN', { timeZone: 'UTC' })
+      const startTime = `${String(s.getUTCHours()).padStart(2, '0')}:00`
+      const endTime = `${String(e.getUTCHours()).padStart(2, '0')}:00`
+      return `${date} ${startTime} - ${endTime} (UTC)`
     } catch {
       return `${start} - ${end}`
     }
@@ -165,4 +168,3 @@ export default function EntityDetailPage({ kind }: { kind?: EntityKind }) {
     </main>
   )
 }
-
