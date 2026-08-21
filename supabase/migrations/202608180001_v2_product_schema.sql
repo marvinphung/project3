@@ -36,6 +36,10 @@ create table source_articles (
   published_at timestamptz,
   crawled_at timestamptz not null default now(),
   content_hash text,
+  slug text,
+  body text,
+  excerpt text,
+  language text not null default 'en',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -67,6 +71,8 @@ create index entities_popularity_idx on entities (mention_count_24h desc, canoni
 create index entities_canonical_name_idx on entities (canonical_name);
 create index entities_aliases_gin_idx on entities using gin (aliases);
 create index source_articles_published_at_idx on source_articles (published_at desc);
+create unique index source_articles_slug_unique_idx on source_articles (slug) where slug is not null;
+create index source_articles_sort_idx on source_articles (coalesce(published_at, crawled_at) desc);
 create index entity_timeline_items_entity_window_idx on entity_timeline_items (entity_id, window_start desc);
 create index entity_timeline_items_window_start_idx on entity_timeline_items (window_start desc);
 create index timeline_item_articles_article_idx on timeline_item_articles (article_id);

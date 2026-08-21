@@ -46,6 +46,10 @@ source_articles = sa.Table(
     sa.Column("published_at", sa.DateTime(timezone=True)),
     sa.Column("crawled_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("content_hash", sa.Text()),
+    sa.Column("slug", sa.Text()),
+    sa.Column("body", sa.Text()),
+    sa.Column("excerpt", sa.Text()),
+    sa.Column("language", sa.Text(), nullable=False, server_default="en"),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
 )

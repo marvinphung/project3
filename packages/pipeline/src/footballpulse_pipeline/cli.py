@@ -287,14 +287,16 @@ def _run_publish(limit: int) -> int:
     mongo = _mongo_client()
     engine = _postgres_engine()
     published = 0
+    backfilled = 0
     try:
         database = mongo[os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse_v2")]
         publisher = V2Publisher(mongo=database, postgres=engine)
         published = publisher.publish_pending(limit=limit)
+        backfilled = publisher.backfill_source_articles()
     finally:
         mongo.close()
         engine.dispose()
-    print(f"footballpulse_pipeline publish completed: published={published}")
+    print(f"footballpulse_pipeline publish completed: published={published}, backfilled={backfilled}")
     return 0
 
 

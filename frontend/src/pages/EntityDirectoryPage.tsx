@@ -38,17 +38,22 @@ export default function EntityDirectoryPage({ kind }: { kind: EntityKind }) {
         <EmptyState message={`Chưa có ${label.title.toLocaleLowerCase('vi')}`} sub="Entity sẽ xuất hiện sau khi có bài được publish." />
       )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {entities.map((entity) => (
-          <Link key={entity.id} to={`/${label.route}/${entity.id}`} className="rounded-xl border border-[#E5E7EB] bg-white p-4 transition-colors hover:border-[#78A83D]/50">
-            <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F3F7EE] font-bold text-[#5E8430]">{entity.name.charAt(0)}</span>
-              <div>
-                <h2 className="font-semibold text-[#111827]">{entity.name}</h2>
-                <p className="text-xs text-[#6B7280]">{entity.article_count} bài đã xuất bản</p>
+        {entities.map((entity) => {
+          const displayName = entity.canonical_name || entity.name || 'Entity'
+          const initial = displayName.charAt(0).toUpperCase() || '?'
+          const count = entity.mention_count_24h ?? entity.article_count ?? 0
+          return (
+            <Link key={entity.id} to={`/${label.route}/${entity.id}`} className="rounded-xl border border-[#E5E7EB] bg-white p-4 transition-colors hover:border-[#78A83D]/50">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F3F7EE] font-bold text-[#5E8430]">{initial}</span>
+                <div>
+                  <h2 className="font-semibold text-[#111827]">{displayName}</h2>
+                  <p className="text-xs text-[#6B7280]">{count} lượt nhắc 24h</p>
+                </div>
               </div>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          )
+        })}
       </div>
     </main>
   )

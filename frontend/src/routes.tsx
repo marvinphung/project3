@@ -20,6 +20,8 @@ import AdminPublishedPage from './pages/admin/AdminPublishedPage'
 import AdminStoryPage from './pages/admin/AdminStoryPage'
 import AdminArticlesPage from './pages/admin/AdminArticlesPage'
 
+import StaticInfoPage from './pages/StaticInfoPage'
+
 export const router = createBrowserRouter([
   {
     path: '/',
@@ -37,6 +39,10 @@ export const router = createBrowserRouter([
       { path: 'bai-viet/:id', Component: ArticleDetailPage },
       { path: 'story/:id', Component: StoryPage },
       { path: 'tim-kiem', Component: SearchPage },
+      { path: 'gioi-thieu', element: <StaticInfoPage type="about" /> },
+      { path: 'nguon-tin', element: <StaticInfoPage type="sources" /> },
+      { path: 'dieu-khoan', element: <StaticInfoPage type="terms" /> },
+      { path: 'lien-he', element: <StaticInfoPage type="contact" /> },
       { path: '*', Component: NotFoundPage },
     ],
   },

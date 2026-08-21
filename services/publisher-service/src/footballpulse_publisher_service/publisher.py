@@ -64,6 +64,8 @@ class V2Publisher:
         article_ids = summary.get("article_ids", [])
         articles_metadata = list(self._mongo.news_metadata.find({"_id": {"$in": article_ids}}))
         articles_map = {m["_id"]: m for m in articles_metadata}
+        articles_content = list(self._mongo.news_content.find({"_id": {"$in": article_ids}}))
+        content_map = {c["_id"]: c for c in articles_content}
 
         now = datetime.now(UTC)
 
@@ -72,9 +74,19 @@ class V2Publisher:
             connection.execute(
                 sa.text(
                     """
-                    insert into entities (id, entity_type, canonical_name, slug, aliases, last_seen_at, updated_at)
-                    values (:id, :entity_type::entity_type_v2, :canonical_name, :slug, :aliases, :last_seen_at, now())
+                    insert into entities (id, entity_type, name, canonical_name, slug, aliases, last_seen_at, updated_at)
+                    values (
+                        :id,
+                        cast(:entity_type as entity_type_v2),
+                        :canonical_name,
+                        :canonical_name,
+                        :slug,
+                        :aliases,
+                        :last_seen_at,
+                        now()
+                    )
                     on conflict (entity_type, slug) do update set
+                        name = excluded.canonical_name,
                         canonical_name = excluded.canonical_name,
                         aliases = case when array_length(excluded.aliases, 1) > 0 then excluded.aliases else entities.aliases end,
                         last_seen_at = greatest(entities.last_seen_at, excluded.last_seen_at),
@@ -98,37 +110,62 @@ class V2Publisher:
                     continue
                 pub_time = meta.get("published_time")
                 crawl_date = meta.get("crawl_date") or now
+                content_doc = content_map.get(art_id)
+                body = (
+                    content_doc.get("filtered_content")
+                    or content_doc.get("content")
+                    if content_doc
+                    else None
+                )
+                if not body:
+                    body = meta.get("description") or meta.get("title", "")
+                description = meta.get("description")
+                excerpt = description or (body[:240] if body else None)
+                title = meta.get("title", "Untitled")
+                art_slug = f"{slugify(title)}-{str(art_id)[:8]}"
+                language = meta.get("language") or "en"
+
                 connection.execute(
                     sa.text(
                         """
                         insert into source_articles (
                             id, title, url, canonical_url, source_name, domain_name,
-                            description, image_url, published_at, crawled_at, content_hash, updated_at
+                            description, image_url, published_at, crawled_at, content_hash,
+                            slug, body, excerpt, language, updated_at
                         )
                         values (
                             :id, :title, :url, :canonical_url, :source_name, :domain_name,
-                            :description, :image_url, :published_at, :crawled_at, :content_hash, now()
+                            :description, :image_url, :published_at, :crawled_at, :content_hash,
+                            :slug, :body, :excerpt, :language, now()
                         )
                         on conflict (canonical_url) do update set
                             title = excluded.title,
                             description = excluded.description,
                             image_url = excluded.image_url,
                             published_at = excluded.published_at,
+                            slug = coalesce(source_articles.slug, excluded.slug),
+                            body = coalesce(excluded.body, source_articles.body),
+                            excerpt = coalesce(excluded.excerpt, source_articles.excerpt),
+                            language = coalesce(excluded.language, source_articles.language),
                             updated_at = now()
                         """
                     ),
                     {
                         "id": art_id,
-                        "title": meta.get("title", "Untitled"),
+                        "title": title,
                         "url": meta.get("url", ""),
                         "canonical_url": meta.get("canonical_url", meta.get("url", "")),
                         "source_name": meta.get("source_name", "Unknown"),
                         "domain_name": meta.get("domain_name", "unknown.com"),
-                        "description": meta.get("description"),
+                        "description": description,
                         "image_url": meta.get("image_url"),
                         "published_at": pub_time,
                         "crawled_at": crawl_date,
                         "content_hash": meta.get("content_hash", ""),
+                        "slug": art_slug,
+                        "body": body,
+                        "excerpt": excerpt,
+                        "language": language,
                     },
                 )
 
@@ -249,3 +286,68 @@ class V2Publisher:
 
         return published_count
 
+    def backfill_source_articles(self) -> int:
+        """Backfills missing slug, body, excerpt, language for existing source_articles."""
+        with self._postgres.connect() as connection:
+            rows = connection.execute(
+                sa.text(
+                    """
+                    select id, title, description, url, canonical_url
+                    from source_articles
+                    where slug is null or body is null or excerpt is null
+                    """
+                )
+            ).mappings().all()
+
+        if not rows:
+            return 0
+
+        art_ids = [row["id"] for row in rows]
+        articles_metadata = list(self._mongo.news_metadata.find({"_id": {"$in": art_ids}}))
+        articles_map = {m["_id"]: m for m in articles_metadata}
+        articles_content = list(self._mongo.news_content.find({"_id": {"$in": art_ids}}))
+        content_map = {c["_id"]: c for c in articles_content}
+
+        updated = 0
+        with self._postgres.begin() as connection:
+            for row in rows:
+                art_id = row["id"]
+                meta = articles_map.get(art_id, {})
+                content_doc = content_map.get(art_id)
+                body = (
+                    content_doc.get("filtered_content")
+                    or content_doc.get("content")
+                    if content_doc
+                    else None
+                )
+                if not body:
+                    body = meta.get("description") or row.get("description") or row.get("title") or ""
+                description = meta.get("description") or row.get("description")
+                excerpt = description or (body[:240] if body else None)
+                title = row.get("title") or meta.get("title", "Untitled")
+                art_slug = f"{slugify(title)}-{str(art_id)[:8]}"
+                language = meta.get("language") or "en"
+
+                connection.execute(
+                    sa.text(
+                        """
+                        update source_articles
+                        set slug = coalesce(slug, :slug),
+                            body = coalesce(body, :body),
+                            excerpt = coalesce(excerpt, :excerpt),
+                            language = coalesce(language, :language),
+                            updated_at = now()
+                        where id = :id
+                        """
+                    ),
+                    {
+                        "id": art_id,
+                        "slug": art_slug,
+                        "body": body,
+                        "excerpt": excerpt,
+                        "language": language,
+                    },
+                )
+                updated += 1
+
+        return updated

@@ -55,18 +55,20 @@ export function MetaRow({ time, sources }: { time: string; sources: number }) {
 
 export function LargeNewsCard({ article }: { article: Article }) {
   return (
-    <Link to={`/bai-viet/${article.id}`} className="group block">
-      <div className="relative aspect-[16/9] rounded-xl overflow-hidden bg-[#E5E7EB] mb-3">
-        <img src={article.img} alt={article.headline} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
-        {article.status && (
-          <div className="absolute top-3 left-3">
-            <StatusBadge status={article.status} />
-          </div>
-        )}
-      </div>
-      <h2 className="text-xl font-bold text-[#111827] leading-snug mb-2 group-hover:text-[#78A83D] transition-colors line-clamp-2">
-        {article.headline}
-      </h2>
+    <div className="group block">
+      <Link to={`/bai-viet/${article.id}`} className="block">
+        <div className="relative aspect-[16/9] rounded-xl overflow-hidden bg-[#E5E7EB] mb-3">
+          <img src={article.img} alt={article.headline} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
+          {article.status && (
+            <div className="absolute top-3 left-3">
+              <StatusBadge status={article.status} />
+            </div>
+          )}
+        </div>
+        <h2 className="text-xl font-bold text-[#111827] leading-snug mb-2 group-hover:text-[#78A83D] transition-colors line-clamp-2">
+          {article.headline}
+        </h2>
+      </Link>
       <p className="text-sm text-[#6B7280] leading-relaxed mb-3 line-clamp-2">{article.summary}</p>
       <MetaRow time={article.time} sources={article.sources} />
       {article.entities.length > 0 && (
@@ -74,7 +76,7 @@ export function LargeNewsCard({ article }: { article: Article }) {
           <EntityChips entities={article.entities} />
         </div>
       )}
-    </Link>
+    </div>
   )
 }
 
@@ -96,14 +98,16 @@ export function MediumNewsCard({ article }: { article: Article }) {
 
 export function NewsRow({ article }: { article: Article }) {
   return (
-    <Link to={`/bai-viet/${article.id}`} className="group flex gap-4 py-4 border-b border-[#E5E7EB] last:border-0">
-      <div className="w-20 h-14 sm:w-24 sm:h-16 flex-shrink-0 rounded-lg overflow-hidden bg-[#E5E7EB]">
+    <div className="group flex gap-4 py-4 border-b border-[#E5E7EB] last:border-0">
+      <Link to={`/bai-viet/${article.id}`} className="w-20 h-14 sm:w-24 sm:h-16 flex-shrink-0 rounded-lg overflow-hidden bg-[#E5E7EB]">
         <img src={article.img} alt={article.headline} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
-      </div>
+      </Link>
       <div className="flex-1 min-w-0">
-        <h3 className="text-[15px] font-semibold text-[#111827] leading-snug line-clamp-2 group-hover:text-[#78A83D] transition-colors mb-1">
-          {article.headline}
-        </h3>
+        <Link to={`/bai-viet/${article.id}`} className="block">
+          <h3 className="text-[15px] font-semibold text-[#111827] leading-snug line-clamp-2 group-hover:text-[#78A83D] transition-colors mb-1">
+            {article.headline}
+          </h3>
+        </Link>
         <p className="text-xs text-[#6B7280] line-clamp-1 mb-1.5 hidden sm:block">{article.summary}</p>
         <div className="flex items-center gap-3 flex-wrap">
           <MetaRow time={article.time} sources={article.sources} />
@@ -115,7 +119,7 @@ export function NewsRow({ article }: { article: Article }) {
           </div>
         )}
       </div>
-    </Link>
+    </div>
   )
 }
 

@@ -38,6 +38,7 @@ class FakeMongoDatabase:
         self.entity_timeline_summaries = FakeMongoCollection()
         self.canonical_entities = FakeMongoCollection()
         self.news_metadata = FakeMongoCollection()
+        self.news_content = FakeMongoCollection()
 
 
 def test_slugify_and_normalize_entity_type() -> None:
@@ -102,3 +103,34 @@ def test_publisher_publishes_summary() -> None:
     updated_summary = mongo.entity_timeline_summaries.find_one({"_id": summary_id})
     assert updated_summary is not None
     assert updated_summary["published_at"] is not None
+
+
+def test_publisher_backfill_articles() -> None:
+    mongo = FakeMongoDatabase()
+    postgres_mock = MagicMock()
+    conn_mock = MagicMock()
+    postgres_mock.connect.return_value.__enter__.return_value = conn_mock
+    postgres_mock.begin.return_value.__enter__.return_value = conn_mock
+
+    art_id = uuid4()
+    conn_mock.execute.return_value.mappings.return_value.all.return_value = [
+        {
+            "id": art_id,
+            "title": "Arsenal Title",
+            "description": "Short description",
+            "url": "https://example.com/art",
+            "canonical_url": "https://example.com/art",
+        }
+    ]
+
+    mongo.news_content.insert_one(
+        {
+            "_id": art_id,
+            "content": "Full article body content here.",
+        }
+    )
+
+    publisher = V2Publisher(mongo=mongo, postgres=postgres_mock)  # type: ignore[arg-type]
+    count = publisher.backfill_source_articles()
+    assert count == 1
+    assert conn_mock.execute.call_count >= 2

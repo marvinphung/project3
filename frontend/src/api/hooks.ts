@@ -1,5 +1,24 @@
 import { useEffect, useState } from 'react'
-import { ApiError, getArticle, getArticleSources, getEntity, getStory, listArticles, listEntities, type ArticleListParams, type PublicArticle, type PublicArticleSource, type PublicEntity, type PublicStory } from './client'
+import {
+  ApiError,
+  getArticle,
+  getArticleSources,
+  getEntity,
+  getEntityById,
+  getEntityTimeline,
+  getStory,
+  getTopEntities,
+  listArticles,
+  listEntities,
+  searchEntities,
+  type ArticleListParams,
+  type PublicArticle,
+  type PublicArticleSource,
+  type PublicEntity,
+  type PublicEntitySummary,
+  type PublicEntityTimeline,
+  type PublicStory,
+} from './client'
 
 type QueryState<T> = {
   data: T | null

@@ -91,11 +91,14 @@ export type PublicEntityStories = {
 
 export type PublicEntity = {
   id: string
-  entity_type: 'PLAYER' | 'CLUB' | 'COACH' | 'COMPETITION'
+  entity_type: 'PLAYER' | 'CLUB' | 'COACH' | 'COMPETITION' | string
   name: string
+  canonical_name?: string
   slug: string
   story_count: number
   article_count: number
+  mention_count_24h?: number
+  aliases?: string[]
 }
 
 export type PublicStory = {
@@ -463,13 +466,26 @@ export function listEntities(params: { type?: string; query?: string; limit?: nu
   if (params.query) query.set('q', params.query)
   if (params.limit !== undefined) query.set('limit', String(params.limit))
   if (params.offset !== undefined) query.set('offset', String(params.offset))
-  return request<ListResponse<PublicEntity>>(`/api/v2/entities?${query}`)
+  return request<ListResponse<PublicEntity>>(`/api/v2/entities?${query}`).then((res) => ({
+    ...res,
+    items: (res.items || []).map((item) => ({
+      ...item,
+      name: item.canonical_name || item.name || 'Entity',
+      article_count: item.mention_count_24h ?? item.article_count ?? 0,
+      story_count: item.mention_count_24h ?? item.story_count ?? 0,
+    })),
+  }))
 }
 
 export function getEntity(entityType: string, entitySlug: string) {
   return request<PublicEntity>(
     `/api/v2/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entitySlug)}`,
-  )
+  ).then((item) => ({
+    ...item,
+    name: item.canonical_name || item.name || 'Entity',
+    article_count: item.mention_count_24h ?? item.article_count ?? 0,
+    story_count: item.mention_count_24h ?? item.story_count ?? 0,
+  }))
 }
 
 export function getStory(storyId: string) {

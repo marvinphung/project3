@@ -125,3 +125,230 @@ async def test_entity_timeline_endpoint() -> None:
     assert data["items"][0]["title"] == "Arsenal Victory"
     assert len(data["items"][0]["source_articles"]) == 1
     assert data["items"][0]["source_articles"][0]["source_name"] == "BBC Sport"
+
+
+@pytest.mark.asyncio
+async def test_get_entity_by_id_endpoint() -> None:
+    engine_mock = MagicMock()
+    conn_mock = MagicMock()
+    engine_mock.connect.return_value.__enter__.return_value = conn_mock
+
+    entity_id = UUID("11111111-1111-1111-1111-111111111111")
+    conn_mock.execute.return_value.mappings.return_value.one_or_none.return_value = {
+        "id": entity_id,
+        "entity_type": "CLUB",
+        "canonical_name": "Arsenal",
+        "slug": "arsenal",
+        "aliases": ["Gunners"],
+        "mention_count_24h": 3,
+        "last_seen_at": datetime.now(UTC),
+    }
+
+    app = create_public_v2_app(engine_mock)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(f"/api/v2/entities/{entity_id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["canonical_name"] == "Arsenal"
+    assert data["name"] == "Arsenal"
+
+
+@pytest.mark.asyncio
+async def test_list_entities_endpoint() -> None:
+    engine_mock = MagicMock()
+    conn_mock = MagicMock()
+    engine_mock.connect.return_value.__enter__.return_value = conn_mock
+
+    entity_id = UUID("11111111-1111-1111-1111-111111111111")
+    items_result = MagicMock()
+    items_result.mappings.return_value.all.return_value = [
+        {
+            "id": entity_id,
+            "entity_type": "CLUB",
+            "canonical_name": "Arsenal",
+            "slug": "arsenal",
+            "aliases": ["Gunners"],
+            "mention_count_24h": 3,
+            "last_seen_at": datetime.now(UTC),
+        }
+    ]
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 1
+
+    conn_mock.execute.side_effect = [items_result, count_result]
+
+    app = create_public_v2_app(engine_mock)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v2/entities?type=CLUB&limit=10")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert len(data["items"]) == 1
+    assert data["items"][0]["name"] == "Arsenal"
+
+
+@pytest.mark.asyncio
+async def test_list_articles_endpoint() -> None:
+    engine_mock = MagicMock()
+    conn_mock = MagicMock()
+    engine_mock.connect.return_value.__enter__.return_value = conn_mock
+
+    art_id = uuid4()
+    eid = uuid4()
+
+    articles_result = MagicMock()
+    articles_result.mappings.return_value.all.return_value = [
+        {
+            "id": art_id,
+            "title": "Arsenal Win Big",
+            "url": "https://example.com/art1",
+            "canonical_url": "https://example.com/art1",
+            "source_name": "Sky Sports",
+            "domain_name": "skysports.com",
+            "description": "Short desc",
+            "image_url": "https://example.com/img.jpg",
+            "published_at": datetime(2026, 8, 20, 10, 0, tzinfo=UTC),
+            "crawled_at": datetime(2026, 8, 20, 10, 5, tzinfo=UTC),
+            "slug": "arsenal-win-big-1234",
+            "body": "Full article text.",
+            "excerpt": "Short desc",
+            "language": "en",
+        }
+    ]
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 1
+
+    entities_result = MagicMock()
+    entities_result.mappings.return_value.all.return_value = [
+        {
+            "article_id": art_id,
+            "entity_id": eid,
+            "entity_type": "CLUB",
+            "name": "Arsenal",
+            "slug": "arsenal",
+        }
+    ]
+
+    conn_mock.execute.side_effect = [articles_result, count_result, entities_result]
+
+    app = create_public_v2_app(engine_mock)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v2/articles?limit=20")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 1
+    item = data["items"][0]
+    assert item["slug"] == "arsenal-win-big-1234"
+    assert item["title_vi"] == "Arsenal Win Big"
+    assert item["body_vi"] == "Full article text."
+    assert len(item["entities"]) == 1
+    assert item["entities"][0]["name"] == "Arsenal"
+
+
+@pytest.mark.asyncio
+async def test_list_articles_empty_db() -> None:
+    engine_mock = MagicMock()
+    conn_mock = MagicMock()
+    engine_mock.connect.return_value.__enter__.return_value = conn_mock
+
+    articles_result = MagicMock()
+    articles_result.mappings.return_value.all.return_value = []
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 0
+
+    conn_mock.execute.side_effect = [articles_result, count_result]
+
+    app = create_public_v2_app(engine_mock)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v2/articles?limit=20")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["items"] == []
+    assert data["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_article_by_slug_and_sources() -> None:
+    engine_mock = MagicMock()
+    conn_mock = MagicMock()
+    engine_mock.connect.return_value.__enter__.return_value = conn_mock
+
+    art_id = uuid4()
+    article_result = MagicMock()
+    article_result.mappings.return_value.one_or_none.return_value = {
+        "id": art_id,
+        "title": "Arsenal Win Big",
+        "url": "https://example.com/art1",
+        "canonical_url": "https://example.com/art1",
+        "source_name": "Sky Sports",
+        "domain_name": "skysports.com",
+        "description": "Short desc",
+        "image_url": "https://example.com/img.jpg",
+        "published_at": datetime(2026, 8, 20, 10, 0, tzinfo=UTC),
+        "crawled_at": datetime(2026, 8, 20, 10, 5, tzinfo=UTC),
+        "slug": "arsenal-win-big-1234",
+        "body": "Full article text.",
+        "excerpt": "Short desc",
+        "language": "en",
+    }
+    entities_result = MagicMock()
+    entities_result.mappings.return_value.all.return_value = []
+
+    conn_mock.execute.side_effect = [article_result, entities_result]
+
+    app = create_public_v2_app(engine_mock)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v2/articles/arsenal-win-big-1234")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["slug"] == "arsenal-win-big-1234"
+    assert data["title_vi"] == "Arsenal Win Big"
+
+    # Test sources endpoint
+    sources_result = MagicMock()
+    sources_result.mappings.return_value.one_or_none.return_value = {
+        "id": art_id,
+        "title": "Arsenal Win Big",
+        "url": "https://example.com/art1",
+        "canonical_url": "https://example.com/art1",
+        "source_name": "Sky Sports",
+        "published_at": datetime(2026, 8, 20, 10, 0, tzinfo=UTC),
+        "crawled_at": datetime(2026, 8, 20, 10, 5, tzinfo=UTC),
+    }
+    conn_mock.execute.side_effect = [sources_result]
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sources_res = await client.get("/api/v2/articles/arsenal-win-big-1234/sources")
+
+    assert sources_res.status_code == 200
+    s_data = sources_res.json()
+    assert len(s_data["items"]) == 1
+    assert s_data["items"][0]["source_name"] == "Sky Sports"
+    assert s_data["items"][0]["source_url"] == "https://example.com/art1"
+
+
+@pytest.mark.asyncio
+async def test_get_article_not_found() -> None:
+    engine_mock = MagicMock()
+    conn_mock = MagicMock()
+    engine_mock.connect.return_value.__enter__.return_value = conn_mock
+
+    article_result = MagicMock()
+    article_result.mappings.return_value.one_or_none.return_value = None
+    conn_mock.execute.side_effect = [article_result]
+
+    app = create_public_v2_app(engine_mock)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v2/articles/nonexistent-slug")
+
+    assert response.status_code == 404

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import ProgrammingError
@@ -79,6 +80,25 @@ def build_app(environment: Mapping[str, str] | None = None) -> FastAPI:
     app.router.routes.extend(auth_app.router.routes)
     app.exception_handlers.update(auth_app.exception_handlers)
     app.openapi_schema = None
+    cors_origins = [
+        origin.strip()
+        for origin in values.get(
+            "FOOTBALLPULSE_API_CORS_ORIGINS",
+            "http://localhost:8443,http://127.0.0.1:8443",
+        ).split(",")
+        if origin.strip()
+    ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_origin_regex=values.get(
+            "FOOTBALLPULSE_API_CORS_ORIGIN_REGEX",
+            r"^http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+):8443$",
+        ),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
 
     @app.get("/health", include_in_schema=False)
     async def health() -> dict[str, str]:
