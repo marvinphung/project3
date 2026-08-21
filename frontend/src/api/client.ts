@@ -478,14 +478,14 @@ export function listEntities(params: { type?: string; query?: string; limit?: nu
 }
 
 export function getEntity(entityType: string, entitySlug: string) {
-  return request<PublicEntity>(
-    `/api/v2/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entitySlug)}`,
-  ).then((item) => ({
-    ...item,
-    name: item.canonical_name || item.name || 'Entity',
-    article_count: item.mention_count_24h ?? item.article_count ?? 0,
-    story_count: item.mention_count_24h ?? item.story_count ?? 0,
-  }))
+  const requestedSlug = entitySlug.toLowerCase()
+  return listEntities({ type: entityType, query: entitySlug, limit: 100 }).then((response) => {
+    const entity = response.items.find((item) => item.slug.toLowerCase() === requestedSlug)
+    if (!entity) {
+      throw new ApiError(404, 'ENTITY_NOT_FOUND', 'Không tìm thấy entity')
+    }
+    return entity
+  })
 }
 
 export function getStory(storyId: string) {
