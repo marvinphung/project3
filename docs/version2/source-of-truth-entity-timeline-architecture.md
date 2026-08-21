@@ -23,6 +23,30 @@ Tai lieu nay mo ta:
 
 No khong co muc tieu mo ta lich su implementation cu.
 
+## Service Detail Docs
+
+Tai lieu nay la source of truth tong. Chi tiet tung service nam o:
+
+- `docs/version2/services/crawler-service.md`
+- `docs/version2/services/entities-extraction-service.md`
+- `docs/version2/services/content-summary-service.md`
+- `docs/version2/services/publish-service.md`
+- `docs/version2/services/backend-api-service.md`
+- `docs/version2/services/frontend-service.md`
+- `docs/version2/services/airflow-orchestration.md`
+
+Chi tiet database contracts nam o:
+
+- `docs/version2/database/database-overview.md`
+- `docs/version2/database/mongo-pipeline-store.md`
+- `docs/version2/database/supabase-postgres-read-model.md`
+- `docs/version2/database/source-management-schema.md`
+
+Khi sua behavior cua mot service, cap nhat file service tuong ung va kiem tra lai
+file tong nay neu behavior do thay doi boundary hoac luong du lieu end-to-end.
+Khi sua schema, collection, table, index hoac data ownership, cap nhat database
+docs tuong ung truoc.
+
 ## Product Goal
 
 FootballPulse v2 khong con tap trung vao viec chi crawl va hien thi danh sach bai
@@ -39,6 +63,59 @@ Muc tieu moi:
 - backend API doc Supabase
 - frontend hien thi entity noi bat va timeline rieng cho tung entity
 
+## Mental Model
+
+FootballPulse v2 co hai lop tach rieng:
+
+```text
+Pipeline layer:
+  tao data moi, chay bat dong bo, co the fail/retry, doc/ghi Mongo va publish sang PostgreSQL
+
+Serving layer:
+  chi doc PostgreSQL, phuc vu user request realtime, khong phu thuoc Mongo/Airflow trong request path
+```
+
+Neu mot trang frontend khong co data, khong sua frontend de doc Mongo. Can di
+nguoc theo chain:
+
+```text
+PostgreSQL read model -> publish -> Mongo summary/entities/content -> crawler/entity extraction/summary
+```
+
+## End-To-End Example
+
+Vi du article moi co noi dung ve Chelsea va Enzo Fernandez:
+
+1. `crawler` crawl article va luu:
+   - `news_metadata` voi `crawl_date=2026-08-21T01:12:00Z`
+   - `news_content.content` la clean text cua article
+2. `entities-extraction-service` thay article chua co `news_entities`:
+   - tao `filtered_content` tu `content`
+   - replace alias nhu `The Blues` ve `Chelsea`
+   - extract `Chelsea` la `CLUB`, `Enzo Fernandez` la `PLAYER`
+   - luu mentions vao `news_entities`
+3. `content-summary-service` chay sau do:
+   - vi job chay sau 03:00 UTC, latest closed window co the la `00:00-03:00`
+   - neu Chelsea hoac Enzo nam trong quota top entities theo 24h, service tao
+     timeline item cho entity do trong window `00:00-03:00`
+   - voi moi entity, service chon toi da 5 articles trong window co mention count
+     cao nhat trong `filtered_content`
+   - LLM tra ve `title` va `content`
+   - service luu vao `entity_timeline_summaries`
+4. `publish` doc summary va materialize sang Supabase:
+   - upsert `entities`
+   - upsert `source_articles`
+   - upsert `entity_timeline_items`
+   - upsert `timeline_item_articles`
+5. `backend-api` doc Supabase:
+   - home goi top entities
+   - `/clb/chelsea` resolve slug thanh entity id
+   - entity detail goi timeline theo entity id
+6. `frontend` render timeline cua Chelsea va source articles lien quan.
+
+Mot article co the tao du lieu cho nhieu entity timeline. Chelsea va Enzo co
+timeline rieng, du cung dung chung mot source article.
+
 ## High-Level System Flow
 
 ```text
@@ -46,7 +123,7 @@ Airflow-managed pipeline:
 (1) crawler -> (2) entities-extraction-service -> (3) content-summary-service -> (4) publish
 
 Serving layer:
-backend-api -> frontend
+frontend -> backend-api -> Supabase PostgreSQL
 ```
 
 Serving layer:
@@ -73,6 +150,8 @@ Mongo output toi thieu:
 - `news_content`
 
 Crawler khong tao timeline.
+
+Chi tiet: `docs/version2/services/crawler-service.md`
 
 ### 2. `entities-extraction-service`
 
@@ -121,6 +200,7 @@ Manchester United
 Chi tiet schema xem:
 
 - `docs/version2/mongo-canonical-entities-schema.md`
+- `docs/version2/services/entities-extraction-service.md`
 
 ### 3. `content-summary-service`
 
@@ -140,6 +220,8 @@ No su dung du lieu da co trong:
 - `news_content`
 - `news_entities`
 
+Chi tiet: `docs/version2/services/content-summary-service.md`
+
 ### 4. `publish`
 
 Trach nhiem:
@@ -150,6 +232,8 @@ Trach nhiem:
 Publish khong tao summary moi.
 No chi chuyen read model can thiet len Supabase.
 
+Chi tiet: `docs/version2/services/publish-service.md`
+
 ### 5. `backend-api`
 
 Trach nhiem:
@@ -158,6 +242,8 @@ Trach nhiem:
 - expose API cho frontend
 
 Backend API khong doc Mongo trong target architecture nay.
+
+Chi tiet: `docs/version2/services/backend-api-service.md`
 
 ### 6. `frontend`
 
@@ -168,6 +254,21 @@ Trach nhiem:
 - render timeline items duoc tong hop san
 
 Frontend khong goi worker, khong doc DB truc tiep.
+
+Chi tiet: `docs/version2/services/frontend-service.md`
+
+### 7. `airflow`
+
+Trach nhiem:
+
+- orchestration pipeline 4 buoc
+- chay tung service theo thu tu
+- retry va timeout theo task
+
+Airflow khong nam trong serving path. Backend va frontend khong phu thuoc Airflow
+luc nguoi dung truy cap UI.
+
+Chi tiet: `docs/version2/services/airflow-orchestration.md`
 
 ## Core Timeline Concept
 
@@ -337,6 +438,44 @@ theo distinct article count trong 24 gio gan nhat. No khong duoc tinh tu
 `entity_timeline_items`, vi frontend can hien top entities ke ca khi entity do
 chua co timeline summary moi.
 
+## Data Lifecycle By Collection/Table
+
+```text
+news_metadata
+  created by crawler
+  consumed by entities-extraction, content-summary, publish
+
+news_content
+  content created by crawler
+  filtered_content created by entities-extraction
+  consumed by content-summary and publish
+
+news_entities
+  created by entities-extraction
+  consumed by content-summary and publish
+
+entity_timeline_summaries
+  created by content-summary
+  consumed by publish
+
+entities/source_articles/entity_timeline_items/timeline_item_articles
+  created/updated by publish
+  consumed by backend-api
+```
+
+## Core Invariants
+
+- `crawl_date` la clock chinh cua pipeline summary.
+- 3h windows phai aligned UTC theo moc `0,3,6,9,12,15,18,21`.
+- Summary khong xu ly window dang mo.
+- Popularity 24h la distinct article count, khong phai total mention count.
+- Article selection cho LLM dung mention count trong `filtered_content`.
+- Prompt content gui LLM dung clean content trong `news_content.content`.
+- LLM chi call 1 lan cho moi entity/window va phai tra `title` + `content`.
+- Backend API production/local doc Supabase PostgreSQL, khong fallback Mongo.
+- Frontend chi goi backend API, khong goi Supabase/Mongo truc tiep.
+- Missing serving data phai fix o publish/read model truoc, khong bypass qua UI.
+
 ## Frontend/Product Expectations
 
 Frontend can nhan duoc tu backend API:
@@ -388,6 +527,18 @@ Khi sua cac docs khac:
    - Render backend
    - Vercel frontend
    - Supabase PostgreSQL la read database
+7. Moi service doc phai noi ro:
+   - input
+   - output
+   - storage owner
+   - command run bang Docker va `uv`
+   - cac invariant khong duoc pha
+8. Moi thay doi database phai cap nhat:
+   - collection/table owner
+   - producer/consumer
+   - primary key/upsert key
+   - freshness/idempotency rule
+   - migration/backfill note neu can
 
 ## Out Of Scope For This Document
 
