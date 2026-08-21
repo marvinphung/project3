@@ -208,22 +208,25 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "${AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS:-admin:admin}"
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/simple_auth_manager_passwords.json
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-webserver:8080/execution/"
       AIRFLOW__CORE__SECRET_KEY: "footballpulse-v2-airflow-secret-key-32chars!"
       AIRFLOW__CORE__INTERNAL_API_SECRET_KEY: "footballpulse-v2-airflow-internal-key-32ch!"
       AIRFLOW__API_AUTH__JWT_SECRET: "footballpulse-v2-airflow-jwt-secret-key-32chars!"
       FOOTBALLPULSE_V2_PIPELINE_SCHEDULE: "${FOOTBALLPULSE_V2_PIPELINE_SCHEDULE:-5,35 * * * *}"
-      FOOTBALLPULSE_PIPELINE_CRAWL_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm crawler python -m footballpulse_pipeline crawl
-      FOOTBALLPULSE_PIPELINE_ENTITIES_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm entities-extraction python -m footballpulse_pipeline process
-      FOOTBALLPULSE_PIPELINE_SUMMARY_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm content-summary python -m footballpulse_pipeline summary
-      FOOTBALLPULSE_PIPELINE_PUBLISH_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm publisher python -m footballpulse_pipeline publish
-      FOOTBALLPULSE_CRAWL_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm crawler python -m footballpulse_pipeline crawl
+      FOOTBALLPULSE_PIPELINE_CRAWL_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --no-deps --rm crawler python -m footballpulse_pipeline crawl
+      FOOTBALLPULSE_PIPELINE_ENTITIES_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --no-deps --rm entities-extraction python -m footballpulse_pipeline process
+      FOOTBALLPULSE_PIPELINE_SUMMARY_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --no-deps --rm content-summary python -m footballpulse_pipeline summary
+      FOOTBALLPULSE_PIPELINE_PUBLISH_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --no-deps --rm publisher python -m footballpulse_pipeline publish
+      FOOTBALLPULSE_CRAWL_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --no-deps --rm crawler python -m footballpulse_pipeline crawl
       FOOTBALLPULSE_PROCESS_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm entities-extraction python -m footballpulse_pipeline process
       FOOTBALLPULSE_SUMMARY_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm content-summary python -m footballpulse_pipeline summary
       FOOTBALLPULSE_PUBLISH_COMMAND: docker compose -f /workspace/docker-compose.v2.yml run --rm publisher python -m footballpulse_pipeline publish
     command: ["bash", "-c", "airflow db migrate"]
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
+      - ./airflow/simple_auth_manager_passwords.json:/opt/airflow/simple_auth_manager_passwords.json
       - footballpulse_v2_airflow_data:/opt/airflow
 
   airflow-dag-processor:
@@ -241,6 +244,7 @@ services:
     command: ["airflow", "dag-processor"]
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
+      - ./airflow/simple_auth_manager_passwords.json:/opt/airflow/simple_auth_manager_passwords.json
       - footballpulse_v2_airflow_data:/opt/airflow
 
   airflow-scheduler:
@@ -263,6 +267,7 @@ services:
     command: ["airflow", "scheduler"]
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
+      - ./airflow/simple_auth_manager_passwords.json:/opt/airflow/simple_auth_manager_passwords.json
       - footballpulse_v2_airflow_data:/opt/airflow
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/workspace
@@ -290,6 +295,7 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
+      - ./airflow/simple_auth_manager_passwords.json:/opt/airflow/simple_auth_manager_passwords.json
       - footballpulse_v2_airflow_data:/opt/airflow
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://localhost:8080/health || exit 0"]

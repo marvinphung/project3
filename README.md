@@ -4,6 +4,16 @@ FootballPulse is a football news intelligence pipeline. It crawls football news,
 extracts canonical entities, generates per-entity timeline summaries, publishes a
 PostgreSQL read model, and serves the UI through a backend API.
 
+## Deployment
+
+Public production URLs:
+
+- Frontend (Vercel): `https://project3-sigma-gray.vercel.app`
+- Backend API (Render): `https://footballpulse-api.onrender.com`
+
+Use [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production deployment and full
+command references for Docker, `uv`, Render, Vercel, Airflow, and Supabase.
+
 ## Current Architecture
 
 ```text
@@ -125,13 +135,4 @@ NER_DEVICE=cpu
 ENTITY_EXTRACTION_MIN_CONFIDENCE=0.95
 ```
 
-## Deployment
 
-Use [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production deployment and full
-command references for Docker, `uv`, Render, Vercel, Airflow, and Supabase.
-
-## Source Of Truth Docs
-
-- [Entity timeline architecture](docs/version2/source-of-truth-entity-timeline-architecture.md)
-- [Local development notes](docs/version2/local-development.md)
-- [Vietnamese run guide](docs/HUONG_DAN_CHAY.md)
