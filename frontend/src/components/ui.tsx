@@ -1,11 +1,12 @@
 import { Link } from 'react-router'
 import type { Article } from '../api/models'
 
-type Entity = { type: 'club' | 'player' | 'coach'; id: string; name: string }
+type Entity = { type: 'club' | 'player' | 'coach' | 'competition'; id: string; name: string }
 
 const entityRoute = (e: Entity) => {
   if (e.type === 'club') return `/clb/${e.id}`
   if (e.type === 'player') return `/cau-thu/${e.id}`
+  if (e.type === 'competition') return `/competition/${e.id}`
   return `/hlv/${e.id}`
 }
 

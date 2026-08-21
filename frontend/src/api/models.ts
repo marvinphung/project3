@@ -1,4 +1,4 @@
-export type EntityKind = 'club' | 'player' | 'coach'
+export type EntityKind = 'club' | 'player' | 'coach' | 'competition'
 
 export type Article = {
   id: string

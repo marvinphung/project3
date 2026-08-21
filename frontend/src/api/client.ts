@@ -479,13 +479,23 @@ export function listEntities(params: { type?: string; query?: string; limit?: nu
 
 export function getEntity(entityType: string, entitySlug: string) {
   const requestedSlug = entitySlug.toLowerCase()
-  return listEntities({ type: entityType, query: entitySlug, limit: 100 }).then((response) => {
-    const entity = response.items.find((item) => item.slug.toLowerCase() === requestedSlug)
-    if (!entity) {
+  const normalizedQuery = entitySlug.replace(/-/g, ' ').trim()
+  const candidateQueries = normalizedQuery && normalizedQuery !== entitySlug
+    ? [entitySlug, normalizedQuery]
+    : [entitySlug]
+
+  const findBySlug = (items: PublicEntity[]) => items.find((item) => item.slug.toLowerCase() === requestedSlug)
+  const searchNext = (index: number): Promise<PublicEntity> => {
+    if (index >= candidateQueries.length) {
       throw new ApiError(404, 'ENTITY_NOT_FOUND', 'Không tìm thấy entity')
     }
-    return entity
-  })
+    return listEntities({ type: entityType, query: candidateQueries[index], limit: 100 }).then((response) => {
+      const entity = findBySlug(response.items)
+      return entity ?? searchNext(index + 1)
+    })
+  }
+
+  return searchNext(0)
 }
 
 export function getStory(storyId: string) {

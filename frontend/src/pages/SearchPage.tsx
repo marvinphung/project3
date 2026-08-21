@@ -26,6 +26,7 @@ export default function SearchPage() {
     if (entity.entity_type === 'CLUB') return `/clb/${entity.slug}`
     if (entity.entity_type === 'PLAYER') return `/cau-thu/${entity.slug}`
     if (entity.entity_type === 'COACH') return `/hlv/${entity.slug}`
+    if (entity.entity_type === 'COMPETITION') return `/competition/${entity.slug}`
     return `/entity/${entity.id}`
   }
 
