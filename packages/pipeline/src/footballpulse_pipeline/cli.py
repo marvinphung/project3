@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import logging
 import os
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -19,12 +21,14 @@ from footballpulse_entities_extraction_service.v2_processor import (
     V2NewsCrawledConsumer,
 )
 from footballpulse_publisher_service.publisher import V2Publisher
+from footballpulse_runtime_config import configure_logging, log_event
 from pymongo import MongoClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 
 ROOT = Path(__file__).resolve().parents[4]
 REAL_CRAWL_SCRIPT = ROOT / "scripts" / "run-real-crawl.py"
+LOGGER = logging.getLogger("footballpulse.pipeline.cli")
 
 
 def _load_repo_env() -> None:
@@ -167,6 +171,8 @@ def _run_crawl(arguments: list[str]) -> int:
 
 
 def _run_process(limit: int) -> int:
+    started = time.monotonic()
+    log_event(LOGGER, "pipeline_process_started", limit=limit)
     mongo = _mongo_client()
     try:
         database = mongo[os.getenv("FOOTBALLPULSE_MONGODB_DB", "footballpulse_v2")]
@@ -187,18 +193,36 @@ def _run_process(limit: int) -> int:
         processor = V2EntityProcessor(database=database, extractor=_extract_entities)
         worker = V2NewsCrawledConsumer(consumer=consumer, processor=processor)
         processed = 0
+        kafka_processed = 0
+        fallback_processed = 0
         try:
+            log_event(LOGGER, "pipeline_process_kafka_drain_started", limit=limit)
             while processed < limit:
                 article_id = worker.run_once(timeout_seconds=2.0)
                 if article_id is None:
+                    log_event(
+                        LOGGER,
+                        "pipeline_process_kafka_drain_empty",
+                        processed=processed,
+                        timeout_seconds=2.0,
+                    )
                     break
                 processed += 1
+                kafka_processed += 1
+                log_event(
+                    LOGGER,
+                    "pipeline_process_kafka_progress",
+                    processed=processed,
+                    limit=limit,
+                    article_id=str(article_id),
+                )
         finally:
             consumer.close()
 
         # Replay fallback for articles missed by Kafka but still lacking entities.
         if processed < limit:
             remaining = limit - processed
+            log_event(LOGGER, "pipeline_process_backlog_started", remaining=remaining)
             pipeline: list[dict[str, object]] = [
                 {
                     "$lookup": {
@@ -215,6 +239,12 @@ def _run_process(limit: int) -> int:
             for document in database.news_metadata.aggregate(pipeline):
                 article_id = document.get("_id")
                 if not isinstance(article_id, UUID):
+                    log_event(
+                        LOGGER,
+                        "pipeline_process_backlog_invalid_article_id",
+                        article_id=str(article_id),
+                        level=logging.WARNING,
+                    )
                     continue
                 try:
                     processor.process_article(article_id)
@@ -237,12 +267,40 @@ def _run_process(limit: int) -> int:
                         },
                         upsert=True,
                     )
+                    log_event(
+                        LOGGER,
+                        "pipeline_process_backlog_marked_missing_content",
+                        article_id=str(article_id),
+                        level=logging.WARNING,
+                    )
                 processed += 1
+                fallback_processed += 1
                 remaining -= 1
+                log_event(
+                    LOGGER,
+                    "pipeline_process_backlog_progress",
+                    processed=processed,
+                    limit=limit,
+                    remaining=remaining,
+                    article_id=str(article_id),
+                )
                 if remaining == 0:
                     break
+            log_event(
+                LOGGER,
+                "pipeline_process_backlog_completed",
+                processed=fallback_processed,
+            )
     finally:
         mongo.close()
+    log_event(
+        LOGGER,
+        "pipeline_process_completed",
+        processed=processed,
+        kafka_processed=kafka_processed,
+        fallback_processed=fallback_processed,
+        duration_ms=round((time.monotonic() - started) * 1000),
+    )
     print(f"footballpulse_pipeline entities extraction completed: processed={processed}")
     return 0
 
@@ -304,6 +362,11 @@ def _run_publish(limit: int) -> int:
 
 def main() -> None:
     _load_repo_env()
+    configure_logging(
+        service="footballpulse-pipeline",
+        level=os.getenv("FOOTBALLPULSE_LOG_LEVEL", "INFO"),
+        force=True,
+    )
     parser = argparse.ArgumentParser(description="FootballPulse v2 local pipeline")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

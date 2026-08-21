@@ -271,7 +271,8 @@ curl -s "http://127.0.0.1:8000/api/v2/articles?limit=5"
 - `content-summary-service` dung `crawl_date` de chia bucket 3h UTC.
 - `content-summary-service` mac dinh backfill cac bucket 3h trong 7 ngay gan
   nhat.
-- `content-summary-service` chi generate top 50 entities trong 24h gan nhat.
+- `content-summary-service` chi generate theo quota 24h: top 50 `PLAYER`,
+  top 30 `COACH`, top 30 `CLUB`.
 - Moi entity/window chi gui toi da 5 clean contents vao LLM, chon theo so lan
   target entity xuat hien trong `filtered_content`.
 - `publish` cap nhat `mention_count_24h` tu toan bo `news_entities`, tinh theo

@@ -128,7 +128,8 @@ Trach nhiem:
 
 - tao timeline item theo tung entity
 - gom cac bai lien quan trong cua so 3 gio theo `news_metadata.crawl_date`
-- chi generate timeline cho top 50 entities noi bat nhat trong 24 gio gan nhat
+- chi generate timeline theo quota 24h: top 50 `PLAYER`, top 30 `COACH`,
+  top 30 `CLUB`
 - goi LLM 1 lan de tao `title` va `content`
 - luu ket qua tong hop vao DB
 
@@ -209,13 +210,17 @@ Co the chay mot window cu the bang `--window-start` va `--window-end`.
 
 Service khong update timeline cho moi entity trong DB.
 
-Service chi lay top 50 entities xuat hien trong nhieu distinct articles nhat
-trong 24 gio gan nhat, tinh theo `news_metadata.crawl_date`. Day la top entity
-cho moi loai entity, gom `PLAYER`, `CLUB`, `COACH`, va `COMPETITION`.
+Service chi lay entities xuat hien trong nhieu distinct articles nhat trong 24
+gio gan nhat, tinh theo `news_metadata.crawl_date`, theo quota:
+
+- top 50 `PLAYER`
+- top 30 `COACH`
+- top 30 `CLUB`
+
 Moi article chi dong gop toi da 1 count cho moi entity.
 
-Chi cac entities trong top 50 nay moi duoc generate timeline summaries cho
-window dang chay.
+Chi cac entities trong quota nay moi duoc generate timeline summaries cho window
+dang chay.
 
 ### Step A: Select articles for one entity
 
@@ -339,6 +344,9 @@ Frontend can nhan duoc tu backend API:
 - danh sach entities noi bat, sap xep theo muc do xuat hien/noi bat
 - home page hien toi da top 100 entities trong 24h, ke ca entity chua co
   timeline summary
+- tab `/cau-thu` hien top 50 `PLAYER` trong 24h
+- tab `/hlv` hien top 30 `COACH` trong 24h
+- tab `/clb` hien top 30 `CLUB` trong 24h
 - timeline rieng cua tung entity
 - timeline item da co:
   - title

@@ -1,18 +1,22 @@
 from __future__ import annotations
 
+import logging
 import os
+import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
 from confluent_kafka import Consumer
 from footballpulse_event_contracts import NewsCrawledEvent
+from footballpulse_runtime_config import log_event
 from pymongo.database import Database
 
 from footballpulse_entities_extraction_service.canonical import CanonicalRegistry
 
+LOGGER = logging.getLogger("footballpulse.entities_extraction.processor")
 NEWS_CRAWLED_TOPIC = "news.crawled.v1"
 MIN_PERSISTED_ENTITY_SCORE = 0.95
 
@@ -41,11 +45,15 @@ class V2EntityProcessor:
 
     def _load_registry(self) -> CanonicalRegistry:
         docs = list(self._database.canonical_entities.find({"status": "ACTIVE"}))
+        log_event(LOGGER, "canonical_registry_loaded", active_entities=len(docs))
         return CanonicalRegistry(docs)
 
     def process_article(self, article_id: UUID) -> UUID:
+        started = time.monotonic()
+        log_event(LOGGER, "entity_article_started", article_id=str(article_id))
         content_doc = self._database.news_content.find_one({"_id": article_id})
         if content_doc is None or not isinstance(content_doc.get("content"), str):
+            log_event(LOGGER, "entity_article_missing_content", article_id=str(article_id), level=logging.WARNING)
             raise ValueError(f"article content not found for {article_id}")
 
         raw_content = content_doc["content"]
@@ -61,6 +69,7 @@ class V2EntityProcessor:
         # Run extraction on filtered_content
         raw_entities = self._extractor(filtered_content)
         canonicalized_entities: list[dict[str, Any]] = []
+        skipped_low_score = 0
 
         for entity in raw_entities:
             text = str(entity.get("text", ""))
@@ -69,6 +78,7 @@ class V2EntityProcessor:
             start = int(entity.get("start", 0))
             end = int(entity.get("end", 0))
             if score < MIN_PERSISTED_ENTITY_SCORE:
+                skipped_low_score += 1
                 continue
 
             can_id, can_name = self._registry.resolve_entity(text, label)
@@ -95,11 +105,46 @@ class V2EntityProcessor:
             },
             upsert=True,
         )
+        log_event(
+            LOGGER,
+            "entity_article_completed",
+            article_id=str(article_id),
+            content_chars=len(raw_content),
+            filtered_chars=len(filtered_content),
+            raw_entities=len(raw_entities),
+            persisted_entities=len(canonicalized_entities),
+            skipped_low_score=skipped_low_score,
+            min_persisted_score=MIN_PERSISTED_ENTITY_SCORE,
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
         return article_id
 
     def process_articles(self, article_ids: list[UUID]) -> list[UUID]:
+        if not article_ids:
+            log_event(LOGGER, "entity_batch_empty")
+            return []
+        started = time.monotonic()
+        log_event(LOGGER, "entity_batch_started", article_count=len(article_ids), workers=self._workers)
+        completed: list[UUID] = []
         with ThreadPoolExecutor(max_workers=self._workers) as executor:
-            return list(executor.map(self.process_article, article_ids))
+            futures = [executor.submit(self.process_article, article_id) for article_id in article_ids]
+            for index, future in enumerate(as_completed(futures), start=1):
+                article_id = future.result()
+                completed.append(article_id)
+                log_event(
+                    LOGGER,
+                    "entity_batch_progress",
+                    completed=index,
+                    total=len(article_ids),
+                    article_id=str(article_id),
+                )
+        log_event(
+            LOGGER,
+            "entity_batch_completed",
+            article_count=len(completed),
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
+        return completed
 
 
 class V2NewsCrawledConsumer:
@@ -118,6 +163,15 @@ class V2NewsCrawledConsumer:
         if raw is None:
             raise ValueError("news.crawled payload must not be null")
         event = NewsCrawledEvent.model_validate_json(raw)
+        log_event(
+            LOGGER,
+            "entity_kafka_message_received",
+            topic=message.topic(),
+            partition=message.partition(),
+            offset=message.offset(),
+            article_id=str(event.payload.article_id),
+        )
         article_id = self._processor.process_article(event.payload.article_id)
         self._consumer.commit(message=message, asynchronous=False)
+        log_event(LOGGER, "entity_kafka_message_committed", article_id=str(article_id))
         return article_id

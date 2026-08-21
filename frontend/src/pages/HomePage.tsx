@@ -22,6 +22,13 @@ export default function HomePage() {
     COMPETITION: 'Giải đấu',
   }
 
+  function entityPath(entity: { id: string; entity_type: string; slug: string }) {
+    if (entity.entity_type === 'CLUB') return `/clb/${entity.slug}`
+    if (entity.entity_type === 'PLAYER') return `/cau-thu/${entity.slug}`
+    if (entity.entity_type === 'COACH') return `/hlv/${entity.slug}`
+    return `/entity/${entity.id}`
+  }
+
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8">
       {/* Hero & Search Banner */}
@@ -76,7 +83,7 @@ export default function HomePage() {
             {topEntities.data.map((entity, idx) => (
               <Link
                 key={entity.id}
-                to={`/entity/${entity.id}`}
+                to={entityPath(entity)}
                 className="group flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-sm transition hover:border-[#78A83D] hover:shadow-md"
               >
                 <div className="flex items-center gap-4 min-w-0">

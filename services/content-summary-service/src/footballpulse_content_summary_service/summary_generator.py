@@ -21,7 +21,11 @@ LOGGER = logging.getLogger("footballpulse.content_summary")
 SUMMARY_NAMESPACE = UUID("c384e508-4e31-4e4b-a25e-e4782bbbe528")
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
-TOP_ENTITY_LIMIT = 50
+TOP_ENTITY_LIMITS_BY_TYPE = {
+    "PLAYER": 50,
+    "COACH": 30,
+    "CLUB": 30,
+}
 MAX_ARTICLES_PER_ENTITY = 5
 DEFAULT_LLM_CALL_TIMEOUT_SECONDS = 45
 
@@ -323,13 +327,21 @@ class SummaryGenerator:
             for entity_key in seen_in_article:
                 counts[entity_key] = counts.get(entity_key, 0) + 1
 
-        return [
-            entity_key
-            for entity_key, _count in sorted(
-                counts.items(),
-                key=lambda item: (-item[1], item[0][1], item[0][2]),
-            )[:TOP_ENTITY_LIMIT]
-        ]
+        selected: list[tuple[UUID, str, str]] = []
+        for entity_type, limit in TOP_ENTITY_LIMITS_BY_TYPE.items():
+            typed_entities = [
+                (entity_key, count)
+                for entity_key, count in counts.items()
+                if entity_key[2] == entity_type
+            ]
+            selected.extend(
+                entity_key
+                for entity_key, _count in sorted(
+                    typed_entities,
+                    key=lambda item: (-item[1], item[0][1]),
+                )[:limit]
+            )
+        return selected
 
     def _select_top_articles_for_entity(self, articles: list[ArticleInfo], canonical_name: str) -> list[ArticleInfo]:
         ranked = sorted(

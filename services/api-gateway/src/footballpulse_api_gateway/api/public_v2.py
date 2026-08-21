@@ -299,6 +299,30 @@ def create_public_v2_app(engine: Engine) -> FastAPI:
             raise HTTPException(status_code=404, detail="entity not found")
         return V2EntitySummary.model_validate(dict(row))
 
+    @app.get("/api/v2/entities/{entity_type}/{entity_slug}", response_model=V2EntitySummary)
+    async def get_entity_by_type_and_slug(entity_type: str, entity_slug: str) -> V2EntitySummary:
+        statement = sa.text(
+            """
+            select id, entity_type::text as entity_type, canonical_name, slug,
+                   aliases, mention_count_24h, last_seen_at
+            from entities
+            where entity_type::text = upper(:entity_type)
+              and slug = :entity_slug
+            limit 1
+            """
+        )
+        with engine.connect() as connection:
+            row = connection.execute(
+                statement,
+                {
+                    "entity_type": entity_type.strip(),
+                    "entity_slug": entity_slug.strip().lower(),
+                },
+            ).mappings().one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="entity not found")
+        return V2EntitySummary.model_validate(dict(row))
+
     @app.get("/api/v2/entities", response_model=V2EntityListResponse)
     async def list_entities(
         type: str | None = Query(None),
@@ -549,4 +573,3 @@ def create_public_v2_app(engine: Engine) -> FastAPI:
         return V2ArticleSourcesResponse(items=items)
 
     return app
-

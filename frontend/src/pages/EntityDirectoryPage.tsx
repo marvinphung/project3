@@ -5,16 +5,16 @@ import { usePublicEntities } from '../api/hooks'
 import type { EntityKind } from '../api/models'
 import { EmptyState, LoadingSkeleton } from '../components/ui'
 
-const labels: Record<EntityKind, { title: string; singular: string; route: string }> = {
-  player: { title: 'Cầu thủ', singular: 'Cầu thủ', route: 'cau-thu' },
-  club: { title: 'Câu lạc bộ', singular: 'CLB', route: 'clb' },
-  coach: { title: 'Huấn luyện viên', singular: 'HLV', route: 'hlv' },
+const labels: Record<EntityKind, { title: string; singular: string; route: string; limit: number }> = {
+  player: { title: 'Cầu thủ', singular: 'Cầu thủ', route: 'cau-thu', limit: 50 },
+  club: { title: 'Câu lạc bộ', singular: 'CLB', route: 'clb', limit: 30 },
+  coach: { title: 'Huấn luyện viên', singular: 'HLV', route: 'hlv', limit: 30 },
 }
 
 export default function EntityDirectoryPage({ kind }: { kind: EntityKind }) {
   const [search, setSearch] = useState('')
   const label = labels[kind]
-  const remote = usePublicEntities(kind.toUpperCase(), search.trim())
+  const remote = usePublicEntities(kind.toUpperCase(), search.trim(), label.limit)
   const entities = useMemo(() => remote.data ?? [], [remote.data])
 
   return (
@@ -43,7 +43,7 @@ export default function EntityDirectoryPage({ kind }: { kind: EntityKind }) {
           const initial = displayName.charAt(0).toUpperCase() || '?'
           const count = entity.mention_count_24h ?? entity.article_count ?? 0
           return (
-            <Link key={entity.id} to={`/${label.route}/${entity.id}`} className="rounded-xl border border-[#E5E7EB] bg-white p-4 transition-colors hover:border-[#78A83D]/50">
+            <Link key={entity.id} to={`/${label.route}/${entity.slug}`} className="rounded-xl border border-[#E5E7EB] bg-white p-4 transition-colors hover:border-[#78A83D]/50">
               <div className="flex items-center gap-3">
                 <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F3F7EE] font-bold text-[#5E8430]">{initial}</span>
                 <div>

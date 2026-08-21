@@ -22,6 +22,13 @@ export default function SearchPage() {
     COMPETITION: 'Giải đấu',
   }
 
+  function entityPath(entity: { id: string; entity_type: string; slug: string }) {
+    if (entity.entity_type === 'CLUB') return `/clb/${entity.slug}`
+    if (entity.entity_type === 'PLAYER') return `/cau-thu/${entity.slug}`
+    if (entity.entity_type === 'COACH') return `/hlv/${entity.slug}`
+    return `/entity/${entity.id}`
+  }
+
   return (
     <main className="max-w-[1000px] mx-auto px-4 sm:px-6 py-8">
       <h1 className="mb-6 text-2xl font-bold text-[#111827]">
@@ -74,7 +81,7 @@ export default function SearchPage() {
           {remote.data?.map((entity) => (
             <Link
               key={entity.id}
-              to={`/entity/${entity.id}`}
+              to={entityPath(entity)}
               className="group flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-sm transition hover:border-[#78A83D] hover:shadow-md"
             >
               <div className="min-w-0">
@@ -105,4 +112,3 @@ export default function SearchPage() {
     </main>
   )
 }
-

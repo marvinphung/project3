@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router'
-import { useEntityTimeline } from '../api/hooks'
+import { useEntityTimelineByRouteParam } from '../api/hooks'
 import type { EntityKind } from '../api/models'
 import { EmptyState, LoadingSkeleton, SectionHeading } from '../components/ui'
 
@@ -12,7 +12,7 @@ const labels: Record<string, { title: string }> = {
 
 export default function EntityDetailPage({ kind }: { kind?: EntityKind }) {
   const { id = '' } = useParams()
-  const remote = useEntityTimeline(id)
+  const remote = useEntityTimelineByRouteParam(kind?.toUpperCase(), id)
 
   if (remote.loading) {
     return (

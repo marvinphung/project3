@@ -91,16 +91,16 @@ export function usePublicArticle(slug: string | undefined): QueryState<PublicArt
   return state
 }
 
-export function usePublicEntities(entityType: string, query = ''): QueryState<PublicEntity[]> {
+export function usePublicEntities(entityType: string, query = '', limit = 100): QueryState<PublicEntity[]> {
   const [state, setState] = useState<QueryState<PublicEntity[]>>({ data: null, loading: true, error: null })
   useEffect(() => {
     let active = true
     setState({ data: null, loading: true, error: null })
-    listEntities({ type: entityType, query: query || undefined, limit: 100 })
+    listEntities({ type: entityType, query: query || undefined, limit })
       .then((response) => active && setState({ data: response.items, loading: false, error: null }))
       .catch((error: unknown) => active && setState({ data: null, loading: false, error: toApiError(error) }))
     return () => { active = false }
-  }, [entityType, query])
+  }, [entityType, limit, query])
   return state
 }
 
@@ -184,6 +184,65 @@ export function useEntityTimeline(entityId: string, limit = 50, offset = 0): Que
       .catch((err) => active && setState({ data: null, loading: false, error: toApiError(err) }))
     return () => { active = false }
   }, [entityId, limit, offset])
+  return state
+}
+
+export function useEntityTimelineBySlug(
+  entityType: string | undefined,
+  entitySlug: string,
+  limit = 50,
+  offset = 0,
+): QueryState<PublicEntityTimeline> {
+  const [state, setState] = useState<QueryState<PublicEntityTimeline>>({
+    data: null,
+    loading: Boolean(entityType && entitySlug),
+    error: null,
+  })
+  useEffect(() => {
+    if (!entityType || !entitySlug) {
+      setState({ data: null, loading: false, error: new ApiError(404, 'ENTITY_NOT_FOUND', 'Không tìm thấy entity') })
+      return
+    }
+    let active = true
+    setState({ data: null, loading: true, error: null })
+    getEntity(entityType, entitySlug)
+      .then((entity) => getEntityTimeline(entity.id, limit, offset))
+      .then((timeline) => active && setState({ data: timeline, loading: false, error: null }))
+      .catch((err) => active && setState({ data: null, loading: false, error: toApiError(err) }))
+    return () => { active = false }
+  }, [entityType, entitySlug, limit, offset])
+  return state
+}
+
+export function useEntityTimelineByRouteParam(
+  entityType: string | undefined,
+  idOrSlug: string,
+  limit = 50,
+  offset = 0,
+): QueryState<PublicEntityTimeline> {
+  const [state, setState] = useState<QueryState<PublicEntityTimeline>>({
+    data: null,
+    loading: Boolean(idOrSlug),
+    error: null,
+  })
+  useEffect(() => {
+    if (!idOrSlug) {
+      setState({ data: null, loading: false, error: new ApiError(404, 'ENTITY_NOT_FOUND', 'Không tìm thấy entity') })
+      return
+    }
+    let active = true
+    setState({ data: null, loading: true, error: null })
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    const timelineRequest = uuidPattern.test(idOrSlug)
+      ? getEntityTimeline(idOrSlug, limit, offset)
+      : entityType
+        ? getEntity(entityType, idOrSlug).then((entity) => getEntityTimeline(entity.id, limit, offset))
+        : getEntityTimeline(idOrSlug, limit, offset)
+    timelineRequest
+      .then((timeline) => active && setState({ data: timeline, loading: false, error: null }))
+      .catch((err) => active && setState({ data: null, loading: false, error: toApiError(err) }))
+    return () => { active = false }
+  }, [entityType, idOrSlug, limit, offset])
   return state
 }
 
